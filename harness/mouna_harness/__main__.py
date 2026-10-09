@@ -50,6 +50,10 @@ def main() -> None:
     fc2.add_argument("data", type=Path)
     fc2.add_argument("--embeddings", type=Path, required=True)
     fc2.add_argument("--out", type=Path, required=True)
+    ff = sub.add_parser("far-frr", help="FAR/FRR curve and equal-error rate for open-set rejection (Kannada)")
+    ff.add_argument("data", type=Path)
+    ff.add_argument("--embeddings", type=Path, required=True)
+    ff.add_argument("--out", type=Path, default=Path("deck/data/far-frr.json"))
     fs = sub.add_parser("finale-silent", help="E4, E5, E17 on our silent recordings, core.py constants unchanged")
     fs.add_argument("data", type=Path)
     fs.add_argument("--embeddings", type=Path, required=True)
@@ -124,6 +128,17 @@ def main() -> None:
 
         z = np.load(args.embeddings)
         doc = run(load_dir(args.data), dict(zip(z["ids"].tolist(), z["embeddings"])))
+        doc["embeddings"] = args.embeddings.name
+        doc["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        args.out.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+        print(json.dumps(doc, indent=2))
+        return
+
+    if args.cmd == "far-frr":
+        from .farfrr import run as run_far_frr
+
+        z = np.load(args.embeddings)
+        doc = run_far_frr(load_dir(args.data), dict(zip(z["ids"].tolist(), z["embeddings"])))
         doc["embeddings"] = args.embeddings.name
         doc["generated"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         args.out.write_text(json.dumps(doc, indent=2), encoding="utf-8")

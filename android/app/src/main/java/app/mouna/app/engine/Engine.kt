@@ -8,6 +8,7 @@ import app.mouna.app.sense.Frame
 import app.mouna.app.sense.Gesture
 import app.mouna.app.sense.HeadGesture
 import app.mouna.app.sense.Sensor
+import app.mouna.core.CoreConstants
 import app.mouna.core.Decision
 import app.mouna.core.GazeModel
 import app.mouna.core.GazeSelector
@@ -128,6 +129,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     private var learner = Learner()
     private var examples = Store.Examples(LinkedHashMap(), mutableListOf())
     private var lastEmbedding: FloatArray? = null
+    /** A clear Speak match that may be kept as an example if the person does not correct it (see [SelfTrain]). */
+    private var pendingSelf: Pair<String, FloatArray>? = null
     private var lastMs: Double? = null
     private var isl: Isl? = null
     @Volatile private var islKnown = false
@@ -342,8 +345,14 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         }
         when (mode) {
             Listen.SPEAK -> {
-                val d = decide(learner.predict(emb), tiers, store.careful)
+                commitPendingSelf()
+                val r = learner.predict(emb)
+                val d = decide(r, tiers, store.careful)
                 lastEmbedding = emb
+                // Rule: keep this clip only if Mouna speaks a very clear match and the person does not correct it.
+                // Any correction (picked, none of these) clears it, and the next Speak commits it.
+                val top = r.intents.firstOrNull()
+                pendingSelf = if (top != null && store.selfTrain && SelfTrain.keep(r, d, learner.count(top))) top to emb else null
                 val ms = (SystemClock.uptimeMillis() - clip.frames.last().tMs).toDouble()
                 lastMs = ms
                 _events.tryEmit(Event.Decided(d, ms))
@@ -368,6 +377,17 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             }
             Listen.PAUSED -> Unit
         }
+    }
+
+    /** The person moved on without correcting the last clear match: keep it as one more example (worker thread). */
+    private fun commitPendingSelf() {
+        val (intent, e) = pendingSelf ?: return
+        pendingSelf = null
+        val n = learner.count(intent)
+        if (!store.selfTrain || n == 0 || n >= CoreConstants.MAX_SHOTS) return // off, forgotten, or full
+        learner.addSample(intent, e)
+        examples.samples.getOrPut(intent) { mutableListOf() }.add(e)
+        store.save(encoder.id, examples)
     }
 
     private fun publish(report: EncoderReport? = null) {
@@ -404,6 +424,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     fun picked(intent: String) = onWorker {
         val e = lastEmbedding ?: return@onWorker
         lastEmbedding = null
+        pendingSelf = null // a correction: that clip is never kept as a self-trained example
         learner.teach(intent, e)
         examples.samples.getOrPut(intent) { mutableListOf() }.add(e)
         store.save(encoder.id, examples)
@@ -414,6 +435,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     fun noneOfThese() = onWorker {
         val e = lastEmbedding ?: return@onWorker
         lastEmbedding = null
+        pendingSelf = null // a correction: that clip is never kept as a self-trained example
         learner.addNegative(e)
         examples.negatives.add(e)
         store.save(encoder.id, examples)
@@ -426,6 +448,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         for (k in removed) {
             learner.forget(k)
             examples.samples.remove(k)
+            if (pendingSelf?.first == k) pendingSelf = null
         }
         if (removed.isNotEmpty()) store.save(encoder.id, examples)
         publish()
@@ -435,6 +458,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     fun reteach(intent: String) = onWorker {
         learner.forget(intent)
         examples.samples.remove(intent)
+        if (pendingSelf?.first == intent) pendingSelf = null
         store.save(encoder.id, examples)
         publish()
     }
@@ -443,6 +467,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         store.wipe()
         learner = Learner()
         examples = Store.Examples(LinkedHashMap(), mutableListOf())
+        pendingSelf = null
         personalSwitch = null
         gazeModel = null
         gaze = null
