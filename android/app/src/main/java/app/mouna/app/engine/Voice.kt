@@ -87,7 +87,7 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
                 val f = linkJobs.remove(id) ?: return
                 main.post {
                     val sent = id == "link:$generation" && toLink { f.readBytes() to "audio/wav" }
-                    if (sent) _via.value = PHONE
+                    if (sent) used(PHONE)
                     f.delete()
                 }
             }
@@ -105,7 +105,7 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         if (path != null) {
             val sent = toLink { context.assets.open("voices/$path").use { it.readBytes() } to "audio/mp4" }
             if (sent || runCatching { play { context.assets.openFd("voices/$path").use { fd -> setDataSource(fd.fileDescriptor, fd.startOffset, fd.length) } } }.isSuccess) {
-                _via.value = PACK
+                used(PACK)
                 return
             }
         }
@@ -148,6 +148,11 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         }
     }
 
+    private fun used(v: String) {
+        _via.value = v
+        Log.i(TAG, "spoke via $v")
+    }
+
     /** True if the active call takes audio and accepted what [render] produced; false means play it on the speaker. */
     private fun toLink(render: () -> Pair<ByteArray, String>): Boolean {
         val l = link ?: return false
@@ -157,7 +162,7 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
 
     private fun playSarvam(f: File): Boolean {
         val ok = toLink { f.readBytes() to "audio/wav" } || runCatching { play { setDataSource(f.path) } }.onFailure { Log.w(TAG, "sarvam clip won't play", it) }.isSuccess
-        if (ok) _via.value = SARVAM
+        if (ok) used(SARVAM)
         return ok
     }
 
@@ -176,7 +181,7 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
             linkJobs.remove(id)
         }
         t.speak(text, TextToSpeech.QUEUE_FLUSH, null, phraseId ?: "say")
-        _via.value = PHONE
+        used(PHONE)
     }
 
     private fun attributes(): AudioAttributes {
