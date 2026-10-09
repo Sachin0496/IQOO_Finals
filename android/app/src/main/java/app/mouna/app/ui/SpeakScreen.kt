@@ -12,8 +12,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.Icon
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
@@ -33,6 +31,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontStyle
@@ -45,6 +48,81 @@ import app.mouna.app.Screen
 import app.mouna.app.engine.Knowledge
 import app.mouna.app.engine.isEmulator
 
+private val switchOn = Type.button.copy(fontSize = 15.sp, color = Ink.bg)
+private val switchOff = Type.button.copy(fontSize = 15.sp, color = Ink.bone2)
+
+private class Status(val text: String, val dot: Color, val pulse: Boolean = false)
+
+private val saidNote = Type.mono.copy(fontSize = 13.sp, color = Ink.mute)
+private val wrongLink = Type.mono.copy(fontSize = 14.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline)
+private val saidStyle = Type.display.copy(fontSize = 32.sp, lineHeight = 36.sp)
+private val waitingStyle = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 32.sp, lineHeight = 36.sp)
+private val teachFirst = Type.title.copy(fontSize = 26.sp, fontStyle = FontStyle.Italic)
+private val teachLink = Type.body.copy(color = Ink.turmeric, textDecoration = TextDecoration.Underline)
+
+/** The one thing to tell the person about this channel, in plain words. */
+private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean): Status = when (app.channel) {
+    Channel.SIGN -> when {
+        st.signing -> Status("Seeing your sign…", Ink.turmeric, true)
+        !k.islKnown -> Status("Getting ready…", Ink.mute, true)
+        !k.islReady -> Status("Sign isn’t available on this phone", Ink.mute)
+        st.body && st.handsUp -> Status("Go ahead and sign", Ink.leaf)
+        st.body -> Status("Ready for a sign", Ink.leaf)
+        else -> Status("Step back so your hands show", Ink.mute)
+    }
+    Channel.VOICE -> when {
+        !app.hearing.ready -> Status("Voice isn’t available on this phone", Ink.mute)
+        app.hearingBusy -> Status("Understanding…", Ink.turmeric, true)
+        micHot -> Status("Hearing you…", Ink.turmeric, true)
+        else -> Status("Listening", Ink.leaf)
+    }
+    Channel.LIPS -> when {
+        !k.ready -> Status("Getting ready…", Ink.mute, true)
+        !st.face -> Status("Looking for your face", Ink.mute)
+        st.hearing -> Status("Reading your lips…", Ink.turmeric, true)
+        else -> Status("Watching your lips", Ink.leaf)
+    }
+    Channel.FREE -> when {
+        !k.freeReady && k.freeTalk.contains("Loading") -> Status("Getting ready…", Ink.mute, true)
+        !k.freeReady -> Status("Free talk isn’t available on this phone", Ink.mute)
+        !st.face -> Status("Looking for your face", Ink.mute)
+        st.hearing -> Status("Reading your lips…", Ink.turmeric, true)
+        else -> Status("Mouth a sentence", Ink.leaf)
+    }
+}
+
+/** What the machine is doing: only on stage-debug. */
+private fun techStatus(app: MounaApp, k: Knowledge): Status? = when (app.channel) {
+    Channel.SIGN -> when {
+        !k.islKnown -> Status("ISL · loading…", Ink.mute, true)
+        k.islReady -> Status("ISL · 263 signs", Ink.leaf)
+        else -> Status(if (isEmulator) "ISL runs on the phone" else "No ISL model", Ink.mute)
+    }
+    Channel.VOICE -> if (app.hearing.ready) Status("Whisper", Ink.leaf) else Status("No voice model", Ink.mute)
+    Channel.FREE -> if (k.freeReady) Status("Auto-AVSR · NPU", Ink.leaf) else Status(k.freeTalk, Ink.mute, k.freeTalk.contains("Loading"))
+    Channel.LIPS -> when {
+        !k.ready -> Status("Encoder · loading…", Ink.mute, true)
+        k.encoder.label.startsWith("NPU") -> Status(k.encoder.label, Ink.leaf)
+        k.encoder.label.startsWith("CPU") -> Status(k.encoder.label, Ink.turmeric)
+        else -> Status(k.encoder.label, Ink.mute)
+    }
+}
+
+/** How a phrase came to be said, in words. */
+private fun howSaid(via: String): String = when {
+    via == "lips" -> "by lips"
+    via == "voice" -> "by voice"
+    via == "sign" -> "by sign"
+    via == "free talk" -> "read from your lips, after you confirmed"
+    via == "touch" -> "by touch"
+    via == "ask" -> "from your answers"
+    via == "confirm" -> "after you confirmed"
+    via == "switch" -> "by your movement"
+    via == "call" -> "on the call"
+    via.startsWith("eyes") -> "by eyes"
+    else -> ""
+}
+
 /**
  * The one screen the person lives on: their face, what Mouna last said, and their phrases as pictures.
  * Mouthing is hands-free (the gate finds the utterance); the pictures are the fallback for anyone who can tap.
@@ -52,69 +130,35 @@ import app.mouna.app.engine.isEmulator
 @Composable
 fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     val taught = k.pack.count { (k.counts[it] ?: 0) > 0 }
+    val micHot by remember { derivedStateOf { app.micLevel > 0.35f } }
+    app.voiceStatus // the voice model loads in the background: re-read "ready" when its status changes
     Column(Modifier.fillMaxSize()) {
         CameraCard(
             app.engine.live,
             bind,
             Modifier.padding(horizontal = 20.dp).fillMaxWidth().weight(1f),
-        ) { live ->
-            val voice = app.channel == Channel.VOICE
-            val sign = app.channel == Channel.SIGN
-            val free = app.channel == Channel.FREE
-            if (voice) VoiceRing(app.micLevel, app.hearingBusy, Modifier.align(Alignment.Center))
+        ) { st ->
+            if (app.channel == Channel.VOICE) VoiceRing(app, Modifier.align(Alignment.Center))
             Row(
                 Modifier.align(Alignment.TopStart).padding(14.dp).fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                when {
-                    sign && live.signing -> Pill("Seeing your sign", Ink.turmeric, pulse = true)
-                    sign && live.body -> Pill(if (live.hands > 0) "Hands up: sign" else "Ready for a sign", Ink.leaf)
-                    sign -> Pill("Step back so your hands show", Ink.mute)
-                    voice && app.hearingBusy -> Pill("Understanding", Ink.turmeric, pulse = true)
-                    voice && app.micLevel > 0.35f -> Pill("Hearing", Ink.turmeric, pulse = true)
-                    voice -> Pill("Listening for your voice", Ink.leaf)
-                    free && !k.freeReady -> Pill(k.freeTalk, Ink.mute, pulse = k.freeTalk.contains("Loading"))
-                    free && !live.face -> Pill("Looking for your face", Ink.mute)
-                    free && live.hearing -> Pill("Reading your lips", Ink.turmeric, pulse = true)
-                    free -> Pill("Mouth a sentence", Ink.leaf)
-                    !k.ready -> Pill("Starting", Ink.mute, pulse = true)
-                    !live.face -> Pill("Looking for your face", Ink.mute)
-                    live.hearing -> Pill("Hearing", Ink.turmeric, pulse = true)
-                    else -> Pill("Watching your lips", Ink.leaf)
-                }
-                if (sign) {
-                    if (!k.islKnown) Pill("ISL · Loading…", Ink.mute, pulse = true)
-                    else Pill(if (k.islReady) "ISL · 263 signs" else if (isEmulator) "ISL runs on the phone" else "No ISL model", if (k.islReady) Ink.leaf else Ink.mute)
-                } else if (free) {
-                    Pill(if (k.freeReady) "NPU · any English" else "Free talk · not ready", if (k.freeReady) Ink.leaf else Ink.mute)
-                } else if (voice) {
-                    Pill(if (app.hearing.ready) "Whisper" else "No voice model", if (app.hearing.ready) Ink.leaf else Ink.mute)
-                } else {
-                    Pill(
-                        if (k.ready) k.encoder.label else "Encoder · Loading…",
-                        when {
-                            !k.ready -> Ink.mute
-                            k.encoder.label.startsWith("NPU") -> Ink.leaf
-                            k.encoder.label.startsWith("CPU") -> Ink.turmeric
-                            else -> Ink.mute
-                        },
-                        pulse = !k.ready,
-                    )
-                }
+                val main = status(app, k, st, micHot)
+                Pill(main.text, main.dot, main.pulse, Modifier.weight(1f, fill = false))
+                if (Stage.debug) techStatus(app, k)?.let { Pill(it.text, it.dot, it.pulse) }
             }
             ChannelSwitch(app, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
         }
 
-        Spacer(Modifier.height(18.dp))
-        Box(Modifier.padding(horizontal = 24.dp).fillMaxWidth().height(112.dp)) {
+        Spacer(Modifier.height(14.dp))
+        Box(Modifier.padding(horizontal = 24.dp).fillMaxWidth().height(124.dp)) {
             if (taught == 0 && app.said == null && app.channel == Channel.LIPS) {
                 Column {
-                    Text("Teach Mouna your phrases first.", style = Type.title.copy(fontSize = 26.sp, fontStyle = FontStyle.Italic))
-                    Spacer(Modifier.height(8.dp))
+                    Text("Teach Mouna your phrases first.", style = teachFirst)
                     Text(
                         "Two examples each, about a minute in all →",
-                        style = Type.body.copy(color = Ink.turmeric, textDecoration = TextDecoration.Underline),
-                        modifier = Modifier.clickable { app.go(Screen.TEACH) },
+                        style = teachLink,
+                        modifier = Modifier.heightIn(min = 48.dp).clickable { app.go(Screen.TEACH) }.wrapContentHeight(Alignment.CenterVertically),
                     )
                 }
             } else {
@@ -124,20 +168,23 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                     label = "said",
                 ) { said ->
                     if (said == null) {
-                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.FREE -> "Mouth anything, in English."; else -> "Mouth a phrase." }, style = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 34.sp))
+                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.FREE -> "Mouth anything, in English."; else -> "Mouth a phrase." }, style = waitingStyle)
                     } else {
                         Column {
-                            Text(said.text, style = Type.display.copy(fontSize = 34.sp, lineHeight = 38.sp), maxLines = 2)
-                            Spacer(Modifier.height(8.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val ms = k.lastMs?.takeIf { said.via == "lips" }?.let { " · ${it.toInt()} ms" } ?: ""
-                                Text("SAID · ${said.via.uppercase()}$ms", style = Type.label)
+                            Text(said.text, style = saidStyle, maxLines = 2)
+                            Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val how = howSaid(said.via)
+                                val ms = if (Stage.debug && said.via == "lips") k.lastMs?.let { " · ${it.toInt()} ms" } ?: "" else ""
+                                Text(
+                                    if (said.via == "none") "Nothing said" else "Said aloud" + (if (how.isEmpty()) "" else " · $how") + ms,
+                                    style = saidNote,
+                                )
                                 if (said.via == "lips" || said.via == "voice") {
-                                    Spacer(Modifier.width(14.dp))
+                                    Spacer(Modifier.width(12.dp))
                                     Text(
                                         "Wrong?",
-                                        style = Type.mono.copy(color = Ink.turmeric, textDecoration = TextDecoration.Underline),
-                                        modifier = Modifier.clickable { app.wrong() },
+                                        style = wrongLink,
+                                        modifier = Modifier.heightIn(min = 48.dp).clickable { app.wrong() }.padding(horizontal = 6.dp).wrapContentHeight(Alignment.CenterVertically),
                                     )
                                 }
                             }
@@ -148,14 +195,15 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
         }
 
         SectionLabel("Or tap a picture", Modifier.padding(start = 24.dp))
+        val tileH = tileHeight(app.lang)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier.padding(bottom = 6.dp),
         ) {
-            items(k.pack) { id ->
+            items(k.pack, key = { it }) { id ->
                 app.phrases[id]?.let { p ->
-                    PhraseTile(p, app.lang, Modifier.width(118.dp).height(148.dp)) { app.speak(id, "touch") }
+                    PhraseTile(p, app.lang, Modifier.width(128.dp).height(tileH)) { app.speak(id, "touch") }
                 }
             }
         }
@@ -173,25 +221,28 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
             val on = app.channel == c
             Text(
                 label,
-                style = Type.button.copy(fontSize = 14.sp, color = if (on) Ink.bg else Ink.bone2),
+                style = if (on) switchOn else switchOff,
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(if (on) Ink.bone else Ink.bg.copy(alpha = 0f))
                     .clickable { app.chooseChannel(c) }
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = 14.dp) // four channels must fit a phone's width
+                    .wrapContentHeight(Alignment.CenterVertically),
             )
         }
     }
 }
 
-/** A soft ring that breathes with the voice: the person can see they are being heard. */
+/** A soft ring that breathes with the voice: the person can see they are being heard. Reads the mic level itself. */
 @Composable
-private fun VoiceRing(level: Float, busy: Boolean, modifier: Modifier) {
-    val scale by animateFloatAsState(1f + 0.6f * level, tween(90), label = "ring")
+private fun VoiceRing(app: MounaApp, modifier: Modifier) {
+    val scale by animateFloatAsState(1f + 0.6f * app.micLevel, tween(90), label = "ring")
+    val busy = app.hearingBusy
     Box(modifier.size(150.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(150.dp).scale(scale).clip(CircleShape).background(Ink.turmeric.copy(alpha = if (busy) 0.30f else 0.14f)))
         Box(Modifier.size(84.dp).clip(CircleShape).background(Ink.bg.copy(alpha = 0.82f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.GraphicEq, null, tint = Ink.turmeric, modifier = Modifier.size(38.dp))
+            Icon(MounaIcons.GraphicEq, null, tint = Ink.turmeric, modifier = Modifier.size(38.dp))
         }
     }
 }

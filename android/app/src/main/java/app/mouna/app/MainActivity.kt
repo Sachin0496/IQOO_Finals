@@ -10,7 +10,9 @@ import android.content.BroadcastReceiver
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
@@ -38,7 +40,6 @@ import android.telephony.TelephonyManager
 import app.mouna.app.ui.MounaRoot
 import app.mouna.app.ui.MounaTheme
 import app.mouna.probe.ProbeActivity
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -64,8 +65,11 @@ class MainActivity : ComponentActivity() {
         contactAnswer = null
     }
     private lateinit var carrier: CarrierLink
+    private val receivers = mutableListOf<BroadcastReceiver>()
     private val cameraDenied = mutableStateOf(false)
     private val cameraReady = mutableStateOf(false)
+    /** First launch (or after Start over): the Welcome screen, until Continue. Set in onCreate from the store. */
+    private val welcome = mutableStateOf(false)
 
     private val askCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraDenied.value = !granted
@@ -79,6 +83,13 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
         super.onCreate(savedInstanceState)
+        // android:keepScreenOn on the <activity> does nothing (it is a View attribute): hands-free mouthing needs the screen to stay lit.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Back with nothing left to close (Speak, no prompt) would finish the activity: the engine dies and a call hangs up.
+        // Added before the UI's own BackHandlers, which therefore still win whenever they are enabled.
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = moveToBack()
+        })
         engine = Engine(applicationContext, PhrasePack.bundled(), Store(applicationContext))
         voice = Voice(applicationContext, engine.store)
         carrier = CarrierLink(applicationContext)
@@ -109,12 +120,14 @@ class MainActivity : ComponentActivity() {
                 pickContactResult.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
             },
         )
+        welcome.value = !engine.store.welcomed
         engine.start()
         lifecycleScope.launch { engine.events.collect { app.onEvent(it) } }
 
+        // First launch: the Welcome screen says why Mouna needs the camera before Android asks for it.
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             cameraReady.value = true
-        } else {
+        } else if (!welcome.value) {
             askCamera.launch(Manifest.permission.CAMERA)
         }
 
@@ -173,9 +186,18 @@ class MainActivity : ComponentActivity() {
                     cameraDenied = cameraDenied.value,
                     bindCamera = ::bindCamera,
                     openProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
+                    welcome = welcome.value,
+                    onWelcomeDone = ::welcomeDone,
                 )
             }
         }
+    }
+
+    /** Continue on the Welcome screen: remember it, then ask for the camera (unless it was already allowed). */
+    private fun welcomeDone() {
+        engine.store.welcomed = true
+        welcome.value = false
+        if (!cameraReady.value) askCamera.launch(Manifest.permission.CAMERA)
     }
 
     /**
@@ -183,9 +205,16 @@ class MainActivity : ComponentActivity() {
      * sender for DUMP, which the shell holds and an ordinary app can't get: no other app can drive the call or the voice.
      */
     private fun debugReceiver(action: String, handle: (Intent) -> Unit) {
-        ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+        val r = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) = handle(i)
-        }, IntentFilter(action), Manifest.permission.DUMP, null, ContextCompat.RECEIVER_EXPORTED)
+        }
+        ContextCompat.registerReceiver(this, r, IntentFilter(action), Manifest.permission.DUMP, null, ContextCompat.RECEIVER_EXPORTED)
+        receivers += r
+    }
+
+    /** Sends the app to the background, the way Home does: the engine and any call keep running. */
+    fun moveToBack() {
+        moveTaskToBack(true)
     }
 
     private val preview = Preview.Builder().build()
@@ -200,35 +229,51 @@ class MainActivity : ComponentActivity() {
         if (bound) return
         bound = true
         lifecycleScope.launch {
-            while (engine.sensor == null) delay(50)
-            val sensor = engine.sensor!!
+            // Null if the face model could not start at all: say so instead of waiting for it forever.
+            val sensor = engine.awaitSensor()
+            if (sensor == null) {
+                noCamera("the face model did not start")
+                return@launch
+            }
             val future = ProcessCameraProvider.getInstance(this@MainActivity)
             future.addListener({
-                val provider = future.get()
-                // Front camera faces the person; any camera is better than none (some devices misreport facing).
-                val camera = listOf(CameraSelector.DEFAULT_FRONT_CAMERA, CameraSelector.DEFAULT_BACK_CAMERA)
-                    .firstOrNull { runCatching { provider.hasCamera(it) }.getOrDefault(false) }
-                    ?: provider.availableCameraInfos.firstOrNull()?.cameraSelector
-                if (camera == null) {
-                    cameraDenied.value = true
-                    return@addListener
+                try {
+                    val provider = future.get()
+                    // Front camera faces the person; any camera is better than none (some devices misreport facing).
+                    val camera = listOf(CameraSelector.DEFAULT_FRONT_CAMERA, CameraSelector.DEFAULT_BACK_CAMERA)
+                        .firstOrNull { runCatching { provider.hasCamera(it) }.getOrDefault(false) }
+                        ?: provider.availableCameraInfos.firstOrNull()?.cameraSelector
+                    if (camera == null) {
+                        noCamera("this phone reports no camera")
+                        return@addListener
+                    }
+                    @Suppress("DEPRECATION")
+                    val builder = ImageAnalysis.Builder()
+                        .setTargetResolution(android.util.Size(480, 640))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                    // Lip reading wants >= 25 fps (Auto-AVSR is trained at 25). Indoors auto-exposure drops the front
+                    // camera to 20 fps (measured on the iQOO 15); ask for the best supported range topping out at 30.
+                    fpsRange(provider, camera)?.let { r ->
+                        androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                            .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, r)
+                        Log.i("Mouna", "camera fps range $r")
+                    }
+                    val analyzer = builder.build().also { it.setAnalyzer(engine.analysis, sensor) }
+                    provider.bindToLifecycle(this@MainActivity, camera, preview, analyzer)
+                } catch (e: Exception) { // the camera is taken by another app, the HAL is down, a policy blocks it
+                    Log.e("Mouna", "camera bind", e)
+                    noCamera("the camera could not be opened")
                 }
-                @Suppress("DEPRECATION")
-                val builder = ImageAnalysis.Builder()
-                    .setTargetResolution(android.util.Size(480, 640))
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                // Lip reading wants >= 25 fps (Auto-AVSR is trained at 25). Indoors auto-exposure drops the front camera
-                // to 20 fps (measured on the iQOO 15); ask for the best supported range topping out at 30 fps instead.
-                fpsRange(provider, camera)?.let { r ->
-                    androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
-                        .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, r)
-                    android.util.Log.i("Mouna", "camera fps range $r")
-                }
-                val analyzer = builder.build().also { it.setAnalyzer(engine.analysis, sensor) }
-                provider.bindToLifecycle(this@MainActivity, camera, preview, analyzer)
             }, ContextCompat.getMainExecutor(this@MainActivity))
         }
+    }
+
+    /** The existing no-camera screen, instead of a Speak screen that will never see a face. */
+    private fun noCamera(why: String) {
+        Log.e("Mouna", "no camera: $why")
+        cameraDenied.value = true
+        cameraReady.value = false
     }
 
     /** The supported AE range with the highest floor whose ceiling is 30 fps ([30, 30] if the camera has it). */
@@ -264,6 +309,8 @@ class MainActivity : ComponentActivity() {
     }.getOrNull()
 
     override fun onDestroy() {
+        for (r in receivers) runCatching { unregisterReceiver(r) }
+        receivers.clear()
         app.shutdown()
         voice.close()
         engine.close()

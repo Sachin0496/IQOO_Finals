@@ -20,6 +20,7 @@ import app.mouna.core.TeachRequest
 import app.mouna.core.Zone
 import app.mouna.core.decide
 import app.mouna.core.teachSwitch
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,10 +30,15 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Collections
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /** What the lips are used for right now. */
 enum class Listen { SPEAK, TEACH, NEGATIVE, PAUSED }
+
+/** The camera analysis (face model) coming up: the UI shows the no-camera screen if it never does. */
+enum class SensorState { STARTING, READY, FAILED }
 
 /** Per-frame state for the camera card. Updated ~30 times a second. */
 data class Live(
@@ -128,6 +134,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
 
     @Volatile var sensor: Sensor? = null
         private set
+    private val _sensorState = MutableStateFlow(SensorState.STARTING)
+    val sensorState: StateFlow<SensorState> = _sensorState.asStateFlow()
+    private val sensorBuilt = CompletableDeferred<Sensor?>()
+    private var startedAt = 0L
+    private var firstFrameSeen = false
     private val segmenter = Segmenter()
     private val taps = CopyOnWriteArrayList<(Frame) -> Unit>()
     private var lastFrameMs = 0L
@@ -141,6 +152,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     private var isl: Isl? = null
     @Volatile private var islKnown = false
     @Volatile private var signMode = false
+    /** The switch setup (or anything else that captures frames) has run: the landmarker keeps its blendshape output. */
+    @Volatile private var setupSeen = false
     // analysis thread: the sign being recorded
     private var signFrames: MutableList<FloatArray>? = null
     private var handsUp = 0
@@ -176,22 +189,35 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         tiers = phrases.tiers()
     }
 
+    /** The sensor once it is built, or null if the face model could not start at all (no camera screen, not a hang). */
+    suspend fun awaitSensor(): Sensor? = sensorBuilt.await()
+
+    /**
+     * Brings the engine up. Order matters on stage: the camera first (the person sees themselves at once), then the lip
+     * encoder (it gates "ready", and a first NPU compile can take minutes), and only then the ISL model; Whisper waits
+     * for the encoder too (see [WhisperGate]), so nothing competes with it for the CPU.
+     */
     fun start() {
-        freeWorker.execute {
-            val (r, msg) = runCatching { OpenVsr.open(context) { ftLog(it) } }
-                .getOrElse { null to "Free talk: ${it.message}" }
-            openVsr = r
-            freeTalkStatus = msg
-            ftLog(msg)
-            _knowledge.value = _knowledge.value.copy(freeTalk = msg.lineSequence().first(), freeReady = r != null)
+        startedAt = SystemClock.elapsedRealtime()
+        onAnalysis {
+            val t0 = SystemClock.elapsedRealtime()
+            val s = runCatching { Sensor(context, ::onFrame, blendshapes = personalSwitch != null) }.onFailure { Log.e(TAG, "sensor", it) }.getOrNull()
+            if (s != null) {
+                syncSensor(s) // flags set before the sensor existed (the persisted Sign channel, a taught switch) reach it now
+                sensor = s
+                syncSensor(s) // and any set in between
+                Log.i(PERF, "sensor ready in ${SystemClock.elapsedRealtime() - t0} ms (${s.delegate})")
+            }
+            _sensorState.value = if (s != null) SensorState.READY else SensorState.FAILED
+            sensorBuilt.complete(s)
         }
-        analysis.execute { sensor = runCatching { Sensor(context, ::onFrame) }.onFailure { Log.e(TAG, "sensor", it) }.getOrNull() }
-        worker.execute {
-            isl = runCatching { Isl.open(context) }.getOrNull()
-            publish() // ISL is known now; the encoder can take minutes on its first NPU compile
-            islKnown = true
-            publish()
-            val (ort, report) = OrtEncoder.open(context) { Log.w(TAG, it) }
+        onWorker {
+            val t0 = SystemClock.elapsedRealtime()
+            val (ort, report) = try {
+                OrtEncoder.open(context) { Log.w(TAG, it) }
+            } finally {
+                WhisperGate.open() // whatever happened, Whisper must not wait on a dead start
+            }
             encoder = ort ?: ShapeEncoder()
             examples = store.load(encoder.id)
             learner = Learner()
@@ -199,12 +225,54 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             for (x in examples.negatives) learner.addNegative(x)
             ready = true
             publish(report)
+            Log.i(PERF, "encoder ready in ${SystemClock.elapsedRealtime() - t0} ms (${encoder.label})")
+            // Free talk after the lip encoder (start-up order above), on its own thread: a first NPU compile takes minutes.
+            submit(freeWorker) {
+                val (r, msg) = runCatching { OpenVsr.open(context) { ftLog(it) } }
+                    .getOrElse { null to "Free talk: ${it.message}" }
+                openVsr = r
+                freeTalkStatus = msg
+                ftLog(msg)
+                _knowledge.value = _knowledge.value.copy(freeTalk = msg.lineSequence().first(), freeReady = r != null)
+            }
+
+            val t1 = SystemClock.elapsedRealtime()
+            isl = runCatching { Isl.open(context) }.getOrNull()
+            islKnown = true
+            publish()
+            Log.i(PERF, "isl ${if (isl != null) "ready" else "absent"} in ${SystemClock.elapsedRealtime() - t1} ms")
         }
+    }
+
+    /** The executors outlive nothing: a call that races [close] is dropped, not a crash. */
+    private fun submit(ex: Executor, block: () -> Unit) {
+        try {
+            ex.execute(block)
+        } catch (e: RejectedExecutionException) {
+            Log.w(TAG, "engine closed: dropped a task")
+        }
+    }
+    private fun onWorker(block: () -> Unit) = submit(worker, block)
+    private fun onAnalysis(block: () -> Unit) = submit(analysis, block)
+
+    /** Tells the sensor what is consumed right now, so it does not produce what nobody reads (see [Sensor.wantCrop]). */
+    private fun syncSensor(s: Sensor) {
+        val crop = ready && listen != Listen.PAUSED
+        if (s.wantCrop != crop) s.wantCrop = crop
+        val blend = personalSwitch != null || setupSeen
+        if (s.wantBlend != blend) s.wantBlend = blend
+        if (s.signing != signMode) s.signing = signMode
+        if (s.wantAvsr != freeOn) s.wantAvsr = freeOn
     }
 
     // ---------------- analysis thread ----------------
 
     private fun onFrame(f: Frame) {
+        sensor?.let { syncSensor(it) }
+        if (!firstFrameSeen) {
+            firstFrameSeen = true
+            Log.i(PERF, "first frame ${SystemClock.elapsedRealtime() - startedAt} ms after engine start")
+        }
         val dt = if (lastFrameMs > 0) f.tMs - lastFrameMs else 0
         lastFrameMs = f.tMs
         if (signMode) {
@@ -240,7 +308,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             }
         }
         if (freeOn && openVsr != null) {
-            freeSegmenter.push(f)?.let { c -> freeWorker.execute { readClip(c) } }
+            freeSegmenter.push(f)?.let { c -> submit(freeWorker) { readClip(c) } }
         } else {
             freeSegmenter.reset()
         }
@@ -249,7 +317,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         if (ready && mode != Listen.PAUSED) clip = segmenter.push(f) else segmenter.reset()
         if (clip != null) {
             val intent = teaching
-            worker.execute { handle(clip, mode, intent) }
+            onWorker { handle(clip, mode, intent) }
         }
         val prev = _live.value
         _live.value = Live(
@@ -285,9 +353,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             val frames = rec.dropLast(minOf(handsDown, rec.size))
             if (frames.size >= 12) {
                 val endMs = f.tMs
-                worker.execute {
-                    val model = isl ?: return@execute
-                    val g = runCatching { model.classify(frames) }.onFailure { Log.e(TAG, "isl", it) }.getOrNull() ?: return@execute
+                onWorker {
+                    val model = isl ?: return@onWorker
+                    val g = runCatching { model.classify(frames) }.onFailure { Log.e(TAG, "isl", it) }.getOrNull() ?: return@onWorker
                     _events.tryEmit(Event.Signed(g, (SystemClock.uptimeMillis() - endMs).toDouble()))
                 }
             }
@@ -295,7 +363,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     }
 
     /** QA: classify recorded keypoints (frames of 27 x 2) and log the top words. */
-    fun classifySign(frames: List<FloatArray>) = worker.execute {
+    fun classifySign(frames: List<FloatArray>) = onWorker {
         val g = isl?.classify(frames)
         Log.i(TAG, "isl check -> " + (g?.joinToString { "${it.word} %.4f".format(it.p) } ?: "no model"))
     }
@@ -304,8 +372,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     fun signing(on: Boolean) {
         if (on == signMode) return
         signMode = on
-        sensor?.signing = on
-        analysis.execute { signFrames = null; handsUp = 0 }
+        sensor?.let { syncSensor(it) } // not built yet: start() applies it
+        onAnalysis { signFrames = null; handsUp = 0 }
     }
 
     // ---------------- worker thread ----------------
@@ -370,16 +438,16 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
 
     // ---------------- UI calls ----------------
 
-    fun listen(mode: Listen, intent: String? = null) = worker.execute {
+    fun listen(mode: Listen, intent: String? = null) = onWorker {
         teaching = if (mode == Listen.TEACH) intent else null
         listen = mode
-        analysis.execute { segmenter.reset() }
+        onAnalysis { segmenter.reset() }
         publish()
     }
 
     /** The person picked [intent] after Mouna wasn't sure: learn from that mouthing (the Lab's tap-to-correct). */
-    fun picked(intent: String) = worker.execute {
-        val e = lastEmbedding ?: return@execute
+    fun picked(intent: String) = onWorker {
+        val e = lastEmbedding ?: return@onWorker
         lastEmbedding = null
         learner.teach(intent, e)
         examples.samples.getOrPut(intent) { mutableListOf() }.add(e)
@@ -388,8 +456,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     }
 
     /** "None of these": that mouthing becomes a negative example (core.md: add every "none of these"). */
-    fun noneOfThese() = worker.execute {
-        val e = lastEmbedding ?: return@execute
+    fun noneOfThese() = onWorker {
+        val e = lastEmbedding ?: return@onWorker
         lastEmbedding = null
         learner.addNegative(e)
         examples.negatives.add(e)
@@ -397,7 +465,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         publish()
     }
 
-    fun setPack(ids: List<String>) = worker.execute {
+    fun setPack(ids: List<String>) = onWorker {
         val removed = (store.pack ?: defaultPack) - ids.toSet()
         store.pack = ids
         for (k in removed) {
@@ -409,14 +477,14 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     }
 
     /** Forget one phrase's examples, e.g. to teach a different mouthing for it. */
-    fun reteach(intent: String) = worker.execute {
+    fun reteach(intent: String) = onWorker {
         learner.forget(intent)
         examples.samples.remove(intent)
         store.save(encoder.id, examples)
         publish()
     }
 
-    fun wipe() = worker.execute {
+    fun wipe() = onWorker {
         store.wipe()
         learner = Learner()
         examples = Store.Examples(LinkedHashMap(), mutableListOf())
@@ -426,10 +494,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         publish()
     }
 
-    fun refresh() = worker.execute { publish() }
+    fun refresh() = onWorker { publish() }
 
     /** Records every frame for [ms] (setup screens: rest face, switch moves, eye looks). */
     suspend fun capture(ms: Long): List<Frame> {
+        setupSeen = true // setup wants every output the face model has, blendshapes included
         val out = Collections.synchronizedList(mutableListOf<Frame>())
         val tap: (Frame) -> Unit = { if (it.face) out.add(it) }
         taps.add(tap)
@@ -462,7 +531,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
 
     /** Nod, shake and double blink are only armed while Mouna is asking, so mouthing can't trigger them. */
     fun gesturesOn(on: Boolean) {
-        if (on && !gestures) analysis.execute { head = HeadGesture(); blink = DoubleBlink() }
+        if (on && !gestures) onAnalysis { head = HeadGesture(); blink = DoubleBlink() }
         gestures = on
     }
 
@@ -563,15 +632,16 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     }
 
     fun close() {
-        freeWorker.execute { openVsr?.close() }
+        submit(freeWorker) { openVsr?.close() }
         freeWorker.shutdown()
-        analysis.execute { sensor?.close() }
+        onAnalysis { sensor?.close() }
         analysis.shutdown()
-        worker.execute { encoder.close(); isl?.close() }
+        onWorker { encoder.close(); isl?.close() }
         worker.shutdown()
     }
 
     companion object {
         private const val TAG = "Mouna"
+        private const val PERF = "MounaPerf"
     }
 }

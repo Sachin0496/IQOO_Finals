@@ -8,7 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,21 +67,31 @@ fun AskScreen(app: MounaApp) {
 
     val result = tick.let { session.result }
     LaunchedEffect(result) { (result as? AskResult.Answer)?.let { app.speakAsk(it.node) } }
+    val face by app.engine.live.collectSlice { it.face } // nods and blinks need the face in view
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        val path = session.path.joinToString("  ›  ") { it.ask[app.lang.tag] ?: it.ask["en"] ?: it.id }
-        Text("ASK · QUESTION ${session.asked}", style = Type.label)
-        if (path.isNotEmpty()) {
-            Spacer(Modifier.height(4.dp))
-            Text(path, style = Type.mono.copy(fontSize = 12.sp, color = Ink.bone2), maxLines = 1)
+        // Both rows keep their height whatever they hold, so nothing below them ever shifts.
+        Row(Modifier.fillMaxWidth().height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (face) Pill("Watching for nods", Ink.leaf) else Pill("Can’t see your face: tap to answer", Ink.mute)
+            if (Stage.debug) {
+                Spacer(Modifier.width(12.dp))
+                Text("ASK · QUESTION ${session.asked}", style = Type.label)
+            }
         }
-        Spacer(Modifier.height(20.dp))
+        Box(Modifier.fillMaxWidth().height(28.dp), contentAlignment = Alignment.CenterStart) {
+            val crumbs = session.path.map { (it.ask[app.lang.tag] ?: it.ask["en"] ?: it.id).trimEnd('?', '？', ' ') }
+            if (crumbs.isNotEmpty() && result == null) {
+                Text(crumbs.joinToString(" → ") + " → Yes", style = crumbStyle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         when (result) {
             null -> {
                 val node = session.current!!
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                     Column {
-                        Text(node.ask[app.lang.tag] ?: node.ask["en"] ?: node.id, style = Type.display.copy(fontSize = 44.sp, lineHeight = 50.sp, color = if (node.urgent) Ink.kumkum else Ink.bone))
+                        // Urgent questions are marked by a turmeric headline, never an alarm red.
+                        Text(node.ask[app.lang.tag] ?: node.ask["en"] ?: node.id, style = if (node.urgent) askUrgent else askStyle)
                         if (app.lang != Lang.EN) {
                             Spacer(Modifier.height(10.dp))
                             Text(node.ask["en"] ?: "", style = Type.body)
@@ -87,21 +102,34 @@ fun AskScreen(app: MounaApp) {
                     Answer("No", Icons.Rounded.Close, Ink.card, Ink.bone, Modifier.weight(1f)) { no() }
                     Answer("Yes", Icons.Rounded.Check, Ink.leaf, Ink.bg, Modifier.weight(1f)) { yes() }
                 }
-                Spacer(Modifier.height(12.dp))
-                Row {
+                Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Nod or blink twice for yes. Shake your head for no.", style = Type.hint, modifier = Modifier.weight(1f))
                     if (session.path.isNotEmpty()) {
-                        Text("Back", style = Type.mono.copy(color = Ink.bone2, textDecoration = TextDecoration.Underline), modifier = Modifier.clickable { session.back(); tick++ }.padding(8.dp))
+                        Text(
+                            "Back",
+                            style = backStyle,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .clickable { session.back(); tick++ }
+                                .padding(horizontal = 14.dp)
+                                .wrapContentHeight(Alignment.CenterVertically),
+                        )
                     }
-                    Spacer(Modifier.weight(1f))
-                    Text("Nod or blink twice = yes · shake = no", style = Type.mono.copy(fontSize = 12.sp, color = Ink.mute), modifier = Modifier.padding(8.dp))
                 }
             }
-            is AskResult.Answer -> Done(app, app.said?.text ?: "", "Said in ${app.lang.label} · ${session.asked} questions") { round++ }
-            is AskResult.None -> Done(app, TREE.none[app.lang.tag] ?: TREE.none["en"] ?: "Not in the list.", "Try the pictures, or teach it as a new phrase") { round++ }
+            is AskResult.Answer -> Done(app.said?.text ?: "", if (Stage.debug) "Said in ${app.lang.label} · ${session.asked} questions" else "Said aloud") { round++ }
+            is AskResult.None -> Done(TREE.none[app.lang.tag] ?: TREE.none["en"] ?: "I want to say something else.", "Nothing on the list matched.") { round++ }
         }
         Spacer(Modifier.height(12.dp))
     }
 }
+
+private val crumbStyle = Type.mono.copy(fontSize = 14.sp, color = Ink.bone2)
+private val backStyle = Type.mono.copy(color = Ink.bone2, fontSize = 14.sp, textDecoration = TextDecoration.Underline)
+private val askStyle = Type.display.copy(fontSize = 44.sp, lineHeight = 50.sp)
+private val askUrgent = askStyle.copy(color = Ink.turmeric)
+private val doneStyle = Type.display.copy(fontSize = 40.sp, lineHeight = 46.sp)
+private val doneNote = Type.hint.copy(fontStyle = FontStyle.Italic)
 
 @Composable
 private fun Answer(text: String, icon: ImageVector, bg: Color, fg: Color, modifier: Modifier, onClick: () -> Unit) {
@@ -117,12 +145,12 @@ private fun Answer(text: String, icon: ImageVector, bg: Color, fg: Color, modifi
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.ColumnScope.Done(app: MounaApp, said: String, note: String, again: () -> Unit) {
+private fun ColumnScope.Done(said: String, note: String, again: () -> Unit) {
     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
         Column {
-            Text(said, style = Type.display.copy(fontSize = 40.sp, lineHeight = 46.sp))
+            Text(said, style = doneStyle)
             Spacer(Modifier.height(10.dp))
-            Text(note, style = Type.mono.copy(fontSize = 12.sp, color = Ink.mute, fontStyle = FontStyle.Italic))
+            Text(note, style = doneNote)
         }
     }
     BigButton("Ask again", Tone.PRIMARY, Modifier.fillMaxWidth(), onClick = again)

@@ -40,6 +40,15 @@ Fixed on the way: filler words ("you", "can"…) had pulled the last one onto "I
 
 ## Log
 
+**10 Oct, night (branch `app/polish`)**
+- Calls (merged 9 Oct, PR #1): web-link call through `call-server/` (guest joins from a browser, no SIM needed); phone-number call for phones with a SIM; Intro, quick phrases, type-to-speak, lips/sign during a call; Sarvam live voice with offline fallback. Audited; 13 findings fixed.
+- Call audio now goes out as AAC m4a instead of WAV: 100 KB → 15 KB per sentence (measured, emulator). Over the laptop tunnel a sentence arrived 4 s after its caption instead of 9.5 s; a cloud host (Render) would cut it further.
+- iQOO 15, cold start (MounaPerf log): camera 241 ms (GPU), lip encoder 1.19 s on the NPU (fp16), ISL 248 ms, Whisper 562 ms.
+- APK: Hexagon libraries only for V75 (OnePlus 13R) and V81 (iQOO 15); 189 MB → 181 MB debug.
+- Stage polish: Welcome screen before the camera prompt; plain status words (technical status only after 7 taps on the version in Settings); Indic text never cut off; contrast ≥ 4.5:1; hold-to-hang-up; Start over confirms and resets everything; said text fades after 8 s.
+- No surprises: screen stays on, Back keeps Mouna running, gestures arm 1 s after a prompt, nothing leaves the Call screen mid-call, a killed NPU compile no longer demotes the encoder to the CPU, phone voice speaks at once off a call.
+- Not yet checked: a real person as the web guest on a phone browser, Sarvam with a real key, lips/sign/switch with a real face on the polished build.
+
 **7 Oct, night**
 - ISL: AI4Bharat OpenHands SL-GCN integrated (export only), Sign mode with MediaPipe pose + hands; preprocessing parity test.
 - Nod / shake / double blink in the app: yes and no with no setup. Total app tests: 30.

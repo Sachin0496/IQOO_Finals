@@ -37,10 +37,15 @@ class Signer(context: Context) : AutoCloseable {
                 .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(poseModel).setDelegate(d).build())
                 .setRunningMode(RunningMode.VIDEO).setNumPoses(1).build())
         }
-        hands = firstWorking { d ->
-            HandLandmarker.createFromOptions(context, HandLandmarker.HandLandmarkerOptions.builder()
-                .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(handModel).setDelegate(d).build())
-                .setRunningMode(RunningMode.VIDEO).setNumHands(2).build())
+        hands = try {
+            firstWorking { d ->
+                HandLandmarker.createFromOptions(context, HandLandmarker.HandLandmarkerOptions.builder()
+                    .setBaseOptions(BaseOptions.builder().setModelAssetBuffer(handModel).setDelegate(d).build())
+                    .setRunningMode(RunningMode.VIDEO).setNumHands(2).build())
+            }
+        } catch (e: Throwable) {
+            pose.close() // the constructor won't return: nobody else will free the pose model
+            throw e
         }
     }
 

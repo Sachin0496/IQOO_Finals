@@ -22,7 +22,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -54,16 +53,12 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Ink.bg.copy(alpha = 0.97f))
+            .background(Ink.bg)
             .clickable(enabled = false) {}
             .systemBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
         Column(Modifier.fillMaxSize()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.weight(1f))
-                IconButtonSoft(Icons.Rounded.Close, "Close") { app.close() }
-            }
             when (prompt) {
                 is Prompt.PickAny -> Pick(app, k, "What did you mean?", "PICK THE RIGHT ONE", k.pack, noneFirst = false)
                 is Prompt.Heard -> SayClearly(app, prompt.text)
@@ -72,10 +67,13 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
                 is Prompt.FromCore -> {
                     val d = prompt.d
                     when (d.kind) {
-                        DecisionKind.CONFIRM -> Confirm(app, d.options[0], d.why, k.switchReady)
+                        DecisionKind.CONFIRM -> {
+                            val first = d.options.firstOrNull()
+                            if (first != null) Confirm(app, first, d.why, k.switchReady) else NotTaught(app, k, emptyList(), d.maybeNone)
+                        }
                         DecisionKind.RESCUE -> Rescue(app, d.options, k)
                         DecisionKind.CHOOSE -> Pick(app, k, "Which one?", "A FEW ARE POSSIBLE", d.options, d.maybeNone)
-                        DecisionKind.ASK -> Pick(app, k, "Is it one of these?", "MANY ARE POSSIBLE", d.options, d.maybeNone, offerAsk = true)
+                        DecisionKind.ASK -> Pick(app, k, "Which one?", "MANY ARE POSSIBLE", d.options, d.maybeNone, offerAsk = true)
                         DecisionKind.NOT_TAUGHT -> NotTaught(app, k, d.options, d.maybeNone)
                         DecisionKind.SPEAK -> Unit
                     }
@@ -85,21 +83,25 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
     }
 }
 
+/** A small label with the close button on its row (so it never lands on the gear), then the title. */
 @Composable
-private fun ColumnScope.Header(label: String, title: String) {
-    Text(label, style = Type.label)
-    Spacer(Modifier.height(8.dp))
+private fun ColumnScope.Header(app: MounaApp, label: String, title: String) {
+    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = Type.label, modifier = Modifier.weight(1f))
+        IconButtonSoft(Icons.Rounded.Close, "Close") { app.close() }
+    }
+    Spacer(Modifier.height(4.dp))
     Text(title, style = Type.display)
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(20.dp))
 }
 
 @Composable
 private fun ColumnScope.Confirm(app: MounaApp, id: String, why: String, switchReady: Boolean) {
     val action = why.startsWith("action")
-    Header(if (action) "AN ACTION · ALWAYS CONFIRMED" else "FAIRLY SURE", "Did you mean…")
+    Header(app, if (action) "AN ACTION: ALWAYS CONFIRMED" else "FAIRLY SURE", "Did you mean…?")
     app.phrases[id]?.let { PhraseTile(it, app.lang, Modifier.fillMaxWidth().height(300.dp), big = true, selected = true, accent = if (action) Ink.kumkum else Ink.turmeric) }
     Spacer(Modifier.weight(1f))
-    Hint(if (switchReady) "Your movement, a nod or two blinks = yes · shake = no" else "Nod or blink twice = yes · shake = no")
+    Hint(if (switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no.")
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.wrong() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.choose(id, "confirm") }
@@ -109,22 +111,22 @@ private fun ColumnScope.Confirm(app: MounaApp, id: String, why: String, switchRe
 /** Two pictures, left and right: the person looks at one (and holds, or uses their switch). */
 @Composable
 private fun ColumnScope.Rescue(app: MounaApp, options: List<String>, k: Knowledge) {
-    val live by app.engine.live.collectAsState()
-    Header("TWO LOOK ALIKE", "Which one?")
+    val zone by app.engine.live.collectSlice { it.gazeZone } // not the whole 30 Hz frame: only the gaze side
+    Header(app, "TWO LOOK ALIKE", "Which one?")
     Row(Modifier.fillMaxWidth().height(330.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         options.take(2).forEachIndexed { i, id ->
             val side = if (i == 0) Zone.LEFT else Zone.RIGHT
             app.phrases[id]?.let {
-                PhraseTile(it, app.lang, Modifier.weight(1f).fillMaxSize(), big = true, selected = live.gazeZone == side) { app.choose(id, "touch") }
+                PhraseTile(it, app.lang, Modifier.weight(1f).fillMaxSize(), big = true, selected = zone == side) { app.choose(id, "touch") }
             }
         }
     }
     Spacer(Modifier.weight(1f))
     Hint(
         when {
-            !k.gazeReady -> "Tap one · set up eyes in Settings to choose by looking"
-            k.switchReady -> "Look at one, then use your movement"
-            else -> "Look at one and hold"
+            !k.gazeReady -> "Tap the one you mean, or set up eyes in Settings to choose by looking."
+            k.switchReady -> "Look at one, then use your movement."
+            else -> "Look at one and hold your gaze."
         },
     )
     BigButton("Neither", Tone.NO, Modifier.fillMaxWidth()) { app.wrong() }
@@ -143,7 +145,8 @@ private fun ColumnScope.Pick(
 ) {
     val items = if (noneFirst) listOf(NONE) + options else options + NONE
     val hi = scanning(app, items, k.switchReady)
-    Header(label, title)
+    Header(app, label, title)
+    val tileH = gridTileHeight(app.lang)
     Column(
         Modifier.weight(1f).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -153,10 +156,10 @@ private fun ColumnScope.Pick(
                 row.forEach { id ->
                     val i = items.indexOf(id)
                     if (id == NONE) {
-                        NoneTile(Modifier.weight(1f).height(170.dp), i == hi) { app.noneOfThese() }
+                        NoneTile(Modifier.weight(1f).height(tileH), i == hi) { app.noneOfThese() }
                     } else {
                         app.phrases[id]?.let {
-                            PhraseTile(it, app.lang, Modifier.weight(1f).height(170.dp), selected = i == hi) { app.choose(id, "touch") }
+                            PhraseTile(it, app.lang, Modifier.weight(1f).height(tileH), roomy = true, selected = i == hi) { app.choose(id, "touch") }
                         }
                     }
                 }
@@ -164,14 +167,14 @@ private fun ColumnScope.Pick(
             }
         }
     }
-    if (k.switchReady) Hint("Use your movement when the right one lights up")
+    if (k.switchReady) Hint("Use your movement when the right one lights up.")
     if (offerAsk) BigButton("Ask me yes / no instead", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.ASK) }
 }
 
 /** Sign mode wasn't sure: the likeliest ISL words, as big buttons. */
 @Composable
 private fun ColumnScope.DidYouSign(app: MounaApp, words: List<String>) {
-    Header("ISL · NOT SURE", "Did you sign…")
+    Header(app, "NOT SURE", "Did you sign…?")
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         words.forEach { w ->
             Box(
@@ -181,7 +184,7 @@ private fun ColumnScope.DidYouSign(app: MounaApp, words: List<String>) {
                     .border(1.dp, Ink.rule2, RoundedCornerShape(22.dp))
                     .clickable { app.sayWord(w) }
                     .padding(horizontal = 22.dp, vertical = 20.dp),
-            ) { Text(w.replaceFirstChar { it.uppercase() }, style = Type.display.copy(fontSize = 30.sp)) }
+            ) { Text(w.replaceFirstChar { it.uppercase() }, style = signWord) }
         }
     }
     Spacer(Modifier.weight(1f))
@@ -191,10 +194,10 @@ private fun ColumnScope.DidYouSign(app: MounaApp, words: List<String>) {
 /** Voice mode: words that are none of the person's phrases. Mouna offers to say exactly those words, clearly. */
 @Composable
 private fun ColumnScope.SayClearly(app: MounaApp, text: String) {
-    Header("I HEARD", "Did you say…")
+    Header(app, "I HEARD", "Did you say…?")
     Text("“$text”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
     Spacer(Modifier.weight(1f))
-    Hint("Mouna will say these words clearly for you")
+    Hint("Mouna will say these words clearly for you.")
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.close() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayHeard(text) }
@@ -204,7 +207,7 @@ private fun ColumnScope.SayClearly(app: MounaApp, text: String) {
 /** Free talk: the sentence Mouna read, the other readings below; nothing is spoken until the person says yes. */
 @Composable
 private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
-    Header("FREE TALK · READ FROM YOUR LIPS", "Did you mean…")
+    Header(app, "FREE TALK: READ FROM YOUR LIPS", "Did you mean…?")
     Text("“${p.sentences[p.index]}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
     val others = p.sentences.filterIndexed { i, _ -> i != p.index }
     if (others.isNotEmpty()) {
@@ -220,7 +223,7 @@ private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
         }
     }
     Spacer(Modifier.weight(1f))
-    Hint("Nod or blink twice = say it · shake = next reading · tap another to say it")
+    Hint("Nod or blink twice to say it, shake your head for the next reading, or tap another.")
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextRead() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayRead(p.sentences[p.index]) }
@@ -229,23 +232,26 @@ private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
 
 @Composable
 private fun ColumnScope.NotTaught(app: MounaApp, k: Knowledge, maybe: List<String>, maybeNone: Boolean) {
-    Header("NOT ONE OF YOUR PHRASES", "I didn't catch that.")
+    Header(app, "I DIDN’T CATCH THAT", "Not one of your phrases")
     if (maybe.isNotEmpty()) {
-        Text("Maybe…", style = Type.body)
+        Text("Maybe one of these?", style = Type.body)
         Spacer(Modifier.height(10.dp))
+        val tileH = gridTileHeight(app.lang)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             maybe.take(2).forEach { id ->
-                app.phrases[id]?.let { PhraseTile(it, app.lang, Modifier.weight(1f).height(170.dp)) { app.choose(id, "touch") } }
+                app.phrases[id]?.let { PhraseTile(it, app.lang, Modifier.weight(1f).height(tileH), roomy = true) { app.choose(id, "touch") } }
             }
         }
     }
     Spacer(Modifier.weight(1f))
-    if (maybeNone) Hint("This looked like one of your “none of these” examples")
+    if (maybeNone) Hint("This looked like one of your “none of these” examples.")
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         BigButton("Ask me yes / no", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.ASK) }
         BigButton("Something else", Tone.NO, Modifier.fillMaxWidth()) { app.noneOfThese() }
     }
 }
+
+private val signWord = Type.display.copy(fontSize = 30.sp)
 
 @Composable
 private fun NoneTile(modifier: Modifier, selected: Boolean, onClick: () -> Unit) {
@@ -263,7 +269,7 @@ private fun NoneTile(modifier: Modifier, selected: Boolean, onClick: () -> Unit)
 
 @Composable
 private fun ColumnScope.Hint(text: String) {
-    Text(text, style = Type.mono.copy(color = Ink.mute, fontSize = 12.sp), modifier = Modifier.padding(bottom = 12.dp))
+    Text(text, style = Type.hint, modifier = Modifier.padding(bottom = 12.dp))
 }
 
 /** Switch scanning: the highlight steps through [items]; a press of the person's switch picks the lit one. */

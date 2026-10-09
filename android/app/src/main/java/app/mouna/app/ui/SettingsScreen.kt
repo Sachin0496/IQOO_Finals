@@ -1,8 +1,9 @@
 package app.mouna.app.ui
 
+import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,14 +13,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,9 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.os.SystemClock
+import app.mouna.BuildConfig
 import app.mouna.app.MounaApp
 import app.mouna.app.Screen
 import app.mouna.app.engine.CallUsage
@@ -39,10 +51,47 @@ import app.mouna.app.engine.Lang
 import app.mouna.app.engine.Sarvam
 import app.mouna.core.DecisionKind
 
+/**
+ * Counts quick taps on the version line, like Android's developer options: [needed] taps, each within [gapMs] of the
+ * one before. Pure (the caller supplies the clock) so it is unit-tested on the JVM.
+ */
+class TapCounter(private val needed: Int = 7, private val gapMs: Long = 1500) {
+    private var count = 0
+    private var last = 0L
+
+    /** Registers a tap at [now]; returns how many more are needed, 0 when this one unlocks (the count then starts over). */
+    fun tap(now: Long): Int {
+        count = if (count > 0 && now - last <= gapMs) count + 1 else 1
+        last = now
+        if (count >= needed) {
+            count = 0
+            return 0
+        }
+        return needed - count
+    }
+}
+
+/** What each preview of "Mouna isn't sure" is called, in plain words. */
+internal fun previewName(kind: DecisionKind): String = when (kind) {
+    DecisionKind.CONFIRM -> "Did-you-mean prompt"
+    DecisionKind.RESCUE -> "Two look alike"
+    DecisionKind.CHOOSE -> "Choose from a few"
+    DecisionKind.NOT_TAUGHT -> "Not one of my phrases"
+    else -> kind.name.lowercase().replace('_', ' ')
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
-    var wipeArmed by remember { mutableStateOf(false) }
+    var confirmWipe by remember { mutableStateOf(false) } // a dialog, never an armed button: leaving Settings forgets it
+    val context = LocalContext.current
+    val taps = remember { TapCounter() }
+    var toast by remember { mutableStateOf<Toast?>(null) }
+    fun say(text: String) {
+        toast?.cancel()
+        toast = Toast.makeText(context, text, Toast.LENGTH_SHORT).also { it.show() }
+    }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Text("Settings", style = Type.title)
         Spacer(Modifier.height(18.dp))
@@ -56,7 +105,15 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 SectionLabel("Voice")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    app.voice.voices.forEach { v -> Chip(v.label, v.id == app.voiceId) { app.chooseVoice(v.id); app.speak("water", "test") } }
+                    app.voice.voices.forEach { v -> Chip(v.label, v.id == app.voiceId) { app.chooseVoice(v.id) } } // choosing is silent
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HearIt(enabled = !app.onCall) { app.hearVoice() }
+                    if (app.onCall) {
+                        Spacer(Modifier.width(10.dp))
+                        Text("Not during a call", style = Type.body.copy(fontSize = 13.sp, color = Ink.mute))
+                    }
                 }
             }
         }
@@ -68,11 +125,8 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                     Text("Careful mode", style = Type.phrase)
                     Text("Speak only when very sure; otherwise show pictures.", style = Type.body.copy(fontSize = 13.sp))
                 }
-                Switch(
-                    checked = app.careful,
-                    onCheckedChange = { app.chooseCareful(it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Ink.turmeric, checkedThumbColor = Ink.bg),
-                )
+                Spacer(Modifier.width(12.dp))
+                MounaSwitch(app.careful) { app.chooseCareful(it) }
             }
         }
 
@@ -96,7 +150,128 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 var name by remember { mutableStateOf(app.callerName) }
                 TextBox(name, { name = it.take(40); app.chooseCallerName(name) }, "Your name", Modifier.fillMaxWidth())
-                Spacer(Modifier.height(14.dp))
+            }
+        }
+
+        if (Stage.debug) {
+            Spacer(Modifier.height(14.dp))
+            Advanced(app, k, openProbe, off = {
+                Stage.debug = false
+                say("Advanced settings off")
+            })
+        }
+
+        Spacer(Modifier.height(14.dp))
+        BigButton(
+            "Start over with a new person",
+            Tone.QUIET,
+            Modifier.fillMaxWidth(),
+            enabled = !app.onCall,
+        ) { confirmWipe = true }
+        if (app.onCall) Text("Not during a call.", style = Type.body.copy(fontSize = 13.sp, color = Ink.mute), modifier = Modifier.padding(top = 6.dp))
+
+        // The version line: seven quick taps open Advanced, as Android's developer options do.
+        Text(
+            "Mouna · version ${BuildConfig.VERSION_NAME}",
+            style = Type.label.copy(letterSpacing = 0.sp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp)
+                .heightIn(min = 48.dp)
+                .clickable(indication = null, interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }) {
+                    if (Stage.debug) {
+                        say("Advanced settings are on")
+                    } else {
+                        val left = taps.tap(SystemClock.elapsedRealtime())
+                        if (left == 0) {
+                            Stage.debug = true
+                            say("Advanced settings on")
+                        } else if (left <= 3) {
+                            say(if (left == 1) "1 more tap for Advanced settings" else "$left more taps for Advanced settings")
+                        }
+                    }
+                }
+                .padding(top = 14.dp),
+        )
+        Spacer(Modifier.height(20.dp))
+    }
+
+    if (confirmWipe) {
+        AlertDialog(
+            onDismissRequest = { confirmWipe = false },
+            containerColor = Ink.raised,
+            titleContentColor = Ink.bone,
+            textContentColor = Ink.bone2,
+            title = { Text("Start over with a new person?", style = Type.title.copy(fontSize = 24.sp, lineHeight = 28.sp)) },
+            text = {
+                Column {
+                    Text("This deletes, from this phone:", style = Type.body)
+                    Spacer(Modifier.height(8.dp))
+                    listOf(
+                        "everything Mouna learned: lip, voice and sign examples",
+                        "voice templates",
+                        "favourites and saved links",
+                        "your own phrases",
+                        "settings: language, voice, your name, and anything typed in Advanced",
+                    ).forEach { Text("•  $it", style = Type.body.copy(fontSize = 14.sp), modifier = Modifier.padding(bottom = 4.dp)) }
+                    Spacer(Modifier.height(8.dp))
+                    Text("It can't be undone.", style = Type.body.copy(color = Ink.bone))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmWipe = false
+                    app.startOver()
+                    say("Mouna is ready for a new person")
+                }) { Text("Delete everything", style = Type.button.copy(color = Ink.kumkum)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmWipe = false }) { Text("Keep everything", style = Type.button) }
+            },
+        )
+    }
+}
+
+/** Everything technical, shown only after the version line has been tapped seven times (see [Stage]). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Advanced(app: MounaApp, k: Knowledge, openProbe: () -> Unit, off: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Advanced", style = Type.phrase)
+                    Text("For setting up and testing. Also shows technical status on the other screens.", style = Type.body.copy(fontSize = 13.sp))
+                }
+                Spacer(Modifier.width(12.dp))
+                MounaSwitch(true) { if (!it) off() }
+            }
+        }
+
+        Card {
+            Column {
+                SectionLabel("Lip encoder")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Pill(if (k.ready) k.encoder.label else "Loading…", if (!k.ready) Ink.mute else if (k.encoder.label.startsWith("NPU")) Ink.leaf else if (k.encoder.label.startsWith("CPU")) Ink.turmeric else Ink.mute)
+                    k.encoder.warmMs?.let { Text("  ${"%.1f".format(it)} ms / window", style = Type.mono) }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(k.encoder.detail, style = Type.mono.copy(fontSize = 12.sp))
+                k.encoder.selfTestCosine?.let { Text("self-test cosine ${"%.5f".format(it)} (pass ≥ 0.99)", style = Type.mono.copy(fontSize = 12.sp)) }
+                k.lastMs?.let { Text("last decision ${it.toInt()} ms after the lips stopped", style = Type.mono.copy(fontSize = 12.sp)) }
+                Text("voice: ${app.voiceStatus}", style = Type.mono.copy(fontSize = 12.sp))
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "To use the NPU: adb push qnn_ctx_fp16.onnx /sdcard/Android/data/app.mouna/files/encoder/ and restart.",
+                    style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute),
+                )
+            }
+        }
+
+        Card {
+            Column {
+                SectionLabel("Web calls")
                 Text("Call server, for web link calls: the address of the relay (call-server/), like https://calls.example.com.", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))
                 var server by remember { mutableStateOf(app.store.callServer) }
@@ -112,7 +287,12 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                     },
                     style = Type.mono.copy(fontSize = 12.sp),
                 )
-                Spacer(Modifier.height(14.dp))
+            }
+        }
+
+        Card {
+            Column {
+                SectionLabel("Natural voice")
                 Text("Sarvam API key, for a natural voice on calls. Only the words to speak are sent, never audio or video.", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))
                 var key by remember { mutableStateOf(app.store.sarvamKey) }
@@ -142,28 +322,6 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(14.dp))
-        Card {
-            Column {
-                SectionLabel("Lip encoder")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Pill(if (k.ready) k.encoder.label else "Loading…", if (!k.ready) Ink.mute else if (k.encoder.label.startsWith("NPU")) Ink.leaf else if (k.encoder.label.startsWith("CPU")) Ink.turmeric else Ink.mute)
-                    k.encoder.warmMs?.let { Text("  ${"%.1f".format(it)} ms / window", style = Type.mono) }
-                }
-                Spacer(Modifier.height(10.dp))
-                Text(k.encoder.detail, style = Type.mono.copy(fontSize = 12.sp))
-                k.encoder.selfTestCosine?.let { Text("self-test cosine ${"%.5f".format(it)} (pass ≥ 0.99)", style = Type.mono.copy(fontSize = 12.sp)) }
-                k.lastMs?.let { Text("last decision ${it.toInt()} ms after the lips stopped", style = Type.mono.copy(fontSize = 12.sp)) }
-                Text("voice: ${app.voiceStatus}", style = Type.mono.copy(fontSize = 12.sp))
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "To use the NPU: adb push qnn_ctx_fp16.onnx /sdcard/Android/data/app.mouna/files/encoder/ and restart.",
-                    style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
         Card {
             Column {
                 SectionLabel("QA tools")
@@ -181,26 +339,50 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                     CallUsage.entries.forEach { u -> Chip(if (u == CallUsage.VOICE) "call audio" else "media", u == usage) { usage = u; app.voice.callUsage = u } }
                 }
                 Spacer(Modifier.height(14.dp))
-                Text("Preview what Mouna shows when it isn't sure:", style = Type.body.copy(fontSize = 13.sp))
+                Text("Show what Mouna shows when it isn't sure:", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(DecisionKind.CONFIRM, DecisionKind.RESCUE, DecisionKind.CHOOSE, DecisionKind.NOT_TAUGHT).forEach { kind ->
-                        Chip(kind.name.lowercase().replace('_', ' '), false) { app.preview(kind) }
+                        Chip(previewName(kind), false) { app.preview(kind) }
                     }
                 }
+                if (app.onCall) Text("Not during a call.", style = Type.body.copy(fontSize = 13.sp, color = Ink.mute), modifier = Modifier.padding(top = 8.dp))
             }
         }
+    }
+}
 
-        Spacer(Modifier.height(14.dp))
-        BigButton(if (wipeArmed) "Tap again to forget everything" else "Start over with a new person", if (wipeArmed) Tone.PRIMARY else Tone.QUIET, Modifier.fillMaxWidth()) {
-            if (wipeArmed) {
-                app.engine.wipe()
-                wipeArmed = false
-            } else {
-                wipeArmed = true
-            }
-        }
-        Spacer(Modifier.height(28.dp))
+/** A switch whose off state can be seen on the dark cards: a bone outline and thumb on a lifted track. */
+@Composable
+private fun MounaSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+    Switch(
+        checked = checked,
+        onCheckedChange = onChange,
+        colors = SwitchDefaults.colors(
+            checkedTrackColor = Ink.turmeric,
+            checkedThumbColor = Ink.bg,
+            checkedBorderColor = Ink.turmeric,
+            uncheckedTrackColor = Ink.rule2,
+            uncheckedThumbColor = Ink.bone2,
+            uncheckedBorderColor = Ink.bone2,
+        ),
+    )
+}
+
+/** A small play button: the only way Settings makes a sound. */
+@Composable
+private fun HearIt(enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .clip(CircleShape)
+            .border(1.dp, if (enabled) Ink.bone2 else Ink.rule, CircleShape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.PlayArrow, null, tint = if (enabled) Ink.bone else Ink.mute, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("Hear it", style = Type.body.copy(fontSize = 14.sp, color = if (enabled) Ink.bone else Ink.mute))
     }
 }
 
