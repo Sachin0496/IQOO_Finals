@@ -1,0 +1,34 @@
+{
+  "voices": [
+    {
+      "id": "kavitha",
+      "label": "Kavitha · female",
+      "engine": "sarvam",
+      "sarvam": { "speaker": "kavitha" }
+    },
+    {
+      "id": "anand",
+      "label": "Anand · male",
+      "engine": "sarvam",
+      "sarvam": { "speaker": "anand" }
+    },
+    {
+      "id": "anu",
+      "label": "Anu · female · open model",
+      "engine": "parler",
+      "parler": {
+        "speakers": { "kn": "Anu", "ta": "Jaya", "hi": "Divya", "en": "Mary" },
+        "style": "speaks slowly and warmly at a moderate pitch, with very clear audio in a close-sounding recording and no background noise."
+      }
+    },
+    {
+      "id": "suresh",
+      "label": "Suresh · male · open model",
+      "engine": "parler",
+      "parler": {
+        "speakers": { "kn": "Suresh", "ta": null, "hi": "Rohit", "en": "Thoma" },
+        "style": "speaks slowly and calmly at a slightly low pitch, with very clear audio in a close-sounding recording and no background noise."
+      }
+    }
+  ]
+}

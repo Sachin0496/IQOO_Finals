@@ -1,0 +1,12 @@
+[project]
+name = "mouna-encoder"
+version = "0.1.0"
+description = "LipLearner encoder: Core ML -> PyTorch -> ONNX, with a parity check"
+requires-python = ">=3.10"
+dependencies = ["numpy", "torch", "onnx", "onnxruntime", "coremltools>=8"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
