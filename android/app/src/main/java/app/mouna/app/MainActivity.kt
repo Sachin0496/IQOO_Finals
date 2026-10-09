@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
             // adb shell am broadcast -a app.mouna.AVSR --es crops <file> [--ef fps 25]   read a clip of Auto-AVSR crops
             debugReceiver("app.mouna.AVSR") { i ->
                 if (i.getBooleanExtra("test", false)) engine.freeTalkSelfTest()
+                if (i.hasExtra("save")) engine.saveClips = i.getBooleanExtra("save", false) // --ez save true: keep clips
                 i.getStringExtra("crops")?.let { engine.freeTalkRead(File(it), i.getFloatExtra("fps", 25f).toDouble()) }
             }
             // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>

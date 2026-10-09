@@ -51,7 +51,7 @@ class FreeTalkParityTest {
             val logp = floats(c.getJSONArray("logp"))
             assertArrayEquals("greedy $i", ints(c.getJSONArray("greedy")), Ctc.greedy(logp, frames, units))
             val want = c.getJSONArray("beam")
-            val got = Ctc.prefixBeam(logp, frames, units, beam = 6, prune = -8f)
+            val got = Ctc.prefixBeam(logp, frames, units, beam = 6, prune = -8f, top = 4)
             assertEquals("beam size $i", want.length(), got.size)
             for (k in 0 until want.length()) {
                 val w = want.getJSONObject(k)

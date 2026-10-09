@@ -29,16 +29,23 @@ object Ctc {
     }
 
     /**
-     * Prefix beam search. Units below [prune] (log-prob) in a frame are skipped, which keeps it to a handful per frame.
-     * Returns up to [beam] hypotheses, best first.
+     * Prefix beam search. Per frame only the [top] most likely units above [prune] (log-prob) are tried (ties: lower id
+     * first), as the Python reference. Returns up to [beam] hypotheses, best first.
      */
-    fun prefixBeam(logp: FloatArray, frames: Int, units: Int, beam: Int = 16, prune: Float = -12f): List<Hyp> {
+    fun prefixBeam(logp: FloatArray, frames: Int, units: Int, beam: Int = 16, prune: Float = -12f, top: Int = 10): List<Hyp> {
         var beams = HashMap<Prefix, DoubleArray>().apply { put(Prefix(IntArray(0)), doubleArrayOf(0.0, NEG)) }
-        val cand = IntArray(units)
+        val cand = IntArray(top)
         for (t in 0 until frames) {
             val o = t * units
             var nc = 0
-            for (k in 0 until units) if (logp[o + k] > prune) cand[nc++] = k
+            // keep the [top] best above [prune], sorted best first (insertion into a short list)
+            for (k in 0 until units) {
+                val p = logp[o + k]
+                if (p <= prune || (nc == top && p <= logp[o + cand[nc - 1]])) continue
+                var i = if (nc < top) nc++ else nc - 1
+                while (i > 0 && logp[o + cand[i - 1]] < p) { cand[i] = cand[i - 1]; i-- }
+                cand[i] = k
+            }
             val next = HashMap<Prefix, DoubleArray>(beams.size * 4)
             fun add(p: Prefix, pb: Double, pnb: Double) {
                 val cur = next[p]

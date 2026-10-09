@@ -315,8 +315,11 @@ def ctc_greedy(logp: np.ndarray) -> list[int]:
     return ids
 
 
-def ctc_prefix_beam(logp: np.ndarray, beam: int = 16, prune: float = -12.0) -> list[tuple[list[int], float]]:
-    """CTC prefix beam search over units. Returns [(ids, log-prob)] best first. Reference for the Kotlin port."""
+def ctc_prefix_beam(logp: np.ndarray, beam: int = 16, prune: float = -12.0, top: int = 10) -> list[tuple[list[int], float]]:
+    """CTC prefix beam search over units. Returns [(ids, log-prob)] best first. Reference for the Kotlin port.
+
+    Per frame only the [top] most likely units above [prune] are tried (ties: lower id first): without it a phone
+    spends seconds on units that never win."""
     neg = -math.inf
 
     def lse(*xs):
@@ -325,7 +328,8 @@ def ctc_prefix_beam(logp: np.ndarray, beam: int = 16, prune: float = -12.0) -> l
 
     beams: dict[tuple, tuple[float, float]] = {(): (0.0, neg)}  # prefix -> (log p ending in blank, ending in unit)
     for row in logp:
-        cand = [int(k) for k in np.nonzero(row > prune)[0]]
+        ok = np.nonzero(row > prune)[0]
+        cand = [int(k) for k in sorted(ok, key=lambda k: (-row[k], k))[:top]]
         nxt: dict[tuple, list[float]] = {}
 
         def add(prefix, pb, pnb):
@@ -480,7 +484,7 @@ def vectors(out: Path) -> Path:
         logits = rng.normal(0, 2.5, (frames, units))
         logits[:, 0] += 1.5  # blanks dominate, as in real CTC output
         logp = logits - np.log(np.exp(logits).sum(-1, keepdims=True))
-        hyps = ctc_prefix_beam(logp.astype(np.float32), beam=6, prune=-8.0)
+        hyps = ctc_prefix_beam(logp.astype(np.float32), beam=6, prune=-8.0, top=4)
         ctc_cases.append(
             {
                 "frames": frames,

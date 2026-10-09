@@ -473,11 +473,21 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         freeOn = on
     }
 
+    /** QA (debug builds, adb broadcast): keep each free-talk clip's mouth crops in avsr/clips/ to replay on the laptop. */
+    @Volatile var saveClips = false
+
     private fun readClip(c: Clip) {
         val r = openVsr ?: return
         val endMs = c.frames.last().tMs
         runCatching {
             val (crops, t) = c.avsrCrops()
+            if (saveClips) runCatching {
+                val dir = java.io.File(OpenVsr.folder(context), "clips").apply { mkdirs() }
+                val name = java.text.SimpleDateFormat("HHmmss", java.util.Locale.US).format(java.util.Date())
+                java.io.File(dir, "$name.bin").outputStream().use { o -> crops.forEach { o.write(it) } }
+                java.io.File(dir, "$name.t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
+                ftLog("free talk: saved clip $name (${crops.size} frames)")
+            }
             val res = r.read(crops, t)
             val ms = (SystemClock.uptimeMillis() - endMs).toDouble()
             ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, beam ${"%.0f".format(res.decodeMs)} ms, " +

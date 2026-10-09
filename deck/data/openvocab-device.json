@@ -1,0 +1,16 @@
+{
+ "what": "Free talk on the judging phone: Auto-AVSR visual encoder + CTC head, fp16 on the Hexagon NPU via ONNX Runtime 1.29 QNN EP (graphs compiled on the phone, all ops on the NPU: CPU fallback disabled), CTC prefix beam search (beam 16, top 10 units per frame) in Kotlin on the CPU",
+ "device": "vivo I2501 = iQOO 15, SM8850 (Snapdragon 8 Elite Gen 5), Android 16, 15.6 GB RAM",
+ "measured": "2026-10-10 00:47-00:55, app log avsr/log.txt (debug broadcast app.mouna.AVSR)",
+ "first_start_compile_ms": {"t64": 54132, "t128": 115025, "t256": 241760},
+ "later_start_load_ms": {"t64": 719, "t128": 511, "t256": 693},
+ "context_binary_mb": {"t64": 383.2, "t128": 389.0, "t256": 404.0},
+ "npu_ms_mean_of_5_selftest": {"t64_2.6s": 22.3, "t128_5.1s": 38.8, "t256_10.2s": 87.8},
+ "npu_vs_laptop_fp32_selftest": {"note": "random input, real frames only", "argmax_agrees": {"t64": "48/48", "t128": "96/96", "t256": "192/192"}, "max_abs_logp_diff": {"t64": 0.18, "t128": 6.32, "t256": 3.91}, "comment": "large differences are in very unlikely units (fp16 log-softmax tails); the best unit per frame matches everywhere"},
+ "grid_clips_on_phone": {
+  "note": "3 GRID s1 clips (75 frames, bucket 128), crops made on the laptop; phone top sentence identical to the laptop's for all 3",
+  "npu_ms": [40.6, 36.6, 37.0],
+  "beam_ms": [120.4, 75.2, 68.4],
+  "beam_ms_before_top10_cap": [6197.7, 7466.1, 7300.5]
+ }
+}
