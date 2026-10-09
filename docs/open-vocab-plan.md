@@ -23,7 +23,51 @@ So: we can't promise a transcriber. We can build **free talk with fast correctio
 likely sentences, the person picks or fixes one with a nod, a look or a tap, and only then does Mouna speak. That
 fits the core thesis (PLAN.md §1: "knows when it hasn't understood, and recovers").
 
-## 2. What we build
+## 2. Which model, for this phone
+
+**The phone (read over adb, 9 Oct):** the USB-connected device is the judging phone itself, vivo **I2501 = iQOO 15**,
+`ro.soc.model=SM8850` (Snapdragon 8 Elite Gen 5, Hexagon NPU), Android 16 (API 36), 15.6 GB RAM (8.4 GB available
+with our app's stack idle), 444 GB free. The app already ships `onnxruntime-android-qnn:1.29.0`, the runtime that
+runs our LipLearner encoder fully on this NPU in 18.06 ms (`deck/data/device-litert.json`). So memory is not the
+limit; what matters is accuracy on silent English and whether the graph compiles for QNN.
+
+**Every open-vocabulary visual-only English model we could find (LRS3 WER, lower is better):**
+
+| Model | LRS3 WER | Size | Weights? | Code licence | Fit for the iQOO 15 |
+|---|---|---|---|---|---|
+| **Auto-AVSR** VSR (Ma et al. 2023), `vsr_trlrs2lrs3vox2avsp_base` | **20.3%** (19.1% for the 3,448 h variant + LM in the VSR-for-multiple-languages repo) | 250 M params | **yes** | Apache-2.0 (auto_avsr); non-commercial (VSR-ML repo) | **Pick.** Conv3D + ResNet-18 front end + 12-layer Conformer + CTC: the same stem as the LipLearner encoder we already run on this NPU (`Conv3d(1, 64, (5, 7, 7))` + ResNet-18, `encoder/mouna_encoder/model.py`), so `Frontend2D` (Conv3D rewritten as an exact Conv2D over 5 stacked frames) carries over. A third party has already converted these exact weights to Core ML (fixed 105 frames, fp16, 362 MB), so the graph exports |
+| **BRAVEn** Large w/ self-training (Haliassos et al. 2024) | 20.9% (20.1% with LM) | Large (parameter count not stated in the README) | yes | MIT | **Runner-up.** Same accuracy band; test it on our silent sentences next to Auto-AVSR (E-OV1b) and keep whichever wins |
+| USR Large, high-resource (Haliassos et al.) | 22.3% | Large | yes | not stated | Worse than both above; skip |
+| VALLR (Thomas, Fish, Bowden, ICCV 2025) | 18.7% | Video Transformer + fine-tuned LLM | **no** (code "after review", none found) | — | Can't use |
+| DLLM-VSR (2026 preprint) | 19.4% | USR 2.0 Huge + Dream-7B diffusion LLM | code only | — | 7B decoder: too big and too slow |
+| Chang et al. 2024 (Google) | 12.8% | — | no (100,000 h private data) | — | Can't use |
+| VSP-LLM, Llama-AVSR | 24.9–25.4% | 7B LLM | partly | — | Too big, and worse |
+| LiteVSR (ICASSP 2024) | 45.7% | small | not found | — | Too inaccurate |
+| LRW word classifiers (mpc001 TCN) | 88.9% top-1 on **500 isolated words** | 139 MB | yes | non-commercial | Not open vocabulary |
+
+**Decision: Auto-AVSR VSR as the main model, BRAVEn Large as the challenger, picked by E-OV1 on our own silent
+sentences**, not by the LRS3 table. The two are within about one WER point of each other on LRS3, and LRS3 is voiced
+TED speech, so it can't break the tie for silent mouthing.
+
+**Will it run fast enough? (estimate, to be measured in E-OV4).** A 4 s sentence = 100 frames at 25 fps. Rough
+count: ResNet-18 at 88×88 is about 0.3 GFLOPs per frame (30 GFLOPs), and 12 Conformer layers with d = 768 are about
+33 GFLOPs: **about 60 GFLOPs per 4 s sentence**. The LipLearner encoder runs in 18 ms on this NPU, so the target of
+≤ 1.5 s from end of mouthing to sentences has a wide margin on the NPU. The CPU int8 fallback is the real unknown.
+CTC beam search over 5,049 units × 100 frames is a few tens of ms in Kotlin (estimate).
+
+**Phone-specific risks:** (1) ORT 1.27 miscomputed an encoder on SM8850, fixed in 1.28; we are on 1.29, and the
+self-test still compares with the laptop output (cosine ≥ 0.999). (2) A Conformer has dynamic shapes; we compile fixed
+buckets, one QNN context binary each. (3) The attention decoder is autoregressive; it stays on the CPU and only
+rescores the n-best.
+
+Sources: [auto_avsr](https://github.com/mpc001/auto_avsr),
+[VSR for multiple languages](https://github.com/mpc001/Visual_Speech_Recognition_for_Multiple_Languages),
+[BRAVEn / RAVEn](https://github.com/ahaliassos/raven), [USR](https://github.com/ahaliassos/usr),
+[VALLR](https://arxiv.org/abs/2503.21408), [DLLM-VSR, with its comparison table](https://arxiv.org/html/2605.28456),
+[LiteVSR](https://arxiv.org/abs/2312.09727), [TCN word models](https://github.com/mpc001/Lipreading_using_Temporal_Convolutional_Networks),
+[Core ML port of the Auto-AVSR weights](https://huggingface.co/ebowwa/silentvsr-models).
+
+## 3. What we build
 
 ```
 utterance clip (existing Segmenter, extended to sentences: up to ~10 s, ends after ~0.8 s still mouth)
@@ -65,12 +109,13 @@ Not doing: training or fine-tuning a VSR model (team rule, and no time); LLM-dec
 too big); a cloud API (offline, privacy); the LRW 500-word classifier as the main path (500 words is not "most
 English", and its code licence is non-commercial).
 
-## 3. Experiments (results go to `deck/data/openvocab-*.json`)
+## 4. Experiments (results go to `deck/data/openvocab-*.json`)
 
 | # | Experiment | Pass line (**targets**) | Tier |
 |---|---|---|---|
 | E-OV0 | Laptop sanity: Auto-AVSR in PyTorch vs our ONNX export on 10 clips | CTC log-probs max abs diff ≤ 1e-3; same greedy text | P0 |
 | E-OV1 | **Our silent sentences**: 3–5 team members × 40 sentences, silent and voiced (protocol below). WER greedy vs beam + LM, top-1 and top-3 sentence accuracy | Go: top-3 sentence ≥ 50% *or* WER ≤ 40% with LM on deliberate silent mouthing | P0, **go/no-go** |
+| E-OV1b | Same clips through BRAVEn Large (w/ ST, + LM): the challenger | keep whichever has lower WER with our decoder; tie → Auto-AVSR (Apache-2.0 code, front end already proven on this NPU) | P0 |
 | E-OV2 | Crop parity: our crop vs their preprocessing on the E-OV1 clips | ≤ 2 WER points apart, else ship theirs | P0 |
 | E-OV3 | Vocabulary size: 1k / 3k / 10k / 50k words + personal words | pick the largest N within 5 WER points of the best | P0 |
 | E-OV4 | On device: latency per bucket, NPU vs CPU int8, SM8650 and SM8850 (AI Hub, then our phones) | 4 s sentence → n-best ≤ 1.5 s on the iQOO 15; cosine ≥ 0.999 vs laptop | P0 |
@@ -83,7 +128,7 @@ English", and its code licence is non-commercial).
 swallow") and 20 everyday ("What time is it", "Call my son after lunch"); each mouthed silently twice and voiced once.
 Read from a prompt screen in the Lab or the in-app recorder; transcripts are the prompts.
 
-## 4. Schedule (Finale: 9–11 Oct)
+## 5. Schedule (Finale: 9–11 Oct)
 
 | When | Nakul | Needs from |
 |---|---|---|
@@ -98,7 +143,7 @@ Read from a prompt screen in the Lab or the in-app recorder; transcripts are the
 "what did you mean?" suggestions inside Ask; (c) a roadmap slide with the E-OV1 numbers. The current demo never
 depends on free talk.
 
-## 5. Risks
+## 6. Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -108,7 +153,7 @@ depends on free talk.
 | Licence: Auto-AVSR weights are trained on LRS2/LRS3/VoxCeleb2/AVSpeech; LRS3 is CC BY-NC-ND (finale-plan §2) | Same status as the LRW encoder: fine for a hackathon demo, stated if asked, not a product path. Weights stay out of git (`encoder/weights/`) |
 | Cross-lane work during the Finale | Wire messages on `npu` (export, AI Hub) and `android` (screen, Segmenter) before touching those files |
 
-## 6. Decisions needed
+## 7. Decisions needed
 
 | # | Decision | Who |
 |---|---|---|
