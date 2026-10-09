@@ -125,5 +125,12 @@
    "after": "I AM SCARED"
   }
  ],
- "caveat": "one person, one evening (three sessions minutes apart), 20% held out; list = the 154 prompts"
+ "caveat": "one person, one evening (three sessions minutes apart), 20% held out; list = the 154 prompts",
+ "on_the_phone": {
+  "measured": "2026-10-10 04:15-04:16, iQOO 15, tuned graphs fp16 on the NPU (adapter folded in), trimmed clips, personal list = his recorded sentences + the app's phrases",
+  "held_out_first_suggestion_correct": "21/21",
+  "note": "the 21 held-out sentences were never trained on, but they are in his sentence list (he recorded them), which is how the app is meant to be used",
+  "npu_selftest": "argmax agrees on every frame (48/48, 96/96, 192/192); NPU 22 / 41 / 94 ms",
+  "first_start_compile": "about 25 min for 9 graphs, once (compiled one at a time: loading six while compiling the seventh got the app killed for memory)"
+ }
 }
