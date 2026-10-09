@@ -588,6 +588,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         (store.freeTalkSentences.asReversed() + recordedSentences() + phrases.phrases.map { it.say(Lang.EN) })
             .map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.take(MAX_PERSONAL)
 
+    fun recordedCount(): Int = recordedSentences().size
+
+    fun recordedTexts(): List<String> = recordedSentences()
+
     /** Sentences this person recorded for training (avsr/train/<session>/NNN.txt): what they want to say, so offered. */
     @Volatile private var recorded: List<String>? = null
 

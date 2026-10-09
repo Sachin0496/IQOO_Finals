@@ -151,6 +151,10 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 SetupRow("Look to choose", if (k.gazeReady) "Calibrated · look left or right" else "Pick between two pictures with your eyes", k.gazeReady,
                     if (k.gazeReady) "Redo" else "Set up") { app.go(Screen.EYES) }
+                Spacer(Modifier.height(12.dp))
+                val recorded = app.recordedCount
+                SetupRow("Teach free talk", if (recorded > 0) "$recorded sentences recorded · they are offered first" else "Mouth sentences you want to say, so free talk learns you",
+                    recorded > 0, "Record") { app.go(Screen.RECORD) }
             }
         }
 
@@ -343,10 +347,7 @@ private fun Advanced(app: MounaApp, k: Knowledge, openProbe: () -> Unit, off: ()
                 )
                 Spacer(Modifier.height(10.dp))
                 BigButton("Open the probe", Tone.NO, Modifier.fillMaxWidth(), onClick = openProbe)
-                Spacer(Modifier.height(10.dp))
-                Text("Free talk: record prompted sentences (mouth crops only) to tune it to this person on the laptop.", style = Type.body.copy(fontSize = 13.sp))
-                Spacer(Modifier.height(8.dp))
-                BigButton("Record for free talk", Tone.NO, Modifier.fillMaxWidth()) { app.go(Screen.RECORD) }
+
                 Spacer(Modifier.height(14.dp))
                 Text("On a call, play Mouna's voice as (which one the microphone hears best differs by phone):", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))

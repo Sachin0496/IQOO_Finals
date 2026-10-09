@@ -461,6 +461,12 @@ class MounaApp(
     // Recording for training (issue #5 B): prompted sentences, mouthed silently, saved as mouth crops + text for the
     // laptop fine-tune (python -m mouna_encoder avsr-adapt). No video is kept: only the 96 px grey mouth crops.
     val recordPrompts: List<String> by lazy { engine.recordPrompts() }
+    /** Sentences recorded so far, all sessions (Settings shows it). Reads [recordCount] so it updates after recording. */
+    val recordedCount: Int
+        get() {
+            @Suppress("UNUSED_VARIABLE") val changed = recordCount
+            return engine.recordedCount()
+        }
     var recordIndex by mutableStateOf(0)
         private set
     var recording by mutableStateOf(false)
@@ -474,7 +480,9 @@ class MounaApp(
     fun startRecording() {
         recordSession = java.io.File(engine.trainFolder(),
             java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date()))
-        recordIndex = 0
+        // carry on from the first sentence not recorded yet (any session); everything recorded -> from the top again
+        val done = engine.recordedTexts().map { it.lowercase() }.toSet()
+        recordIndex = recordPrompts.indexOfFirst { it.lowercase() !in done }.coerceAtLeast(0)
         recordCount = 0
         lastRecorded = null
         recording = true
