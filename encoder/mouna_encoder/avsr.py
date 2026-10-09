@@ -356,10 +356,22 @@ def ctc_prefix_beam(logp: np.ndarray, beam: int = 16, prune: float = -12.0) -> l
 def joint_beam(model, enc: torch.Tensor, beam: int = 10, ctc_weight: float = 0.1) -> list[tuple[list[int], float]]:
     """Auto-AVSR's own decoder: joint CTC / attention beam search (espnet BatchBeamSearch), as in its eval."""
     _import_avsr()
-    from lightning import get_beam_search_decoder
+    from espnet.nets.batch_beam_search import BatchBeamSearch
+    from espnet.nets.scorers.length_bonus import LengthBonus
 
     toks = tokens()
-    search = get_beam_search_decoder(model, toks, ctc_weight=ctc_weight, beam_size=beam)
+    scorers = model.scorers()  # as auto_avsr's lightning.get_beam_search_decoder, without pytorch_lightning
+    scorers["length_bonus"] = LengthBonus(len(toks))
+    search = BatchBeamSearch(
+        beam_size=beam,
+        vocab_size=len(toks),
+        weights={"decoder": 1.0 - ctc_weight, "ctc": ctc_weight, "length_bonus": 0.0},
+        scorers=scorers,
+        sos=model.sos,
+        eos=model.eos,
+        token_list=toks,
+        pre_beam_score_key=None if ctc_weight == 1.0 else "decoder",
+    )
     with torch.no_grad():
         hyps = search(enc[0], maxlenratio=0.0, minlenratio=0.0)
     return [([int(i) for i in h.yseq[1:-1]], float(h.score)) for h in hyps]
@@ -614,7 +626,7 @@ def grid_transcript(align: Path) -> str:
     return " ".join(w for w in words if w not in ("sil", "sp")).upper()
 
 
-def grid_eval(videos: list[Path], aligns: Path, beam: int = 10, smooth_margin: int = 6) -> dict:
+def grid_eval(videos: list[Path], aligns: Path | None = None, beam: int = 10, smooth_margin: int = 6) -> dict:
     """WER of joint CTC/attention vs CTC prefix beam (and greedy) over GRID clips, with this module's mesh crop."""
     import time
 
@@ -623,7 +635,8 @@ def grid_eval(videos: list[Path], aligns: Path, beam: int = 10, smooth_margin: i
     tot = {"joint": [0, 0], "ctc_beam": [0, 0], "ctc_greedy": [0, 0]}
     rows = []
     for v in videos:
-        ref = grid_transcript(aligns / (v.stem + ".align"))
+        a = aligns / (v.stem + ".align") if aligns else None
+        ref = grid_transcript(a) if a and a.exists() else grid_from_name(v.stem)
         try:
             x = model_input(crops_from_video(read_video(v), smooth_margin))
         except ValueError as e:
@@ -647,3 +660,18 @@ def grid_eval(videos: list[Path], aligns: Path, beam: int = 10, smooth_margin: i
     res = {k: (e / n if n else None) for k, (e, n) in tot.items()}
     print("WER " + "  ".join(f"{k} {100 * r:.1f}%" for k, r in res.items() if r is not None) + f"  over {len(rows)} clips")
     return {"wer": res, "clips": len(rows), "rows": rows}
+
+
+GRID_WORDS = (
+    {"b": "BIN", "l": "LAY", "p": "PLACE", "s": "SET"},
+    {"b": "BLUE", "g": "GREEN", "r": "RED", "w": "WHITE"},
+    {"a": "AT", "b": "BY", "i": "IN", "w": "WITH"},
+    None,  # the letter itself
+    {"z": "ZERO", "1": "ONE", "2": "TWO", "3": "THREE", "4": "FOUR", "5": "FIVE", "6": "SIX", "7": "SEVEN", "8": "EIGHT", "9": "NINE"},
+    {"a": "AGAIN", "n": "NOW", "p": "PLEASE", "s": "SOON"},
+)
+
+
+def grid_from_name(stem: str) -> str:
+    """GRID clip names spell their sentence: 'lbbk6p' -> 'LAY BLUE BY K SIX PLEASE'."""
+    return " ".join(c.upper() if m is None else m[c] for c, m in zip(stem, GRID_WORDS))
