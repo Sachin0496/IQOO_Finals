@@ -1,0 +1,71 @@
+# Finale log (app lane)
+
+*A running record of what we decided, built and checked. Newest first. Branch: `app/finale-ui`. Demo: 9 Oct 2026.*
+
+## Where we are (updated 7 Oct, 21:00)
+
+| Area | Status |
+|---|---|
+| **Direction** | Mouna gives a voice back to anyone who lost theirs. English first; Hindi and Tamil as voices. No training: existing models only. No presentation inside the app. |
+| Lips (main) | ✅ Real LipLearner encoder in the app; self-test cosine 1.00000 on the emulator (CPU, 6.9 s per window there). NPU path: Maadhav's SM8650/SM8850 binaries are in `encoder/qnn_ctx/`, **but `model.onnx` wrappers are missing from git** (only `model.bin` via LFS). |
+| Voice (Parkinson's, mild dysarthria) | ✅ Whisper tiny.en via sherpa-onnx, runs in the app on the emulator. 5 of 5 test recordings handled right (table below). ⏳ Not yet with a live microphone or a real dysarthric speaker. |
+| Own words + warm phrases | ✅ Built ("I love you", "I'm okay", "Hold my hand", "I'm scared", "Stay with me" + family-typed words). |
+| Personal movement, eyes, Ask, pictures | ✅ Built (from `android/core`). Not tested on real faces. |
+| ISL (AI4Bharat OpenHands) | ✅ Built: their SL-GCN (INCLUDE, 263 signs) exported (`models/isl`, ONNX = PyTorch to 2.5e-6); MediaPipe pose + hands give their 27 keypoints; Sign mode on Speak. App preprocessing = OpenHands' Python on all 1,620 values (IslTest). ⏳ Inference only on a phone: the emulator's CPU traps in ORT (Apple M4 SME), and this ORT build has no XNNPACK/NNAPI. Not tested with a real signer. |
+| Nod / shake / double blink | ✅ Ported from the Lab (same constants); armed only while Mouna asks (prompts, Ask) so mouthing can't trigger it. 4 unit tests. ⏳ Not tried on a real face. |
+| App icon + dark splash | ✅ |
+| Git push | ✅ GitHub recovered ~21:10; branch is pushed. |
+
+## Next
+
+1. Maadhav: commit the two `model.onnx` wrappers (`git add -f`); asked on the `npu` thread.
+2. On the phone (OnePlus 13R / iQOO 15): NPU encoder, Whisper, ISL, latency; push the model files (see "How to run").
+3. Live checks with Sachin: lips (teach 3–4 phrases), voice with the mic, nod / blink, switch, eyes, a few ISL signs.
+4. A 20-run soak of the demo script on the phone.
+
+## Voice check on the emulator (7 Oct, 21:00)
+
+macOS `say` recordings fed through the app's live path (`adb shell am broadcast -a app.mouna.HEAR`). Synthetic
+voices, not a dysarthric speaker: this checks the pipeline, it is not an accuracy claim.
+
+| Recording | Whisper heard | Best match | Mouna |
+|---|---|---|---|
+| "I need water", normal | "I need water." | water 1.00 | spoke it |
+| "I… need… wah… ter", slow | "I need, watch her." | water 0.73 | "Did you mean… I need water?" |
+| "I love you" | "I love you." | love 1.00 | spoke it |
+| "I am… in… pain", slow | "I am in pain." | pain 1.00 | spoke it |
+| "Can you open the window please" | same | pain 0.23 | "Did you say…?" then says the words clearly |
+
+Fixed on the way: filler words ("you", "can"…) had pulled the last one onto "I love you" (0.49).
+
+## Log
+
+**7 Oct, night**
+- ISL: AI4Bharat OpenHands SL-GCN integrated (export only), Sign mode with MediaPipe pose + hands; preprocessing parity test.
+- Nod / shake / double blink in the app: yes and no with no setup. Total app tests: 30.
+- GitHub push recovered; branch pushed. Asked Maadhav for the missing `model.onnx` wrappers.
+
+**7 Oct, evening**
+- Removed the in-app story slides (Sachin: no presentation inside the app). Kept the app icon and dark splash.
+- Voice channel, own words, warm phrases, voice-matcher unit tests (4 pass). Total app tests: 21.
+- Exported the encoder ourselves from LipLearner's MIT release (`python -m mouna_encoder static`), cosine 1.0 vs the self-test. Mac M4 CPU: 857 ms per window; the phone needs the NPU.
+- App compiles the plain ONNX for the NPU on the phone if no precompiled binary works; crash guard skips a model that killed the app last time.
+- Maadhav pushed the QNN context binaries for both chips to `main` (merged into the branch).
+
+**7 Oct, afternoon**
+- Direction set with Sachin: one job (a voice for anyone who lost theirs), English first, Kannada out of the app, existing models only. `docs/impact.md` (cited numbers), `docs/existing-models.md`.
+- Emulator on the Mac with the real MacBook camera (start it from Terminal: `mouna-emulator.command`). Fixed: face-model CPU fallback, GPU failure mid-run, camera re-binding stalls, missing front camera, Back closing the app, prompts when nothing is taught.
+
+**7 Oct, morning**
+- Built the product app on `android/core`: Speak, Teach (active teaching, look-alike pairs, negatives), decision prompts, Ask, Settings, switch and eye setup. Replied to Maadhav on D6 (ISL via existing model) and D7 (iQOO 15 IR blaster).
+
+## How to run on the Mac
+
+```bash
+open -a Terminal "/Users/sachin/Development/IQOO FINALS/mouna-emulator.command"
+cd android && ./gradlew assembleDebug && adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+adb push ../encoder/weights/encoder_static48.onnx /sdcard/Android/data/app.mouna/files/encoder/
+adb push tiny.en-encoder.int8.onnx tiny.en-decoder.int8.onnx tiny.en-tokens.txt /sdcard/Android/data/app.mouna/files/asr/
+adb push isl_include_slgcn.onnx isl_include_labels.json /sdcard/Android/data/app.mouna/files/isl/   # models/isl/README.md
+# QA without a person: adb shell am broadcast -a app.mouna.HEAR --es wav <file.wav>   (voice path)
+```

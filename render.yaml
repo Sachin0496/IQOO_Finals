@@ -1,0 +1,21 @@
+# Render blueprint: a static site, no server. The CSP proves the page cannot send data anywhere.
+services:
+  - type: web
+    name: mouna-lab
+    runtime: static
+    rootDir: lab
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(self), microphone=(self), geolocation=(), interest-cohort=()"
+      - path: /*
+        name: Referrer-Policy
+        value: "no-referrer"
+      - path: /*
+        name: X-Content-Type-Options
+        value: "nosniff"

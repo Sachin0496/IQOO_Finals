@@ -1,0 +1,71 @@
+{
+  "model": "encoder_static48",
+  "devices": {
+    "sm8650": {
+      "device": "Samsung Galaxy S24 (Family)",
+      "runs": {
+        "fp32_cpu": {
+          "compile_job": "jgk6768n5",
+          "error": "size too big: 18446744073131320219 details: string length exceeds max size"
+        },
+        "fp16_npu": {
+          "compile_job": "j5q4e4vog",
+          "error": "size too big: 18446744073131320219 details: string length exceeds max size"
+        },
+        "fp16_gpu": {
+          "compile_job": "j56oeo7y5",
+          "error": "size too big: 18446744073131320219 details: string length exceeds max size"
+        },
+        "int8_npu": {
+          "compile_job": "jpv202drg",
+          "error": "size too big: 18446744073136528894 details: string length exceeds max size"
+        },
+        "qnn_ctx_fp16": {
+          "compile_job": "jp2o0oz6g",
+          "file": "qnn_ctx_fp16.onnx.zip",
+          "profile_job": "jp4ek4llg",
+          "inference_job": "j5m9qknqg",
+          "median_ms": 32.37,
+          "peak_memory_mb": 100.7,
+          "layers_by_unit": {
+            "NPU": 5265
+          },
+          "parity_cosine_vs_onnx_fp32": 0.999782
+        }
+      }
+    },
+    "sm8850": {
+      "device": "Samsung Galaxy S26 (Family)",
+      "runs": {
+        "fp16_npu": {
+          "compile_job": "jglw6wxmp",
+          "error": "size too big: 18446744073131320219 details: string length exceeds max size"
+        },
+        "fp32_cpu": {
+          "compile_job": "jp8j0j1o5",
+          "error": "size too big: 18446744073131320219 details: string length exceeds max size"
+        },
+        "fp16_gpu": {
+          "compile_job": "jgodkdrk5",
+          "error": "size too big: 18446744073131320219 details: string length exceeds max size"
+        },
+        "int8_npu": {
+          "compile_job": "jp3ovo9np",
+          "error": "size too big: 18446744073136528894 details: string length exceeds max size"
+        },
+        "qnn_ctx_fp16": {
+          "compile_job": "jpy8r8y0g",
+          "file": "qnn_ctx_fp16.onnx.zip",
+          "profile_job": "j57o0nyrg",
+          "inference_job": "jpx0nrk9p",
+          "median_ms": 18.06,
+          "peak_memory_mb": 110.1,
+          "layers_by_unit": {
+            "NPU": 5265
+          },
+          "parity_cosine_vs_onnx_fp32": 0.999782
+        }
+      }
+    }
+  }
+}

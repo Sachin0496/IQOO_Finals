@@ -1,0 +1,35 @@
+{
+  "head": "plan-a-prototype",
+  "by_type": {
+    "word": {
+      "top1": 0.8351,
+      "n": 1346
+    },
+    "phrase": {
+      "top1": 0.9725,
+      "n": 327
+    }
+  },
+  "hardest": [
+    {
+      "class": "sari",
+      "top1": 0.5,
+      "n": 74
+    },
+    {
+      "class": "neeru",
+      "top1": 0.566,
+      "n": 53
+    },
+    {
+      "class": "banni",
+      "top1": 0.6939,
+      "n": 49
+    },
+    {
+      "class": "hogu",
+      "top1": 0.7,
+      "n": 40
+    }
+  ]
+}

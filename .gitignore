@@ -1,0 +1,34 @@
+node_modules/
+dist/
+.vite/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Recorded data stays local (measured results in deck/data are aggregates and are committed)
+/data/
+*.mouna.json
+harness/reports/
+
+# Model weights are fetched, never committed
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.task
+lab/public/models/
+lab/public/wasm/
+
+.DS_Store
+Thumbs.db
+~$*.pptx
+
+# Encoder weights and exports stay local (python -m mouna_encoder fetch)
+encoder/weights/
+lab/public/qa/
+lab/dist/test.mp4
+voices/.venv/
+voices/parler.log
+harness/reports-finale.log

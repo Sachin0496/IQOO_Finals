@@ -1,0 +1,23 @@
+{
+  "experiment": "E23 half-face mirror (PLAN.md): pass line within 5 top-1 points of the full face",
+  "source": "Kannada multi-speaker dataset, deck split (teach reps 1-3, test 4+), int8 static encoder; taught and tested on mirrored crops",
+  "caveat": "healthy speakers: measures what one half of the mouth carries, not a drooping mouth",
+  "full_face": {
+    "n": 1673,
+    "top1": 0.8619,
+    "top3": 0.9492,
+    "top1_vs_full_points": 0.0
+  },
+  "image_left_half": {
+    "n": 1673,
+    "top1": 0.844,
+    "top3": 0.9384,
+    "top1_vs_full_points": -1.79
+  },
+  "image_right_half": {
+    "n": 1673,
+    "top1": 0.8649,
+    "top3": 0.9498,
+    "top1_vs_full_points": 0.3
+  }
+}

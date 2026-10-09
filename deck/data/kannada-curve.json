@@ -1,0 +1,24 @@
+{
+  "head": "plan-a-prototype",
+  "test": "reps > 5 of every class, identical for every point",
+  "curve": [
+    {
+      "shots": 1,
+      "top1": 0.7194,
+      "top3": 0.8582,
+      "n": 1333
+    },
+    {
+      "shots": 3,
+      "top1": 0.8522,
+      "top3": 0.943,
+      "n": 1333
+    },
+    {
+      "shots": 5,
+      "top1": 0.8897,
+      "top3": 0.9722,
+      "n": 1333
+    }
+  ]
+}

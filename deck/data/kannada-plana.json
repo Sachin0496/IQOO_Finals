@@ -1,0 +1,1094 @@
+{
+  "head": "plan-a-prototype",
+  "participants": [
+    {
+      "participant": "k01",
+      "threshold": 0.1568,
+      "same_session": {
+        "n": 304,
+        "top1": 0.898,
+        "top3": 0.9836,
+        "spoke": 0.8158,
+        "spoke_precision": 0.9476,
+        "confusion": {
+          "akka": {
+            "akka": 8
+          },
+          "amma": {
+            "amma": 6
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 11
+          },
+          "avanu": {
+            "avanu": 8
+          },
+          "banni": {
+            "banni": 6,
+            "manne": 1
+          },
+          "beda": {
+            "beda": 6,
+            "beku": 3
+          },
+          "beku": {
+            "beku": 8,
+            "beda": 3,
+            "manne": 1
+          },
+          "chennagidini": {
+            "chennagidini": 7
+          },
+          "dhanyavada": {
+            "dhanyavada": 8,
+            "nanna_hesaru": 1
+          },
+          "entu": {
+            "entu": 6,
+            "neeru": 1,
+            "eradu": 1,
+            "sari": 1
+          },
+          "eradu": {
+            "eradu": 5,
+            "entu": 2,
+            "neeru": 1
+          },
+          "haudu": {
+            "haudu": 13
+          },
+          "hogu": {
+            "hogu": 13
+          },
+          "illa": {
+            "illa": 13,
+            "neeru": 2,
+            "tindi": 1
+          },
+          "manege_banni": {
+            "manege_banni": 14,
+            "manne": 1
+          },
+          "manne": {
+            "manne": 13,
+            "beda": 1
+          },
+          "mooru": {
+            "mooru": 17
+          },
+          "namaskara": {
+            "namaskara": 20
+          },
+          "nanna_hesaru": {
+            "nanna_hesaru": 8
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 7
+          },
+          "neeru": {
+            "neeru": 7,
+            "eradu": 1
+          },
+          "ombathu": {
+            "ombathu": 12
+          },
+          "oota": {
+            "oota": 14
+          },
+          "saku": {
+            "saku": 13
+          },
+          "sari": {
+            "sari": 14,
+            "nanna_hesaru": 3,
+            "tindi": 3
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 9,
+            "ombathu": 1
+          },
+          "tindi": {
+            "tindi": 7,
+            "sari": 2,
+            "illa": 1
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    },
+    {
+      "participant": "k02",
+      "threshold": 0.1479,
+      "same_session": {
+        "n": 90,
+        "top1": 0.9,
+        "top3": 0.9889,
+        "spoke": 0.7889,
+        "spoke_precision": 0.9718,
+        "confusion": {
+          "akka": {
+            "akka": 4
+          },
+          "amma": {
+            "amma": 2,
+            "avanu": 1
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 3
+          },
+          "avanu": {
+            "avanu": 2
+          },
+          "banni": {
+            "manne": 1,
+            "banni": 2
+          },
+          "beda": {
+            "beda": 3
+          },
+          "beku": {
+            "beku": 3
+          },
+          "chennagidini": {
+            "chennagidini": 3,
+            "nanna_hesaru": 1
+          },
+          "dhanyavada": {
+            "nanna_hesaru": 1,
+            "dhanyavada": 2
+          },
+          "entu": {
+            "entu": 3,
+            "chennagidini": 1
+          },
+          "eradu": {
+            "eradu": 3
+          },
+          "haudu": {
+            "haudu": 3
+          },
+          "hogu": {
+            "hogu": 3
+          },
+          "illa": {
+            "illa": 3
+          },
+          "manege_banni": {
+            "manege_banni": 3
+          },
+          "manne": {
+            "banni": 1,
+            "manne": 2
+          },
+          "mooru": {
+            "haudu": 1,
+            "entu": 1,
+            "mooru": 1
+          },
+          "namaskara": {
+            "namaskara": 3
+          },
+          "nanna_hesaru": {
+            "nanna_hesaru": 3
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 4
+          },
+          "neeru": {
+            "neeru": 4
+          },
+          "ombathu": {
+            "ombathu": 3
+          },
+          "oota": {
+            "oota": 3
+          },
+          "saku": {
+            "saku": 7
+          },
+          "sari": {
+            "sari": 4
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 3
+          },
+          "tindi": {
+            "tindi": 2,
+            "neeru": 1
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    },
+    {
+      "participant": "k04",
+      "threshold": 0.1417,
+      "same_session": {
+        "n": 241,
+        "top1": 0.8133,
+        "top3": 0.9336,
+        "spoke": 0.7759,
+        "spoke_precision": 0.8717,
+        "confusion": {
+          "akka": {
+            "akka": 3
+          },
+          "amma": {
+            "amma": 8,
+            "akka": 1
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 9
+          },
+          "avanu": {
+            "avanu": 11
+          },
+          "banni": {
+            "mane": 3,
+            "banni": 1
+          },
+          "beda": {
+            "beda": 3,
+            "beku": 1,
+            "neeru": 1
+          },
+          "beku": {
+            "beku": 7,
+            "entu": 4,
+            "neeru": 1,
+            "beda": 1
+          },
+          "chennagidini": {
+            "chennagidini": 2
+          },
+          "dhanyavada": {
+            "dhanyavada": 3,
+            "saku": 1
+          },
+          "entu": {
+            "entu": 4
+          },
+          "eradu": {
+            "eradu": 5
+          },
+          "haudu": {
+            "haudu": 14,
+            "akka": 1
+          },
+          "hogu": {
+            "hogu": 4
+          },
+          "illa": {
+            "illa": 14,
+            "neeru": 1,
+            "haudu": 1
+          },
+          "mane": {
+            "mane": 9,
+            "banni": 1
+          },
+          "manege_banni": {
+            "manege_banni": 4
+          },
+          "mooru": {
+            "beda": 2,
+            "mooru": 2
+          },
+          "namaskara": {
+            "namaskara": 10
+          },
+          "nanna_hesaru": {
+            "nanna_hesaru": 4
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 12
+          },
+          "neeru": {
+            "entu": 2,
+            "neeru": 1,
+            "tindi": 6,
+            "neeru_kudi": 3,
+            "saku": 1
+          },
+          "ombathu": {
+            "ombathu": 16,
+            "oota": 1
+          },
+          "oota": {
+            "oota": 12
+          },
+          "saku": {
+            "saku": 10,
+            "haudu": 1
+          },
+          "sari": {
+            "tindi": 12,
+            "sari": 1
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 12
+          },
+          "tindi": {
+            "tindi": 15
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    },
+    {
+      "participant": "k05",
+      "threshold": 0.2129,
+      "same_session": {
+        "n": 161,
+        "top1": 0.8385,
+        "top3": 0.9441,
+        "spoke": 0.913,
+        "spoke_precision": 0.8912,
+        "confusion": {
+          "akka": {
+            "akka": 2
+          },
+          "amma": {
+            "amma": 7,
+            "beda": 1
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 7
+          },
+          "avanu": {
+            "avanu": 6
+          },
+          "banni": {
+            "manne": 3,
+            "beda": 1,
+            "banni": 4
+          },
+          "beda": {
+            "manne": 3,
+            "beda": 2,
+            "manege_banni": 1
+          },
+          "beku": {
+            "ombathu": 1
+          },
+          "chennagidini": {
+            "chennagidini": 8
+          },
+          "dhanyavada": {
+            "dhanyavada": 7,
+            "sari": 1
+          },
+          "entu": {
+            "eradu": 3
+          },
+          "haudu": {
+            "haudu": 8,
+            "hogu": 2
+          },
+          "illa": {
+            "illa": 7
+          },
+          "manege_banni": {
+            "manege_banni": 7
+          },
+          "manne": {
+            "manne": 7
+          },
+          "namaskara": {
+            "namaskara": 8
+          },
+          "nanna_hesaru": {
+            "nanna_hesaru": 11
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 11
+          },
+          "neeru": {
+            "illa": 1,
+            "neeru": 2,
+            "eradu": 4,
+            "neeru_kudi": 1,
+            "chennagidini": 1
+          },
+          "ombathu": {
+            "ombathu": 2
+          },
+          "oota": {
+            "oota": 5,
+            "akka": 1
+          },
+          "saku": {
+            "saku": 10
+          },
+          "sari": {
+            "sari": 2,
+            "neeru_kudi": 1
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 10
+          },
+          "tindi": {
+            "tindi": 2,
+            "illa": 1
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    },
+    {
+      "participant": "k06",
+      "threshold": 0.1238,
+      "same_session": {
+        "n": 226,
+        "top1": 0.9823,
+        "top3": 0.9912,
+        "spoke": 0.9159,
+        "spoke_precision": 0.9903,
+        "confusion": {
+          "akka": {
+            "akka": 8,
+            "sari": 1
+          },
+          "amma": {
+            "amma": 15
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 10
+          },
+          "avanu": {
+            "avanu": 10
+          },
+          "banni": {
+            "banni": 7
+          },
+          "beda": {
+            "beda": 9
+          },
+          "beku": {
+            "beku": 10,
+            "hogu": 1
+          },
+          "chennagidini": {
+            "chennagidini": 3
+          },
+          "dhanyavada": {
+            "dhanyavada": 9
+          },
+          "entu": {
+            "entu": 5,
+            "beku": 1
+          },
+          "eradu": {
+            "eradu": 9
+          },
+          "haudu": {
+            "haudu": 5
+          },
+          "hogu": {
+            "hogu": 6
+          },
+          "illa": {
+            "illa": 5
+          },
+          "manege_banni": {
+            "manege_banni": 9
+          },
+          "manne": {
+            "manne": 12
+          },
+          "mooru": {
+            "mooru": 7
+          },
+          "namaskara": {
+            "namaskara": 10
+          },
+          "nanna_hesaru": {
+            "nanna_hesaru": 5
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 9
+          },
+          "neeru": {
+            "neeru": 2
+          },
+          "ombathu": {
+            "ombathu": 14
+          },
+          "oota": {
+            "oota": 12
+          },
+          "saku": {
+            "saku": 11,
+            "eradu": 1
+          },
+          "sari": {
+            "sari": 10
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 9
+          },
+          "tindi": {
+            "tindi": 1
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    },
+    {
+      "participant": "k07",
+      "threshold": 0.1278,
+      "same_session": {
+        "n": 342,
+        "top1": 0.8216,
+        "top3": 0.9123,
+        "spoke": 0.7222,
+        "spoke_precision": 0.9514,
+        "confusion": {
+          "akka": {
+            "akka": 10
+          },
+          "amma": {
+            "amma": 11
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 5
+          },
+          "avanu": {
+            "avanu": 15
+          },
+          "banni": {
+            "banni": 9,
+            "beda": 1,
+            "manege_banni": 1
+          },
+          "beda": {
+            "beda": 13,
+            "akka": 1
+          },
+          "beku": {
+            "beku": 15
+          },
+          "chennagidini": {
+            "chennagidini": 15
+          },
+          "dhanyavada": {
+            "dhanyavada": 10,
+            "akka": 1
+          },
+          "entu": {
+            "entu": 12,
+            "sari": 1
+          },
+          "eradu": {
+            "eradu": 12,
+            "entu": 8
+          },
+          "haudu": {
+            "haudu": 17,
+            "mooru": 1
+          },
+          "hogu": {
+            "mooru": 3,
+            "oota": 5,
+            "beku": 1,
+            "hogu": 2,
+            "haudu": 3
+          },
+          "illa": {
+            "illa": 6,
+            "akka": 3
+          },
+          "manege_banni": {
+            "manege_banni": 14
+          },
+          "manne": {
+            "manne": 2,
+            "beda": 3,
+            "manege_banni": 5,
+            "banni": 4,
+            "illa": 1
+          },
+          "mooru": {
+            "beda": 1,
+            "mooru": 10,
+            "hogu": 1,
+            "haudu": 2
+          },
+          "namaskara": {
+            "namaskara": 10
+          },
+          "nanna_hesaru": {
+            "nanna_hesaru": 13,
+            "akka": 1
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 12
+          },
+          "neeru": {
+            "neeru": 8
+          },
+          "ombathu": {
+            "ombathu": 14
+          },
+          "oota": {
+            "oota": 17
+          },
+          "saku": {
+            "nanna_hesaru": 1,
+            "eradu": 2,
+            "oota": 1,
+            "akka": 1,
+            "saku": 7,
+            "entu": 1,
+            "haudu": 2
+          },
+          "sari": {
+            "chennagidini": 2,
+            "sari": 5,
+            "illa": 1
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 9
+          },
+          "tindi": {
+            "tindi": 8,
+            "sari": 2,
+            "illa": 1
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    },
+    {
+      "participant": "k08",
+      "threshold": 0.1618,
+      "same_session": {
+        "n": 309,
+        "top1": 0.822,
+        "top3": 0.9288,
+        "spoke": 0.6926,
+        "spoke_precision": 0.9673,
+        "confusion": {
+          "akka": {
+            "akka": 6
+          },
+          "amma": {
+            "amma": 5,
+            "avanu": 1,
+            "beda": 1
+          },
+          "avanu_baruthane": {
+            "avanu_baruthane": 11
+          },
+          "avanu": {
+            "avanu": 6,
+            "nanna_hesaru": 1
+          },
+          "banni": {
+            "neeru": 3,
+            "banni": 5,
+            "beda": 1
+          },
+          "beda": {
+            "beda": 6,
+            "illa": 1
+          },
+          "beku": {
+            "beku": 8,
+            "manege_banni": 1
+          },
+          "chennagidini": {
+            "chennagidini": 9,
+            "entu": 1
+          },
+          "dhanyavada": {
+            "dhanyavada": 11
+          },
+          "entu": {
+            "entu": 5,
+            "eradu": 1
+          },
+          "eradu": {
+            "eradu": 6,
+            "entu": 3
+          },
+          "haudu": {
+            "chennagidini": 3,
+            "haudu": 6,
+            "entu": 1,
+            "avanu_baruthane": 1,
+            "avanu": 1
+          },
+          "illa": {
+            "illa": 7,
+            "neeru": 2,
+            "mooru": 1
+          },
+          "manege_banni": {
+            "manege_banni": 15
+          },
+          "manne": {
+            "manne": 12,
+            "neeru": 2
+          },
+          "mooru": {
+            "mooru": 4
+          },
+          "namaskara": {
+            "namaskara": 26,
+            "beda": 2
+          },
+          "nanna_hesaru": {
+            "avanu": 1,
+            "nanna_hesaru": 7,
+            "dhanyavada": 4,
+            "entu": 1
+          },
+          "neeru_kudi": {
+            "neeru_kudi": 18
+          },
+          "neeru": {
+            "neeru": 6,
+            "tindi": 2,
+            "banni": 1
+          },
+          "ombathu": {
+            "ombathu": 13,
+            "swalpa_kodi": 1
+          },
+          "oota": {
+            "oota": 17
+          },
+          "saku": {
+            "namaskara": 1,
+            "saku": 13
+          },
+          "sari": {
+            "tindi": 7,
+            "saku": 4,
+            "sari": 1,
+            "neeru": 1,
+            "eradu": 2,
+            "dhanyavada": 1
+          },
+          "swalpa_kodi": {
+            "swalpa_kodi": 20
+          },
+          "tindi": {
+            "tindi": 11,
+            "neeru": 2
+          }
+        }
+      },
+      "next_session": {
+        "n": 0,
+        "top1": null,
+        "top3": null,
+        "spoke": null,
+        "spoke_precision": null,
+        "confusion": {}
+      },
+      "idle_minutes": 0.0,
+      "gate_triggers": 0,
+      "false_speaks": 0
+    }
+  ],
+  "pooled": {
+    "same_session": {
+      "n": 1673,
+      "top1": 0.8619,
+      "top3": 0.9492,
+      "spoke": 0.7896,
+      "spoke_precision": 0.9425,
+      "confusion": {
+        "akka": {
+          "akka": 41,
+          "sari": 1
+        },
+        "amma": {
+          "amma": 54,
+          "avanu": 2,
+          "akka": 1,
+          "beda": 2
+        },
+        "avanu_baruthane": {
+          "avanu_baruthane": 56
+        },
+        "avanu": {
+          "avanu": 58,
+          "nanna_hesaru": 1
+        },
+        "banni": {
+          "banni": 34,
+          "manne": 5,
+          "mane": 3,
+          "beda": 3,
+          "manege_banni": 1,
+          "neeru": 3
+        },
+        "beda": {
+          "beda": 42,
+          "beku": 4,
+          "neeru": 1,
+          "manne": 3,
+          "manege_banni": 1,
+          "akka": 1,
+          "illa": 1
+        },
+        "beku": {
+          "beku": 51,
+          "beda": 4,
+          "manne": 1,
+          "entu": 4,
+          "neeru": 1,
+          "ombathu": 1,
+          "hogu": 1,
+          "manege_banni": 1
+        },
+        "chennagidini": {
+          "chennagidini": 47,
+          "nanna_hesaru": 1,
+          "entu": 1
+        },
+        "dhanyavada": {
+          "dhanyavada": 50,
+          "nanna_hesaru": 2,
+          "saku": 1,
+          "sari": 1,
+          "akka": 1
+        },
+        "entu": {
+          "entu": 35,
+          "neeru": 1,
+          "eradu": 5,
+          "sari": 2,
+          "chennagidini": 1,
+          "beku": 1
+        },
+        "eradu": {
+          "eradu": 40,
+          "entu": 13,
+          "neeru": 1
+        },
+        "haudu": {
+          "haudu": 66,
+          "akka": 1,
+          "hogu": 2,
+          "mooru": 1,
+          "chennagidini": 3,
+          "entu": 1,
+          "avanu_baruthane": 1,
+          "avanu": 1
+        },
+        "hogu": {
+          "hogu": 28,
+          "mooru": 3,
+          "oota": 5,
+          "beku": 1,
+          "haudu": 3
+        },
+        "illa": {
+          "illa": 55,
+          "neeru": 5,
+          "tindi": 1,
+          "haudu": 1,
+          "akka": 3,
+          "mooru": 1
+        },
+        "manege_banni": {
+          "manege_banni": 66,
+          "manne": 1
+        },
+        "manne": {
+          "manne": 48,
+          "beda": 4,
+          "banni": 5,
+          "manege_banni": 5,
+          "illa": 1,
+          "neeru": 2
+        },
+        "mooru": {
+          "mooru": 41,
+          "haudu": 3,
+          "entu": 1,
+          "beda": 3,
+          "hogu": 1
+        },
+        "namaskara": {
+          "namaskara": 87,
+          "beda": 2
+        },
+        "nanna_hesaru": {
+          "nanna_hesaru": 51,
+          "akka": 1,
+          "avanu": 1,
+          "dhanyavada": 4,
+          "entu": 1
+        },
+        "neeru_kudi": {
+          "neeru_kudi": 73
+        },
+        "neeru": {
+          "neeru": 30,
+          "eradu": 5,
+          "entu": 2,
+          "tindi": 8,
+          "neeru_kudi": 4,
+          "saku": 1,
+          "illa": 1,
+          "chennagidini": 1,
+          "banni": 1
+        },
+        "ombathu": {
+          "ombathu": 74,
+          "oota": 1,
+          "swalpa_kodi": 1
+        },
+        "oota": {
+          "oota": 80,
+          "akka": 1
+        },
+        "saku": {
+          "saku": 71,
+          "haudu": 3,
+          "eradu": 3,
+          "nanna_hesaru": 1,
+          "oota": 1,
+          "akka": 1,
+          "entu": 1,
+          "namaskara": 1
+        },
+        "sari": {
+          "sari": 37,
+          "nanna_hesaru": 3,
+          "tindi": 22,
+          "neeru_kudi": 1,
+          "chennagidini": 2,
+          "illa": 1,
+          "saku": 4,
+          "neeru": 1,
+          "eradu": 2,
+          "dhanyavada": 1
+        },
+        "swalpa_kodi": {
+          "swalpa_kodi": 72,
+          "ombathu": 1
+        },
+        "tindi": {
+          "tindi": 46,
+          "sari": 4,
+          "illa": 3,
+          "neeru": 3
+        },
+        "mane": {
+          "mane": 9,
+          "banni": 1
+        }
+      }
+    },
+    "next_session": {
+      "n": 0,
+      "top1": null,
+      "top3": null,
+      "spoke": null,
+      "spoke_precision": null,
+      "confusion": {}
+    },
+    "idle_minutes": 0.0,
+    "gate_triggers_per_min": null,
+    "false_speaks_per_min": null
+  },
+  "verdict": "no-go: below 90% same-session; move to the backup idea",
+  "phrases": [
+    "akka",
+    "amma",
+    "avanu",
+    "avanu_baruthane",
+    "banni",
+    "beda",
+    "beku",
+    "chennagidini",
+    "dhanyavada",
+    "entu",
+    "eradu",
+    "haudu",
+    "hogu",
+    "illa",
+    "mane",
+    "manege_banni",
+    "manne",
+    "mooru",
+    "namaskara",
+    "nanna_hesaru",
+    "neeru",
+    "neeru_kudi",
+    "ombathu",
+    "oota",
+    "saku",
+    "sari",
+    "swalpa_kodi",
+    "tindi"
+  ],
+  "synthetic": false,
+  "generated": "2026-10-04T03:36:34+00:00"
+}

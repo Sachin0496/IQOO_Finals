@@ -1,0 +1,27 @@
+{
+  "params_m": 59.52,
+  "torch_vs_coreml_max_abs": 1.4645978808403015e-05,
+  "onnx_fp32_mb": 228.5,
+  "onnx_cosine_vs_torch": 1.0,
+  "cpu_bench": {
+    "host": "laptop CPU (not the phone)",
+    "rows": [
+      {
+        "frames": 25,
+        "seconds": 1.0,
+        "median_ms": 58.2
+      },
+      {
+        "frames": 50,
+        "seconds": 2.0,
+        "median_ms": 100.2
+      },
+      {
+        "frames": 68,
+        "seconds": 2.72,
+        "median_ms": 195.1
+      }
+    ]
+  },
+  "source": "LipLearner Core ML package (MIT, rkmtlab/LipLearner), rebuilt in PyTorch; measured on a laptop CPU, not the phone"
+}

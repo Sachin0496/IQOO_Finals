@@ -1,0 +1,81 @@
+{
+  "experiment": "E3 shot augmentation (PLAN.md): pass line +1.5 top-1 points at 3 shots",
+  "source": "Kannada multi-speaker dataset, deck split (teach reps 1-3, test reps 4+), int8 static encoder, all 28 classes",
+  "variants": "mirror; crop shifted 4 px; zoom 6% (ROI 136); 5% trimmed at both ends",
+  "1_shot": {
+    "none": {
+      "n": 1673,
+      "top1": 0.7197,
+      "top3": 0.8601,
+      "top1_gain_points": 0.0
+    },
+    "mirror": {
+      "n": 1673,
+      "top1": 0.7209,
+      "top3": 0.8589,
+      "top1_gain_points": 0.12
+    },
+    "shift": {
+      "n": 1673,
+      "top1": 0.7227,
+      "top3": 0.8619,
+      "top1_gain_points": 0.3
+    },
+    "zoom": {
+      "n": 1673,
+      "top1": 0.7209,
+      "top3": 0.8607,
+      "top1_gain_points": 0.12
+    },
+    "trim": {
+      "n": 1673,
+      "top1": 0.7328,
+      "top3": 0.8661,
+      "top1_gain_points": 1.31
+    },
+    "all_four": {
+      "n": 1673,
+      "top1": 0.725,
+      "top3": 0.8703,
+      "top1_gain_points": 0.53
+    }
+  },
+  "3_shot": {
+    "none": {
+      "n": 1673,
+      "top1": 0.8619,
+      "top3": 0.9492,
+      "top1_gain_points": 0.0
+    },
+    "mirror": {
+      "n": 1673,
+      "top1": 0.8565,
+      "top3": 0.9522,
+      "top1_gain_points": -0.54
+    },
+    "shift": {
+      "n": 1673,
+      "top1": 0.8548,
+      "top3": 0.948,
+      "top1_gain_points": -0.71
+    },
+    "zoom": {
+      "n": 1673,
+      "top1": 0.8577,
+      "top3": 0.948,
+      "top1_gain_points": -0.42
+    },
+    "trim": {
+      "n": 1673,
+      "top1": 0.8619,
+      "top3": 0.951,
+      "top1_gain_points": 0.0
+    },
+    "all_four": {
+      "n": 1673,
+      "top1": 0.8583,
+      "top3": 0.951,
+      "top1_gain_points": -0.36
+    }
+  }
+}

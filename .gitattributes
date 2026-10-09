@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.pptx binary
+*.png binary
+*.bat text eol=crlf
+encoder/qnn_ctx/**/*.bin filter=lfs diff=lfs merge=lfs -text

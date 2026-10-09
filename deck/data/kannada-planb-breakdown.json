@@ -1,0 +1,35 @@
+{
+  "head": "plan-b-dtw",
+  "by_type": {
+    "word": {
+      "top1": 0.6865,
+      "n": 1346
+    },
+    "phrase": {
+      "top1": 0.8043,
+      "n": 327
+    }
+  },
+  "hardest": [
+    {
+      "class": "neeru",
+      "top1": 0.3585,
+      "n": 53
+    },
+    {
+      "class": "sari",
+      "top1": 0.4054,
+      "n": 74
+    },
+    {
+      "class": "illa",
+      "top1": 0.4394,
+      "n": 66
+    },
+    {
+      "class": "manne",
+      "top1": 0.4769,
+      "n": 65
+    }
+  ]
+}

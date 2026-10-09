@@ -1,0 +1,56 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: lab/package-lock.json }
+      - run: npm ci
+        working-directory: lab
+      - run: npm test && npm run build
+        working-directory: lab
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -e "harness[dev]" && python -m pytest harness
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: lab/dist }
+
+  # Publishes Mouna Lab to GitHub Pages. Needs Pages enabled (public repo, or a paid plan for private).
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.PAGES_ENABLED == 'true'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.deploy.outputs.page_url }}' }
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run vendor
+        working-directory: lab
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: ./gradlew --console=plain :core:test testDebugUnitTest assembleDebug
+        working-directory: android
+      - name: APK must not request INTERNET (spike test S6)
+        run: |
+          AAPT=$(ls $ANDROID_HOME/build-tools/*/aapt2 | tail -1)
+          $AAPT dump permissions android/app/build/outputs/apk/debug/app-debug.apk | tee perms.txt
+          ! grep -q "android.permission.INTERNET" perms.txt

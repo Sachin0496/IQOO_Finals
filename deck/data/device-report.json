@@ -1,0 +1,65 @@
+{
+  "device": "Samsung Galaxy S26",
+  "frames": 64,
+  "runs": {
+    "npu_qnn_fp16": {
+      "compile_job": "j57oylerg",
+      "profile_job": "jp4eldylg",
+      "error": "Failed to profile the model: Failed to call QnnModel_composeGraphsFromDlc: MODEL_GRAPH_ERROR."
+    },
+    "gpu_tflite_fp16": {
+      "compile_job": "jp8jqm4z5",
+      "profile_job": "jgk6eq9y5",
+      "median_ms": 284.06,
+      "peak_memory_mb": 686.4,
+      "layers_by_unit": {
+        "CPU": 272
+      }
+    },
+    "cpu_tflite_fp32": {
+      "compile_job": "jgn16mkvp",
+      "profile_job": "jp2ok9exg",
+      "median_ms": 285.83,
+      "peak_memory_mb": 687.9,
+      "layers_by_unit": {
+        "CPU": 272
+      }
+    },
+    "frontend_npu": {
+      "compile_job": "jprxv2xep",
+      "profile_job": "jp2ok9omg",
+      "median_ms": 6.67,
+      "peak_memory_mb": 217.8,
+      "layers_by_unit": {
+        "NPU": 101
+      }
+    },
+    "frontend_cpu": {
+      "compile_job": "jglwv28lp",
+      "profile_job": "jgod2nwd5",
+      "median_ms": 69.28,
+      "peak_memory_mb": 213.3,
+      "layers_by_unit": {
+        "CPU": 77
+      }
+    },
+    "temporal_cpu": {
+      "compile_job": "jgk6eq125",
+      "profile_job": "j56oyzx05",
+      "median_ms": 186.86,
+      "peak_memory_mb": 307.6,
+      "layers_by_unit": {
+        "CPU": 190
+      }
+    },
+    "static_npu": {
+      "compile_job": "jg9ol3jwg",
+      "profile_job": "jp1o4dy85",
+      "median_ms": 18.35,
+      "peak_memory_mb": 227.9,
+      "layers_by_unit": {
+        "NPU": 5265
+      }
+    }
+  }
+}

@@ -1,0 +1,345 @@
+{
+  "source": "Kannada multi-speaker dataset (voiced, 7 speakers, 28 classes), int8 static encoder embeddings",
+  "split": "and per draw (20 draws): 8 taught classes; 10 other classes are candidates for \"none of my phrases\" examples (one mouthing each, the first 0, 5 or 10 of them are used); the remaining 10 classes are the untaught words, never seen in any form. Fixed teaching uses reps 1-3; active teaching may use reps 1-5; every condition is tested on the same clips (taught classes: reps 6 and later; untaught: every clip).",
+  "held_out": "decision constants chosen on six speakers, scored on the seventh, for each speaker; pooled",
+  "operating_point": "untaught words spoken by mistake <= 5% on the six calibration speakers",
+  "E17_speak_rule": {
+    "baseline_today_default": {
+      "taught_spoken_right": 0.8526421488640643,
+      "taught_spoken_wrong": 0.019706288439814233,
+      "spoke_precision": 0.977410071942446,
+      "untaught_spoken": 0.2565780014378145,
+      "negative_word_spoken": 0.24187676958338952
+    },
+    "baseline_today_careful_0.7": {
+      "taught_spoken_right": 0.6843228316806829,
+      "taught_spoken_wrong": 0.011422116229446467,
+      "spoke_precision": 0.9835828973480065,
+      "untaught_spoken": 0.07828900071890726,
+      "negative_word_spoken": 0.07010920857489551
+    },
+    "baseline_at_operating_point": {
+      "taught_spoken_right": 0.5497677921425882,
+      "taught_spoken_wrong": 0.006275888038157399,
+      "spoke_precision": 0.9887133182844243,
+      "untaught_spoken": 0.041480948957584474,
+      "negative_word_spoken": 0.03694215990292571,
+      "constants_per_held_out_speaker": [
+        {
+          "st": 0.65
+        },
+        {
+          "st": 0.6
+        },
+        {
+          "st": 0.6
+        },
+        {
+          "st": 0.6
+        },
+        {
+          "st": 0.6
+        },
+        {
+          "st": 0.6
+        },
+        {
+          "st": 0.6
+        }
+      ]
+    },
+    "core_0_negatives": {
+      "taught_spoken_right": 0.5923183130412953,
+      "taught_spoken_wrong": 0.0022593196937366637,
+      "spoke_precision": 0.9962001266624446,
+      "untaught_spoken": 0.040977713874910136,
+      "negative_word_spoken": null,
+      "constants_per_held_out_speaker": [
+        {
+          "q": 1.5,
+          "m": 1.5,
+          "rho": 0.8
+        },
+        {
+          "q": 2.6,
+          "m": 1.75,
+          "rho": 0.8
+        },
+        {
+          "q": 1.5,
+          "m": 1.5,
+          "rho": 0.8
+        },
+        {
+          "q": 2.6,
+          "m": 1.75,
+          "rho": 0.8
+        },
+        {
+          "q": 1.4,
+          "m": 1.5,
+          "rho": 0.8
+        },
+        {
+          "q": 2.1,
+          "m": 1.75,
+          "rho": 0.8
+        },
+        {
+          "q": 2.0,
+          "m": 1.75,
+          "rho": 0.8
+        }
+      ]
+    },
+    "core_5_negatives": {
+      "taught_spoken_right": 0.6482992343416594,
+      "taught_spoken_wrong": 0.003263461779841848,
+      "spoke_precision": 0.9949913311500674,
+      "untaught_spoken": 0.04543493889288282,
+      "negative_word_spoken": 0.010516381286234326,
+      "constants_per_held_out_speaker": [
+        {
+          "q": 1.8,
+          "m": 1.3,
+          "rho": 1.2
+        },
+        {
+          "q": 1.7,
+          "m": 1.3,
+          "rho": 1.2
+        },
+        {
+          "q": 1.7,
+          "m": 1.3,
+          "rho": 1.2
+        },
+        {
+          "q": 1.7,
+          "m": 1.3,
+          "rho": 1.2
+        },
+        {
+          "q": 1.6,
+          "m": 1.3,
+          "rho": 1.2
+        },
+        {
+          "q": 2.6,
+          "m": 1.5,
+          "rho": 1.2
+        },
+        {
+          "q": 2.6,
+          "m": 1.5,
+          "rho": 1.2
+        }
+      ]
+    },
+    "core_10_negatives": {
+      "taught_spoken_right": 0.671771055604368,
+      "taught_spoken_wrong": 0.0030124262583155516,
+      "spoke_precision": 0.9955357142857143,
+      "untaught_spoken": 0.05168943206326384,
+      "negative_word_spoken": 0.011762347122903161,
+      "constants_per_held_out_speaker": [
+        {
+          "q": 2.6,
+          "m": 1.5,
+          "rho": 1.0
+        },
+        {
+          "q": 2.0,
+          "m": 1.5,
+          "rho": 1.0
+        },
+        {
+          "q": 2.2,
+          "m": 1.5,
+          "rho": 1.0
+        },
+        {
+          "q": 2.0,
+          "m": 1.5,
+          "rho": 1.0
+        },
+        {
+          "q": 2.1,
+          "m": 1.5,
+          "rho": 1.0
+        },
+        {
+          "q": 1.7,
+          "m": 1.5,
+          "rho": 1.0
+        },
+        {
+          "q": 2.1,
+          "m": 1.15,
+          "rho": 1.2
+        }
+      ]
+    }
+  },
+  "shipped_constants": {
+    "Q_SPEAK_A": 1.7,
+    "MARGIN": 1.3,
+    "NEG_RATIO": 1.2,
+    "Q_SET": 1.95
+  },
+  "E16_prediction_set": {
+    "target": 0.9,
+    "held_out_coverage_per_speaker": [
+      0.8661,
+      1.0,
+      0.8636,
+      0.9466,
+      0.9222,
+      0.9619,
+      0.8155
+    ],
+    "held_out_coverage_mean": 0.9108,
+    "set_size_mean": 1.326,
+    "set_size_share": {
+      "0": 0.0919,
+      "1": 0.6534,
+      "2": 0.1512,
+      "3": 0.064,
+      "4": 0.027,
+      "5": 0.0075
+    }
+  },
+  "E19_fallback_for_unspoken_taught_words": {
+    "unspoken_taught_share": 0.3267,
+    "confirm_one": {
+      "share": 0.4049,
+      "truth_shown": 0.9459
+    },
+    "rescue_two": {
+      "share": 0.1829,
+      "truth_shown": 0.958
+    },
+    "choose_three_or_four": {
+      "share": 0.1272,
+      "truth_shown": 0.997
+    },
+    "ask_more_than_four": {
+      "share": 0.0165,
+      "truth_shown": 1.0
+    },
+    "not_taught_with_two_maybes": {
+      "share": 0.2685,
+      "truth_shown": 0.9213
+    },
+    "truth_shown_overall": 0.9489,
+    "untaught_said_not_taught": 0.6895,
+    "untaught_none_of_these_first": 0.8307
+  },
+  "E15_active_teaching": {
+    "fixed_3": {
+      "examples_per_pack": 24,
+      "taught_spoken_right": 0.6685075938245262,
+      "taught_spoken_wrong": 0.004769674908999624,
+      "spoke_precision": 0.9929157345264727,
+      "untaught_spoken": 0.0498921639108555,
+      "negative_word_spoken": 0.010786032088445464,
+      "top1": 0.9412576879628467
+    },
+    "active_quick_min2": {
+      "examples_per_pack": 19.54,
+      "taught_spoken_right": 0.6662482741307895,
+      "taught_spoken_wrong": 0.006024852516631103,
+      "spoke_precision": 0.9910380881254668,
+      "untaught_spoken": 0.06721782890007189,
+      "negative_word_spoken": 0.011999460698395577,
+      "top1": 0.9325969624701895
+    },
+    "active_thorough_min3": {
+      "examples_per_pack": 25.09,
+      "taught_spoken_right": 0.6707669135182628,
+      "taught_spoken_wrong": 0.0055227814735785115,
+      "spoke_precision": 0.991833704528582,
+      "untaught_spoken": 0.05046728971962617,
+      "negative_word_spoken": 0.01092085748955103,
+      "top1": 0.9461528806326095
+    }
+  },
+  "separability_calibration": [
+    {
+      "by_colour": {
+        "yellow": {
+          "pairs": 1570,
+          "mean_confusion": 0.0113
+        },
+        "green": {
+          "pairs": 1979,
+          "mean_confusion": 0.0013
+        },
+        "red": {
+          "pairs": 371,
+          "mean_confusion": 0.0259
+        }
+      }
+    },
+    {
+      "by_gap": [
+        {
+          "gap_from": 0,
+          "gap_to": 0.8,
+          "pairs": 186,
+          "mean_confusion": 0.0345
+        },
+        {
+          "gap_from": 0.8,
+          "gap_to": 1.0,
+          "pairs": 185,
+          "mean_confusion": 0.0173
+        },
+        {
+          "gap_from": 1.0,
+          "gap_to": 1.2,
+          "pairs": 302,
+          "mean_confusion": 0.0136
+        },
+        {
+          "gap_from": 1.2,
+          "gap_to": 1.4,
+          "pairs": 365,
+          "mean_confusion": 0.0172
+        },
+        {
+          "gap_from": 1.4,
+          "gap_to": 1.6,
+          "pairs": 420,
+          "mean_confusion": 0.0092
+        },
+        {
+          "gap_from": 1.6,
+          "gap_to": 1.8,
+          "pairs": 483,
+          "mean_confusion": 0.0073
+        },
+        {
+          "gap_from": 1.8,
+          "gap_to": 2.2,
+          "pairs": 816,
+          "mean_confusion": 0.0028
+        },
+        {
+          "gap_from": 2.2,
+          "gap_to": 3.0,
+          "pairs": 875,
+          "mean_confusion": 0.0005
+        },
+        {
+          "gap_from": 3.0,
+          "gap_to": 99,
+          "pairs": 288,
+          "mean_confusion": 0.0
+        }
+      ]
+    }
+  ],
+  "embeddings": "kannada-emb-int8.npz",
+  "generated": "2026-10-06T16:57:17+00:00"
+}

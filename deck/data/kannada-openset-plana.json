@@ -1,0 +1,202 @@
+{
+  "head": "plan-a-prototype",
+  "source": "Kannada multi-speaker dataset (voiced speech), same teach/test split as the deck",
+  "small_vocabulary_8": {
+    "taught_classes": 8,
+    "draws_per_participant": 20,
+    "taught_words": {
+      "n": 10007,
+      "top1": 0.9303,
+      "spoke": 0.8509,
+      "spoke_precision": 0.9779
+    },
+    "untaught_words": {
+      "n": 30712,
+      "spoken_as_a_taught_phrase": 0.2324,
+      "offered_choices": 0.6277,
+      "said_not_taught": 0.1399,
+      "most_often_spoken_as": [
+        {
+          "said": "eradu",
+          "spoken_as": "entu",
+          "share_of_wrong_speaks": 0.0434
+        },
+        {
+          "said": "manne",
+          "spoken_as": "banni",
+          "share_of_wrong_speaks": 0.0335
+        },
+        {
+          "said": "banni",
+          "spoken_as": "manne",
+          "share_of_wrong_speaks": 0.0314
+        },
+        {
+          "said": "chennagidini",
+          "spoken_as": "sari",
+          "share_of_wrong_speaks": 0.0244
+        },
+        {
+          "said": "sari",
+          "spoken_as": "tindi",
+          "share_of_wrong_speaks": 0.0231
+        }
+      ]
+    }
+  },
+  "large_vocabulary": {
+    "taught_classes": "all but one (each class left out in turn)",
+    "draws_per_participant": null,
+    "taught_words": {
+      "n": 43028,
+      "top1": 0.865,
+      "spoke": 0.7929,
+      "spoke_precision": 0.9428
+    },
+    "untaught_words": {
+      "n": 2192,
+      "spoken_as_a_taught_phrase": 0.2733,
+      "offered_choices": 0.6679,
+      "said_not_taught": 0.0589,
+      "most_often_spoken_as": [
+        {
+          "said": "eradu",
+          "spoken_as": "entu",
+          "share_of_wrong_speaks": 0.0634
+        },
+        {
+          "said": "manne",
+          "spoken_as": "banni",
+          "share_of_wrong_speaks": 0.0618
+        },
+        {
+          "said": "banni",
+          "spoken_as": "manne",
+          "share_of_wrong_speaks": 0.0501
+        },
+        {
+          "said": "chennagidini",
+          "spoken_as": "sari",
+          "share_of_wrong_speaks": 0.0501
+        },
+        {
+          "said": "entu",
+          "spoken_as": "eradu",
+          "share_of_wrong_speaks": 0.0384
+        }
+      ]
+    }
+  },
+  "chains": {
+    "2_blocks": {
+      "n": 6663,
+      "each_block_alone": 0.6922,
+      "top3_ceiling": 0.8558,
+      "with_sentence_list": 0.8916,
+      "spoke": 0.719,
+      "spoke_precision": 0.9274
+    },
+    "3_blocks": {
+      "n": 56784,
+      "each_block_alone": 0.7088,
+      "top3_ceiling": 0.8763,
+      "with_sentence_list": 0.8673,
+      "spoke": 0.647,
+      "spoke_precision": 0.9199
+    },
+    "most_common_mistakes": [
+      {
+        "meant": "amma neeru beku",
+        "got": "amma tindi beku",
+        "share": 0.1199
+      },
+      {
+        "meant": "akka oota beku",
+        "got": "akka oota beda",
+        "share": 0.0586
+      },
+      {
+        "meant": "amma oota beda",
+        "got": "amma oota beku",
+        "share": 0.0538
+      },
+      {
+        "meant": "amma oota beku",
+        "got": "amma oota beda",
+        "share": 0.0523
+      },
+      {
+        "meant": "akka neeru beku",
+        "got": "akka tindi beku",
+        "share": 0.0523
+      }
+    ],
+    "sentences": [
+      "neeru beku",
+      "neeru beda",
+      "neeru saku",
+      "oota beku",
+      "oota beda",
+      "oota saku",
+      "tindi beku",
+      "tindi beda",
+      "tindi saku",
+      "amma banni",
+      "akka banni",
+      "amma neeru beku",
+      "amma neeru beda",
+      "amma oota beku",
+      "amma oota beda",
+      "amma tindi beku",
+      "amma tindi beda",
+      "akka neeru beku",
+      "akka neeru beda",
+      "akka oota beku",
+      "akka oota beda",
+      "akka tindi beku",
+      "akka tindi beda"
+    ]
+  },
+  "chains_not_on_list": {
+    "n": 1376,
+    "spoken_as_a_listed_sentence": 0.0276,
+    "within_choice_range": 0.5414
+  },
+  "strictness_curve": [
+    {
+      "strictness": 1.0,
+      "taught_spoken": 0.8509,
+      "taught_spoken_precision": 0.9779,
+      "untaught_spoken": 0.2324,
+      "untaught_said_not_taught": 0.1399
+    },
+    {
+      "strictness": 0.9,
+      "taught_spoken": 0.8163,
+      "taught_spoken_precision": 0.9793,
+      "untaught_spoken": 0.1767,
+      "untaught_said_not_taught": 0.2256
+    },
+    {
+      "strictness": 0.8,
+      "taught_spoken": 0.7567,
+      "taught_spoken_precision": 0.9836,
+      "untaught_spoken": 0.12,
+      "untaught_said_not_taught": 0.3563
+    },
+    {
+      "strictness": 0.7,
+      "taught_spoken": 0.669,
+      "taught_spoken_precision": 0.986,
+      "untaught_spoken": 0.0725,
+      "untaught_said_not_taught": 0.526
+    },
+    {
+      "strictness": 0.6,
+      "taught_spoken": 0.5329,
+      "taught_spoken_precision": 0.9897,
+      "untaught_spoken": 0.0363,
+      "untaught_said_not_taught": 0.7033
+    }
+  ]
+}
