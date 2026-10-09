@@ -43,9 +43,15 @@ object Ink {
     val rule2 = Color(0xFF3D3A33)
     val bone = Color(0xFFEDE6D6)
     val bone2 = Color(0xFFB9B2A3)
-    val mute = Color(0xFF7D776B)
+    /** Quiet labels. #958F81: 6.03:1 on bg, 5.23:1 on card, 5.62:1 on raised (the old #7D776B was 4.37 / 3.78). */
+    val mute = Color(0xFF958F81)
     val turmeric = Color(0xFFF0AA2E)
+    /** Kumkum for icons and fills (4.84:1 on bg). */
     val kumkum = Color(0xFFE4472B)
+    /** Kumkum as small text on dark: #F0694D, 6.32:1 on bg, 5.47:1 on card. */
+    val kumkumInk = Color(0xFFF0694D)
+    /** Fill behind bone text on a danger button: #B8321A, bone on it is 4.81:1 (bone on kumkum was 3.23). */
+    val kumkumDeep = Color(0xFFB8321A)
     val leaf = Color(0xFF8FBF8A)
 }
 
@@ -57,6 +63,9 @@ object Type {
     val label = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, letterSpacing = 1.2.sp, color = Ink.mute)
     val mono = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = Ink.bone2)
     val button = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium, color = Ink.bone)
+    /** Status pills on the camera: one line, readable from across a room. */
+    val pill = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = Ink.bone)
+    val hint = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, color = Ink.mute)
 }
 
 @Composable

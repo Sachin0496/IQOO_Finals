@@ -4,7 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-/** Technical status (NPU/CPU, model names, timings, QA tools) shows only while this is on: Settings › Advanced. */
+/**
+ * Stage mode: the screens say only plain words. With [debug] on they also show what the machine is doing (NPU or
+ * CPU, model names, milliseconds, file paths). The switch lives in Settings, Advanced.
+ */
 object Stage {
     var debug by mutableStateOf(false)
 }
