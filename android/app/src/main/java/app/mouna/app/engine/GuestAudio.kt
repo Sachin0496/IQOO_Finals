@@ -32,34 +32,56 @@ class GuestAudio(context: Context) {
 
     val playing get() = running
 
-    fun start() {
-        if (running) return
-        savedMode = audio.mode
-        audio.mode = AudioManager.MODE_IN_COMMUNICATION
-        speaker()
-        runCatching {
-            savedVolume = audio.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
-            audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, audio.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0)
-        }.onFailure { Log.w(TAG, "volume", it) }
+    /** Why the last [start] failed, in words for the screen. */
+    var error: String? = null
+        private set
 
-        val format = AudioFormat.Builder()
-            .setSampleRate(CallWire.PCM_RATE)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .build()
-        val min = AudioTrack.getMinBufferSize(CallWire.PCM_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
-        val t = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setAudioFormat(format)
-            .setBufferSizeInBytes(maxOf(min, CallWire.PCM_BYTES_PER_MS * 200))
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-            .build()
-        t.play()
+    /** Starts the call audio; false (with [error], and the audio mode put back) if the phone would not. */
+    fun start(): Boolean {
+        if (running) return true
+        error = null
+        savedMode = audio.mode
+        savedVolume = -1
+        val started = runCatching {
+            audio.mode = AudioManager.MODE_IN_COMMUNICATION
+            speaker()
+            runCatching {
+                savedVolume = audio.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
+                audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, audio.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0)
+            }.onFailure { Log.w(TAG, "volume", it) }
+
+            val format = AudioFormat.Builder()
+                .setSampleRate(CallWire.PCM_RATE)
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                .build()
+            val min = AudioTrack.getMinBufferSize(CallWire.PCM_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            val t = AudioTrack.Builder()
+                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(maxOf(min, CallWire.PCM_BYTES_PER_MS * 200))
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+                .build()
+            try {
+                t.play()
+            } catch (e: Exception) {
+                t.release()
+                throw e
+            }
+            t
+        }
+        val t = started.getOrElse {
+            Log.w(TAG, "guest audio won't start", it)
+            error = "This phone would not start the call audio (${it.javaClass.simpleName})."
+            restore()
+            return false
+        }
         track = t
         running = true
         Log.i(TAG, "guest audio: AudioTrack ${t.sampleRate} Hz, buffer ${t.bufferSizeInFrames} frames, mode=${audio.mode}, route=${t.routedDevice?.type}")
         worker = thread(name = "guest-audio", isDaemon = true) { pump(t) }
+        return true
     }
 
     /** Called with each frame of the guest's PCM, from the socket's thread. */
@@ -94,6 +116,11 @@ class GuestAudio(context: Context) {
         track = null
         jitter.clear()
         _level.value = 0f
+        restore()
+    }
+
+    /** Volume, route and audio mode back to what they were before [start]. */
+    private fun restore() {
         runCatching {
             if (savedVolume >= 0) audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, savedVolume, 0)
             if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice()
@@ -101,6 +128,7 @@ class GuestAudio(context: Context) {
             if (Build.VERSION.SDK_INT < 31) audio.isSpeakerphoneOn = false
             audio.mode = savedMode
         }
+        savedVolume = -1
     }
 
     /** Speakerphone, best effort (API 31+ routes by communication device). */

@@ -126,4 +126,50 @@ class SarvamTest {
             }
         }
     }
+
+    private fun answerFor(wav: ByteArray) = JSONObject().put("audios", listOf(Base64.getEncoder().encodeToString(wav))).toString()
+
+    @Test
+    fun concurrentFetchesOfOnePhraseEachWriteTheirOwnFile() {
+        val wav = ByteArray(40_000) { (it % 251).toByte() }
+        val dir = Files.createTempDirectory("sarvam").toFile()
+        FakeServer(200, answerFor(wav)).use { server ->
+            try {
+                val stale = java.io.File(java.io.File(dir, "sarvam").also { it.mkdirs() }, Sarvam.cacheKey(req) + ".wav.tmp")
+                stale.writeBytes(byteArrayOf(9, 9, 9)) // what the old shared temp name could hold: another request's half-written bytes
+                val results = java.util.Collections.synchronizedList(mutableListOf<ByteArray>())
+                val errors = java.util.Collections.synchronizedList(mutableListOf<Throwable>())
+                val threads = List(6) { thread { runCatching { results += Sarvam.fetch("k", req, dir, server.url).readBytes() }.onFailure { errors += it } } }
+                threads.forEach { it.join(10_000) }
+                assertTrue(errors.toString(), errors.isEmpty())
+                assertEquals(6, results.size)
+                results.forEach { assertArrayEquals(wav, it) }
+                assertArrayEquals(wav, Sarvam.cacheFile(dir, req).readBytes())
+                // no temp file of ours is left behind (the unrelated stale one is not touched either)
+                val left = java.io.File(dir, "sarvam").listFiles()!!.map { it.name }.filter { it.endsWith(".tmp") }
+                assertEquals(listOf(stale.name), left)
+            } finally {
+                dir.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun theVoiceCacheCanBeCountedAndCleared() {
+        val dir = Files.createTempDirectory("sarvam").toFile()
+        try {
+            assertEquals(0 to 0L, Sarvam.cacheStats(dir))
+            assertEquals(0, Sarvam.clearCache(dir))
+            val folder = java.io.File(dir, "sarvam").also { it.mkdirs() }
+            java.io.File(folder, "a.wav").writeBytes(ByteArray(10))
+            java.io.File(folder, "b.wav").writeBytes(ByteArray(5))
+            java.io.File(folder, "c.wav.tmp").writeBytes(ByteArray(3))
+            assertEquals(2 to 15L, Sarvam.cacheStats(dir))
+            assertEquals(2, Sarvam.clearCache(dir))
+            assertEquals(0 to 0L, Sarvam.cacheStats(dir))
+            assertEquals(0, folder.listFiles()!!.size)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 }

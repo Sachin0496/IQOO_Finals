@@ -28,6 +28,11 @@ interface CallLink {
      */
     fun sendAudio(data: ByteArray, mime: String): Boolean = false
 
+    /** The app is going away: end any call and give back the audio route and volume it took. */
+    fun shutdown() {
+        if (state != CallState.IDLE) hangUp()
+    }
+
     /** The words about to be spoken, sent ahead of the audio so the other side can show them as a caption. */
     fun sendText(text: String) = Unit
 }

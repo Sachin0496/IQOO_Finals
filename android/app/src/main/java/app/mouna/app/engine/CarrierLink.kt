@@ -37,8 +37,10 @@ class CarrierLink(private val context: Context) : CallLink {
     private var offPolls = 0
     private var polls = 0
     private var lastMode = -1
+    private var savedVolume = -1
 
     override fun dial(target: String): Boolean {
+        if (state != CallState.IDLE) return false
         val number = Phones.normalise(target) ?: return false
         if (!granted(android.Manifest.permission.CALL_PHONE)) return false
         val intent = Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null))
@@ -97,6 +99,7 @@ class CarrierLink(private val context: Context) : CallLink {
     private fun onConnected() {
         speaker()
         runCatching {
+            if (savedVolume < 0) savedVolume = audio.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
             audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, audio.getStreamMaxVolume(AudioManager.STREAM_VOICE_CALL), 0)
         }.onFailure { Log.w(TAG, "volume", it) }
         if (!foreground) comeBack(3)
@@ -116,10 +119,23 @@ class CarrierLink(private val context: Context) : CallLink {
         }.onFailure { Log.w(TAG, "speaker", it) }
     }
 
-    private fun release() = runCatching {
-        if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice()
-        @Suppress("DEPRECATION")
-        if (Build.VERSION.SDK_INT < 31) audio.isSpeakerphoneOn = false
+    /** Route and volume back to what they were before the call. */
+    private fun release() {
+        runCatching {
+            if (savedVolume >= 0) audio.setStreamVolume(AudioManager.STREAM_VOICE_CALL, savedVolume, 0)
+            if (Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice()
+            @Suppress("DEPRECATION")
+            if (Build.VERSION.SDK_INT < 31) audio.isSpeakerphoneOn = false
+        }
+        savedVolume = -1
+    }
+
+    override fun shutdown() {
+        if (state == CallState.IDLE) return
+        hangUp()
+        main.removeCallbacksAndMessages(null)
+        release()
+        state = CallState.IDLE
     }
 
     /** The system call screen takes over after dialing; try to bring Mouna back. May be blocked by background-start rules. */

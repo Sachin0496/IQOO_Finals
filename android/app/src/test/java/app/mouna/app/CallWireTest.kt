@@ -4,6 +4,7 @@ import app.mouna.app.engine.CallWire
 import app.mouna.app.engine.JitterBuffer
 import app.mouna.app.engine.Pcm
 import app.mouna.app.engine.Rooms
+import app.mouna.app.engine.WebLink
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -41,6 +42,34 @@ class CallWireTest {
         assertEquals("ws://192.168.1.5:8787/ws?room=K7M2QX&role=guest", Rooms.wsUrl("http://192.168.1.5:8787", "K7M2QX", "guest"))
         assertEquals("https://calm.trycloudflare.com/c/K7M2QX", Rooms.joinUrl("calm.trycloudflare.com/", "K7M2QX"))
         assertEquals("calm.trycloudflare.com/c/K7M2QX", Rooms.shortUrl("https://calm.trycloudflare.com", "K7M2QX"))
+    }
+
+    @Test
+    fun aCallKeyIsRandomUrlSafeAndSentOnTheSocketAddress() {
+        val k = Rooms.newToken()
+        assertEquals(Rooms.TOKEN_LENGTH, k.length)
+        assertTrue(k.all { it.isLetterOrDigit() })
+        assertFalse(k == Rooms.newToken())
+        // the relay accepts 16-64 characters of A-Za-z0-9_- (call-server/server.js)
+        assertTrue(Regex("^[A-Za-z0-9_-]{16,64}$").matches(k))
+        assertEquals("wss://calm.trycloudflare.com/ws?room=K7M2QX&role=mouna&k=$k", Rooms.wsUrl("https://calm.trycloudflare.com", "K7M2QX", token = k))
+    }
+
+    @Test
+    fun onlyHttpsCallServersAreUsable() {
+        assertTrue(Rooms.isCleartext("http://192.168.1.5:8787"))
+        assertTrue(Rooms.isCleartext("  HTTP://calm.trycloudflare.com "))
+        assertFalse(Rooms.isCleartext("https://calm.trycloudflare.com"))
+        assertFalse(Rooms.isCleartext("calm.trycloudflare.com")) // no scheme means https (Rooms.base)
+        assertFalse(Rooms.isCleartext(""))
+    }
+
+    @Test
+    fun aCleartextFailureIsRecognisedSoItIsNeverRetried() {
+        assertTrue(WebLink.isCleartextFailure(java.net.UnknownServiceException("CLEARTEXT communication to 192.168.1.5 not permitted by network security policy")))
+        assertTrue(WebLink.isCleartextFailure(java.io.IOException("Cleartext HTTP traffic to x not permitted")))
+        assertFalse(WebLink.isCleartextFailure(java.net.SocketTimeoutException("timeout")))
+        assertFalse(WebLink.isCleartextFailure(java.io.IOException("Connection reset")))
     }
 
     @Test

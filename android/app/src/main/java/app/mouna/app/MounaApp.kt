@@ -163,6 +163,7 @@ class MounaApp(
     init {
         web.server = ::callServer
         web.callerName = { callerName }
+        web.tokenFor = { room -> store.webTokens[room] ?: Rooms.newToken() }
         voice.link = link
         for (l in listOf(carrier, web)) {
             l.onState = { st -> if (l === link) onLinkState(st) }
@@ -540,6 +541,7 @@ class MounaApp(
     }
 
     fun dial() {
+        if (onCall) return // a second tap while the first call is dialing
         val number = Phones.normalise(dialNumber) ?: return
         callNote = null
         askCall { allowed ->
@@ -570,9 +572,15 @@ class MounaApp(
     /** The call relay: Settings wins over the one built in from local.properties; blank means web calls are off. */
     fun callServer(): String = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
 
-    fun chooseCallServer(url: String) {
+    /** Saves the relay's address; returns why not (an http:// address cannot be used) or null when it is saved. */
+    fun chooseCallServer(url: String): String? {
+        if (Rooms.isCleartext(url)) return Rooms.HTTPS_ONLY
         store.callServer = url
+        return null
     }
+
+    /** Settings: forgets the spoken sentences kept for instant replay. Returns how many. */
+    fun clearVoiceCache(): Int = voice.clearCache()
 
     fun chooseCallMode(m: CallMode) {
         callMode = m
@@ -606,11 +614,19 @@ class MounaApp(
         val name = webName.trim().ifEmpty { return }
         webFavourites = webFavourites.filter { it.second != room && it.first != name } + (name to room)
         store.webFavourites = webFavourites
+        // The relay made this call's key the room's owner: keep it, so this phone can always get the room back.
+        if (web.token.isNotEmpty()) store.webTokens = store.webTokens + (room to web.token)
+        forgetStrayTokens()
     }
 
     fun removeWebFavourite(room: String) {
         webFavourites = webFavourites.filter { it.second != room }
         store.webFavourites = webFavourites
+        forgetStrayTokens()
+    }
+
+    private fun forgetStrayTokens() {
+        store.webTokens = store.webTokens.filterKeys { r -> webFavourites.any { it.second == r } }
     }
 
     /** QA: start a web call in [room] (adb: app.mouna.WEBCALL). */
@@ -654,7 +670,10 @@ class MounaApp(
         said = null
     }
 
+    /** The screen is going away (the activity is destroyed): end the call so the room, the speaker and the volume are given back. */
     fun shutdown() {
+        carrier.shutdown()
+        web.shutdown()
         listener.stop()
         asr.execute { hearing.close() }
         asr.shutdown()

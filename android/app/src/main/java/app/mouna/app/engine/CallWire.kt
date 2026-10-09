@@ -16,6 +16,20 @@ object Rooms {
 
     fun newId(random: java.util.Random = rng): String = String(CharArray(LENGTH) { ALPHABET[random.nextInt(ALPHABET.length)] })
 
+    private const val TOKEN_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    const val TOKEN_LENGTH = 24
+
+    /**
+     * A secret for one call, sent as `k` on every connection of it. The relay lets the same key take its seat back at
+     * once after a dropped connection and refuses anyone else; for a favourite's fixed room it also names the owner.
+     */
+    fun newToken(random: java.util.Random = rng): String = String(CharArray(TOKEN_LENGTH) { TOKEN_CHARS[random.nextInt(TOKEN_CHARS.length)] })
+
+    /** Android blocks plain-text sockets, so a call server must be https. */
+    fun isCleartext(raw: String): Boolean = raw.trim().startsWith("http://", ignoreCase = true)
+
+    const val HTTPS_ONLY = "The call server must be an https:// address: Android does not allow plain http:// connections."
+
     /** The id as the server sees it (upper case), or null if it can't be a room. */
     fun normalise(raw: String): String? = raw.trim().uppercase().takeIf { ID.matches(it) }
 
@@ -27,10 +41,10 @@ object Rooms {
     }
 
     /** The WebSocket address of [room] on the server at [base]; https becomes wss. */
-    fun wsUrl(base: String, room: String, role: String = "mouna"): String {
+    fun wsUrl(base: String, room: String, role: String = "mouna", token: String? = null): String {
         val b = base(base)
         val ws = if (b.startsWith("https://")) "wss://" + b.removePrefix("https://") else "ws://" + b.removePrefix("http://")
-        return "$ws/ws?room=$room&role=$role"
+        return "$ws/ws?room=$room&role=$role" + (token?.let { "&k=$it" } ?: "")
     }
 
     /** What the guest opens (and the QR code holds). */

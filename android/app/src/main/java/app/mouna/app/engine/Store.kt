@@ -145,6 +145,16 @@ class Store(context: Context) {
         } ?: emptyList()
         set(v) = prefs.edit().putString("webFavourites", JSONArray(v.map { (n, r) -> JSONObject().put("name", n).put("room", r) }).toString()).apply()
 
+    /**
+     * The key for each favourite web room (room id to key). The relay names the first key that opens a room its owner,
+     * so a favourite's fixed room is only ever reclaimed by this phone. Kept in app-private storage, never logged.
+     */
+    var webTokens: Map<String, String>
+        get() = prefs.getString("webTokens", null)?.let { s ->
+            runCatching { JSONObject(s).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrNull()
+        } ?: emptyMap()
+        set(v) = prefs.edit().putString("webTokens", JSONObject(v).toString()).apply()
+
     private fun json(xs: List<FloatArray>) = JSONArray(xs.map { x -> JSONArray(x.map { it.toDouble() }) })
     private fun vectors(a: JSONArray): MutableList<FloatArray> = MutableList(a.length()) { i ->
         val v = a.getJSONArray(i)

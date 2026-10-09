@@ -139,6 +139,12 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         }
     }
 
+    /** Spoken sentences kept on the phone for instant replay: how many and how many bytes (see [Sarvam.CACHE_KEEP]). */
+    fun cacheStats(): Pair<Int, Long> = Sarvam.cacheStats(context.cacheDir)
+
+    /** Forgets every kept sentence; returns how many. */
+    fun clearCache(): Int = Sarvam.clearCache(context.cacheDir)
+
     /** Fetches [texts] into the cache without speaking them, so they are instant later. Best effort, one at a time. */
     fun prefetch(texts: List<String>, lang: Lang, voice: String) {
         val key = sarvamKey()

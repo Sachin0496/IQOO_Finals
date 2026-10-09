@@ -4,12 +4,15 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.Base64
 
 /**
  * Sarvam Bulbul text-to-speech, live: the call feature needs words nobody pre-rendered ("I'll be there at five").
- * The only network use in the app. Text goes out, a WAV comes back; no audio or video from the phone ever does.
+ * Network use of its own: text goes out, a WAV comes back; no audio or video from the phone ever does. (Web calls use
+ * the network too, see [WebLink]: there Mouna's rendered voice and its caption go to the relay.)
  * Pure Kotlin (no Android types) so the request, response and cache key are unit-tested on the JVM.
  */
 object Sarvam {
@@ -20,7 +23,8 @@ object Sarvam {
     /** The whole answer must be in this long, or the phone's own voice speaks instead (the person is on a live call). */
     const val TIMEOUT_MS = 4000
 
-    private const val CACHE_KEEP = 300
+    /** The cache holds the newest this-many spoken sentences (typed text included); Settings can clear it. */
+    const val CACHE_KEEP = 300
 
     /** The app's voice ids that Bulbul has a speaker for; every other voice (open models, the phone's) speaks as kavitha. */
     fun speakerFor(voiceId: String): String = if (voiceId == "anand") "anand" else "kavitha"
@@ -69,9 +73,15 @@ object Sarvam {
             if (code != 200) throw SarvamException("HTTP $code")
             val wav = parseAudio(c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }) ?: throw SarvamException("no audio in the answer")
             out.parentFile?.mkdirs()
-            val tmp = File(out.parentFile, "${out.name}.tmp")
-            tmp.writeBytes(wav)
-            tmp.renameTo(out)
+            // Two requests for the same phrase can be in flight (a tap while the call's warm-up fetches it): each writes
+            // its own file and moves it into place, so neither sees the other's half-written bytes.
+            val tmp = File.createTempFile("fetch-", ".tmp", out.parentFile)
+            try {
+                tmp.writeBytes(wav)
+                Files.move(tmp.toPath(), out.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } finally {
+                tmp.delete() // nothing left behind if the move failed (after a successful move there is no such file)
+            }
             prune(out.parentFile)
             return out
         } finally {
@@ -79,11 +89,26 @@ object Sarvam {
         }
     }
 
-    /** Typed sentences are unbounded; keep the newest few hundred files. */
+    /** Typed sentences are unbounded; keep the newest [CACHE_KEEP] files. */
     private fun prune(dir: File?) {
+        dir?.listFiles { f -> f.extension == "tmp" && System.currentTimeMillis() - f.lastModified() > 600_000 }?.forEach { it.delete() } // a crashed fetch
         val files = dir?.listFiles { f -> f.extension == "wav" } ?: return
         if (files.size <= CACHE_KEEP) return
         files.sortedBy { it.lastModified() }.take(files.size - CACHE_KEEP).forEach { it.delete() }
+    }
+
+    /** How many spoken sentences are kept on the phone, and their size in bytes. */
+    fun cacheStats(cacheDir: File): Pair<Int, Long> {
+        val files = File(cacheDir, "sarvam").listFiles { f -> f.extension == "wav" } ?: return 0 to 0L
+        return files.size to files.sumOf { it.length() }
+    }
+
+    /** Deletes every kept sentence (and any half-written file); returns how many sentences went. */
+    fun clearCache(cacheDir: File): Int {
+        val files = File(cacheDir, "sarvam").listFiles() ?: return 0
+        var sentences = 0
+        for (f in files) if (f.delete() && f.extension == "wav") sentences++
+        return sentences
     }
 
     class SarvamException(message: String) : Exception(message)

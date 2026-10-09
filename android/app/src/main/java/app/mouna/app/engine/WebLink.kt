@@ -36,6 +36,11 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
     var server: () -> String = { "" }
     /** Said in the guest's "X is calling you". */
     var callerName: () -> String = { "" }
+    /** The key for a call in this room (see [Rooms.newToken]): the app keeps one per favourite room, else a new one. */
+    var tokenFor: (String) -> String = { Rooms.newToken() }
+    /** This call's key, kept to rejoin the relay with after a drop (and to save with a favourite). Empty when idle. */
+    var token = ""
+        private set
 
     private val _phase = MutableStateFlow(WebPhase.OFF)
     val phase: StateFlow<WebPhase> = _phase
@@ -58,6 +63,7 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
     private var offlineSince = 0L
     private var guestHere = false
     private var answered = false
+    private var seated = false // the relay has accepted us at least once in this call
 
     /** The link to give the guest, or null when there is no call. */
     val joinUrl: String? get() = _room.value?.let { Rooms.joinUrl(base, it) }
@@ -69,7 +75,10 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
         val url = Rooms.base(server())
         if (room == null) { _note.value = "That is not a call link."; return false }
         if (url.isEmpty()) { _note.value = "Set the call server in Settings first."; return false }
+        if (Rooms.isCleartext(server())) { _note.value = Rooms.HTTPS_ONLY; return false }
         base = url
+        token = tokenFor(room)
+        seated = false
         _room.value = room
         _note.value = null
         guestHere = false
@@ -102,7 +111,7 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
 
     private fun connect() {
         val gen = ++generation
-        val req = Request.Builder().url(Rooms.wsUrl(base, _room.value!!)).build()
+        val req = Request.Builder().url(Rooms.wsUrl(base, _room.value!!, token = token)).build()
         socket = http.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 main.post { if (gen == generation) opened() }
@@ -125,7 +134,7 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
             }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.w(TAG, "web socket failed: ${t.javaClass.simpleName} ${t.message}")
-                main.post { if (gen == generation) dropped(-1, t.message.orEmpty()) }
+                main.post { if (gen == generation) dropped(if (isCleartextFailure(t)) FAIL_CLEARTEXT else -1, t.message.orEmpty()) }
             }
         })
     }
@@ -143,6 +152,7 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
     private fun onMsg(m: CallWire.Msg) {
         when (m) {
             is CallWire.Msg.Peer -> {
+                seated = true // the first message is the relay's welcome: the seat is ours
                 guestHere = m.joined
                 Log.i(TAG, "web call: guest ${if (m.joined) "opened the link" else "left"}")
                 if (m.joined) {
@@ -161,7 +171,12 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
                 answered = true
                 Log.i(TAG, "web call: guest answered")
                 _phase.value = WebPhase.ACTIVE
-                guest.start()
+                if (!guest.start()) {
+                    // Without the speaker the person could not hear the guest: say so and end it, rather than a silent call.
+                    socket?.runCatching { send(CallWire.bye()) }
+                    end(guest.error ?: "The call audio could not start.")
+                    return
+                }
                 set(CallState.ACTIVE)
             }
             CallWire.Msg.Bye -> end("The other person hung up.")
@@ -169,13 +184,18 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
         }
     }
 
-    /** The socket closed or failed: a wrong room or a taken one ends the call, anything else is retried. */
+    /**
+     * The socket closed or failed: a refused room, or a seat someone else holds when we first ask, ends the call;
+     * anything else is retried. "In use" after we had the seat is retried too: it is our own old socket, still being cleared.
+     */
     private fun dropped(code: Int, reason: String) {
         open = false
         if (state == CallState.IDLE) return
-        when (code) {
-            CLOSE_BAD_ROOM -> return end("The call link was refused.")
-            CLOSE_FULL -> return end("This call link is already in use. Hang up and start again in a minute.")
+        when {
+            code == FAIL_CLEARTEXT -> return end(Rooms.HTTPS_ONLY)
+            code == CLOSE_BAD_ROOM -> return end("The call link was refused.")
+            code == CLOSE_NOT_YOURS -> return end("This call link belongs to another phone. Use a new link.")
+            code == CLOSE_FULL && !seated -> return end("This call link is already in use. Hang up and start again in a minute.")
         }
         val now = SystemClock.elapsedRealtime()
         if (offlineSince == 0L) offlineSince = now
@@ -196,6 +216,7 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
         guest.stop()
         guestHere = false
         answered = false
+        token = ""
         _phase.value = WebPhase.OFF
         _room.value = null
         if (why != null) _note.value = why
@@ -211,7 +232,14 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
     companion object {
         private const val TAG = "MounaCall"
         private const val CLOSE_BAD_ROOM = 4400
+        private const val CLOSE_NOT_YOURS = 4403
         private const val CLOSE_FULL = 4409
+        /** Not a close code: [dropped] is told this when Android refused to open a plain-text socket. */
+        private const val FAIL_CLEARTEXT = -2
+
+        /** OkHttp's failure when the address is http:// (ws://) and the app may not use clear text. Never worth retrying. */
+        fun isCleartextFailure(t: Throwable): Boolean =
+            t is java.net.UnknownServiceException || t.message.orEmpty().contains("CLEARTEXT", ignoreCase = true)
         /** Keep trying to get back for this long before the call is given up. */
         const val GIVE_UP_MS = 90_000L
 
