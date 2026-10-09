@@ -160,6 +160,13 @@ class MainActivity : ComponentActivity() {
                 voice.callUsage = if (i.getStringExtra("usage") == "media") CallUsage.MEDIA else CallUsage.VOICE
                 Log.i("MounaCall", "call audio usage = ${voice.callUsage}")
             }
+            // adb shell am broadcast -a app.mouna.AVSR --ez test true            free talk NPU self-test (logcat tag Mouna)
+            // adb shell am broadcast -a app.mouna.AVSR --es crops <file> [--ef fps 25]   read a clip of Auto-AVSR crops
+            debugReceiver("app.mouna.AVSR") { i ->
+                if (i.getBooleanExtra("test", false)) engine.freeTalkSelfTest()
+                if (i.hasExtra("save")) engine.saveClips = i.getBooleanExtra("save", false) // --ez save true: keep clips
+                i.getStringExtra("crops")?.let { engine.freeTalkRead(File(it), i.getFloatExtra("fps", 25f).toDouble()) }
+            }
             // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>
             debugReceiver("app.mouna.SIGN") { i ->
                 val path = i.getStringExtra("json") ?: return@debugReceiver
@@ -231,13 +238,6 @@ class MainActivity : ComponentActivity() {
             val future = ProcessCameraProvider.getInstance(this@MainActivity)
             future.addListener({
                 try {
-                    @Suppress("DEPRECATION")
-                    val analyzer = ImageAnalysis.Builder()
-                        .setTargetResolution(android.util.Size(480, 640))
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                        .build()
-                        .also { it.setAnalyzer(engine.analysis, sensor) }
                     val provider = future.get()
                     // Front camera faces the person; any camera is better than none (some devices misreport facing).
                     val camera = listOf(CameraSelector.DEFAULT_FRONT_CAMERA, CameraSelector.DEFAULT_BACK_CAMERA)
@@ -247,6 +247,19 @@ class MainActivity : ComponentActivity() {
                         noCamera("this phone reports no camera")
                         return@addListener
                     }
+                    @Suppress("DEPRECATION")
+                    val builder = ImageAnalysis.Builder()
+                        .setTargetResolution(android.util.Size(480, 640))
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                    // Lip reading wants >= 25 fps (Auto-AVSR is trained at 25). Indoors auto-exposure drops the front
+                    // camera to 20 fps (measured on the iQOO 15); ask for the best supported range topping out at 30.
+                    fpsRange(provider, camera)?.let { r ->
+                        androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                            .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, r)
+                        Log.i("Mouna", "camera fps range $r")
+                    }
+                    val analyzer = builder.build().also { it.setAnalyzer(engine.analysis, sensor) }
                     provider.bindToLifecycle(this@MainActivity, camera, preview, analyzer)
                 } catch (e: Exception) { // the camera is taken by another app, the HAL is down, a policy blocks it
                     Log.e("Mouna", "camera bind", e)
@@ -262,6 +275,15 @@ class MainActivity : ComponentActivity() {
         cameraDenied.value = true
         cameraReady.value = false
     }
+
+    /** The supported AE range with the highest floor whose ceiling is 30 fps ([30, 30] if the camera has it). */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun fpsRange(provider: ProcessCameraProvider, selector: CameraSelector): android.util.Range<Int>? = runCatching {
+        val info = selector.filter(provider.availableCameraInfos).firstOrNull() ?: return null
+        val ranges = androidx.camera.camera2.interop.Camera2CameraInfo.from(info)
+            .getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+        ranges?.filter { it.upper == 30 }?.maxByOrNull { it.lower }
+    }.getOrNull()
 
     override fun onResume() {
         super.onResume()

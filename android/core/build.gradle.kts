@@ -28,4 +28,5 @@ tasks.processResources {
 
 tasks.test {
     systemProperty("mouna.vectors", rootProject.file("../harness/vectors/core.json").absolutePath)
+    systemProperty("mouna.freetalk", rootProject.file("../harness/vectors/freetalk.json").absolutePath)
 }

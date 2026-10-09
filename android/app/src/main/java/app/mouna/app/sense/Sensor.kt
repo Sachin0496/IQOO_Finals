@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import app.mouna.core.FreeTalk
 import app.mouna.core.Pt
 import app.mouna.core.irisPosition
 import app.mouna.probe.ActivityGate
@@ -38,6 +39,8 @@ class Frame(
     val gateOpen: Boolean = false,
     /** 96 x 96 grey mouth crop, row-major, one byte per pixel (the encoder's input). Only while something is listening. */
     val crop: ByteArray? = null,
+    /** 96 x 96 grey mouth crop in Auto-AVSR's geometry (FreeTalk.cropMatrix), for free talk. */
+    val avsr: ByteArray? = null,
     /** MediaPipe's 52 blendshape scores (personal switch). Only with a taught switch or while setting one up. */
     val blend: FloatArray? = null,
     /** Iris position between the eye corners, 0..1 (look to choose); NaN without a face. */
@@ -51,6 +54,8 @@ class Frame(
     val imageW: Int = 0,
     val imageH: Int = 0,
     val landmarkMs: Float = 0f,
+    /** The whole frame (conversion, face model, crops), for free talk's frame-rate check. */
+    val analyzeMs: Float = 0f,
     /** Sign mode only: 27 body + hand points (x, y) for ISL, and how many hands were seen. */
     val sign: FloatArray? = null,
     val hands: Int = 0,
@@ -99,6 +104,8 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
      * frames are lost); a failed rebuild keeps the working one.
      */
     @Volatile var wantCrop = true
+    /** Free talk's Auto-AVSR mouth crop: only while free talk listens. */
+    @Volatile var wantAvsr = false
     @Volatile var wantBlend = blendshapes
 
     /** Sign mode: run body + hands (for ISL) instead of the face. Turning it on builds the [Signer] off the analysis thread. */
@@ -135,6 +142,15 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
     private val grey = Paint(Paint.FILTER_BITMAP_FLAG).apply {
         colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
     }
+    /** BT.601 luma, as OpenCV's RGB2GRAY in Auto-AVSR's preprocessing. */
+    private val luma = Paint(Paint.FILTER_BITMAP_FLAG).apply {
+        val y = floatArrayOf(0.299f, 0.587f, 0.114f, 0f, 0f)
+        colorFilter = ColorMatrixColorFilter(ColorMatrix(y + y + y + floatArrayOf(0f, 0f, 0f, 1f, 0f)))
+    }
+    private val avsrMatrix = Matrix()
+    private val avsrValues = FloatArray(9)
+    private var avsrPx = FloatArray(0)
+    private var avsrPy = FloatArray(0)
 
     init {
         // The model as one direct buffer: after a failed GPU start, MediaPipe can't re-open the asset by path
@@ -265,6 +281,7 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
                 aperture = f.aperture,
                 gateOpen = open,
                 crop = if (wantCrop) cutMouth(frame, f) else null,
+                avsr = if (wantAvsr && n >= 468) cutMouthAvsr(frame) else null,
                 blend = blend,
                 iris = iris,
                 yawDeg = f.yawDeg,
@@ -274,8 +291,29 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
                 imageW = frame.width,
                 imageH = frame.height,
                 landmarkMs = lmMs,
+                analyzeMs = (SystemClock.elapsedRealtimeNanos() - tPrep) / 1e6f,
             ),
         )
+    }
+
+    /** Auto-AVSR's crop: eyes, nose and mouth onto its mean face (similarity), 96 px patch around the mouth. */
+    private fun cutMouthAvsr(src: Bitmap): ByteArray {
+        if (avsrPx.size != xs.size) {
+            avsrPx = FloatArray(xs.size)
+            avsrPy = FloatArray(ys.size)
+        }
+        for (i in xs.indices) {
+            avsrPx[i] = xs[i] * src.width
+            avsrPy[i] = ys[i] * src.height
+        }
+        val m = FreeTalk.cropMatrix(FreeTalk.stablePoints(avsrPx, avsrPy))
+        for (i in 0 until 6) avsrValues[i] = m[i].toFloat()
+        avsrValues[6] = 0f; avsrValues[7] = 0f; avsrValues[8] = 1f
+        avsrMatrix.setValues(avsrValues)
+        cropCanvas.drawColor(android.graphics.Color.BLACK)
+        cropCanvas.drawBitmap(src, avsrMatrix, luma)
+        cropBmp.getPixels(cropPixels, 0, CROP, 0, 0, CROP, CROP)
+        return ByteArray(CROP * CROP) { (cropPixels[it] shr 16 and 0xff).toByte() }
     }
 
     /** Rebuilds the landmarker with the blendshape output on (a taught switch, or switch setup, needs it). */

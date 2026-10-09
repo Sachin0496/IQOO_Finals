@@ -82,6 +82,13 @@ private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean)
         st.hearing -> Status("Reading your lips…", Ink.turmeric, true)
         else -> Status("Watching your lips", Ink.leaf)
     }
+    Channel.FREE -> when {
+        !k.freeReady && k.freeTalk.contains("Loading") -> Status("Getting ready…", Ink.mute, true)
+        !k.freeReady -> Status("Free talk isn’t available on this phone", Ink.mute)
+        !st.face -> Status("Looking for your face", Ink.mute)
+        st.hearing -> Status("Reading your lips…", Ink.turmeric, true)
+        else -> Status("Mouth a sentence", Ink.leaf)
+    }
 }
 
 /** What the machine is doing: only on stage-debug. */
@@ -92,6 +99,7 @@ private fun techStatus(app: MounaApp, k: Knowledge): Status? = when (app.channel
         else -> Status(if (isEmulator) "ISL runs on the phone" else "No ISL model", Ink.mute)
     }
     Channel.VOICE -> if (app.hearing.ready) Status("Whisper", Ink.leaf) else Status("No voice model", Ink.mute)
+    Channel.FREE -> if (k.freeReady) Status("Auto-AVSR · NPU", Ink.leaf) else Status(k.freeTalk, Ink.mute, k.freeTalk.contains("Loading"))
     Channel.LIPS -> when {
         !k.ready -> Status("Encoder · loading…", Ink.mute, true)
         k.encoder.label.startsWith("NPU") -> Status(k.encoder.label, Ink.leaf)
@@ -105,6 +113,7 @@ private fun howSaid(via: String): String = when {
     via == "lips" -> "by lips"
     via == "voice" -> "by voice"
     via == "sign" -> "by sign"
+    via == "free talk" -> "read from your lips, after you confirmed"
     via == "touch" -> "by touch"
     via == "ask" -> "from your answers"
     via == "confirm" -> "after you confirmed"
@@ -159,7 +168,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                     label = "said",
                 ) { said ->
                     if (said == null) {
-                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; else -> "Mouth a phrase." }, style = waitingStyle)
+                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.FREE -> "Mouth anything, in English."; else -> "Mouth a phrase." }, style = waitingStyle)
                     } else {
                         Column {
                             Text(said.text, style = saidStyle, maxLines = 2)
@@ -208,7 +217,7 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
         modifier.clip(CircleShape).background(Ink.bg.copy(alpha = 0.78f)).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        listOf(Channel.LIPS to "Lips", Channel.VOICE to "Voice", Channel.SIGN to "Sign").forEach { (c, label) ->
+        listOf(Channel.LIPS to "Lips", Channel.FREE to "Free talk", Channel.VOICE to "Voice", Channel.SIGN to "Sign").forEach { (c, label) ->
             val on = app.channel == c
             Text(
                 label,
@@ -218,7 +227,7 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
                     .background(if (on) Ink.bone else Ink.bg.copy(alpha = 0f))
                     .clickable { app.chooseChannel(c) }
                     .heightIn(min = 48.dp)
-                    .padding(horizontal = 18.dp)
+                    .padding(horizontal = 14.dp) // four channels must fit a phone's width
                     .wrapContentHeight(Alignment.CenterVertically),
             )
         }

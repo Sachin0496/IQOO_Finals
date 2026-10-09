@@ -1,0 +1,67 @@
+{
+ "what": "Free talk (open-vocabulary English lip reading), Auto-AVSR vsr_trlrs2lrs3vox2avsp_base (250 M params, 20.3% WER on LRS3 per its authors), zero-shot on GRID speaker s1",
+ "measured": "2026-10-10, laptop CPU (PyTorch), python -m mouna_encoder avsr (grid_eval)",
+ "data": "GRID corpus, Zenodo record 3625687 (CC BY 4.0), speaker s1, 30 random clips (seed 0); transcripts from the clip names",
+ "caveats": "GRID is voiced speech with a fixed nonsense grammar (command colour preposition LETTER DIGIT adverb), 360x288 video: out of domain for an LRS3-trained model and no help from language context. Not silent mouthing, not our users. Not comparable to LRS3 numbers.",
+ "wer": {
+  "joint_ctc_attention_beam10": 0.7166666666666667,
+  "ctc_prefix_beam16": 0.7333333333333333,
+  "ctc_greedy": 0.7333333333333333
+ },
+ "crop_check": {
+  "note": "same 30 clips, joint decoding",
+  "auto_avsr_official_mediapipe_crop": 0.717,
+  "mouna_face_mesh_crop_no_smoothing": 0.706,
+  "mouna_face_mesh_crop_smoothed": 0.7166666666666667
+ },
+ "examples": [
+  {
+   "clip": "lgif2p",
+   "ref": "LAY GREEN IN F TWO PLEASE",
+   "joint": "LIKE WE LEFT YOU PLEASE",
+   "ctc_beam": "LAKE GREEN LEFT YOU PLEASE"
+  },
+  {
+   "clip": "lgifzn",
+   "ref": "LAY GREEN IN F ZERO NOW",
+   "joint": "LIKE WE CAN HAVE ZERO NOW",
+   "ctc_beam": "LAKE WE F ZERO NOW"
+  },
+  {
+   "clip": "bwba7a",
+   "ref": "BIN WHITE BY A SEVEN AGAIN",
+   "joint": "BEAT Y BY 87 AGAIN",
+   "ctc_beam": "BEATY BY87 AGAIN"
+  },
+  {
+   "clip": "bwba6p",
+   "ref": "BIN WHITE BY A SIX PLEASE",
+   "joint": "BEING WIPED BY A6 PLEASE",
+   "ctc_beam": "BEING WI BY A6 PLEASE"
+  },
+  {
+   "clip": "bgia4p",
+   "ref": "BIN GREEN IN A FOUR PLEASE",
+   "joint": "BILL AND WE CLEAVE ALL PLEASE",
+   "ctc_beam": "BILL WE CLAY FOR PLEASE"
+  },
+  {
+   "clip": "lbwr5a",
+   "ref": "LAY BLUE WITH R FIVE AGAIN",
+   "joint": "KEEP ON WITH OUR FIVE AGAIN",
+   "ctc_beam": "THEYBU WITH OUR FIVE DAY"
+  },
+  {
+   "clip": "lbbq8n",
+   "ref": "LAY BLUE BY Q EIGHT NOW",
+   "joint": "LET BLEW BY QA NOW",
+   "ctc_beam": "LETREW BY U A NOW"
+  },
+  {
+   "clip": "lgas5a",
+   "ref": "LAY GREEN AT S FIVE AGAIN",
+   "joint": "LATE READER S5 AGAIN",
+   "ctc_beam": "LATE READER S FIVE A DAY"
+  }
+ ]
+}

@@ -75,6 +75,9 @@ data class Knowledge(
     val islReady: Boolean = false,
     /** The ISL model has been looked for (found or not): until then the screen says "Loading…", not "No ISL model". */
     val islKnown: Boolean = false,
+    /** Free talk (open-vocabulary English, NPU): status line, and whether it is ready to read. */
+    val freeTalk: String = "Free talk · Loading…",
+    val freeReady: Boolean = false,
 )
 
 sealed interface Event {
@@ -86,6 +89,8 @@ sealed interface Event {
     data object SwitchPressed : Event
     /** A sign was seen; the most likely words from the ISL model, best first. */
     data class Signed(val guesses: List<Isl.Guess>, val ms: Double) : Event
+    /** Free talk read a sentence: candidates best first (empty: nothing readable). [ms]: end of mouthing to sentences. */
+    data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double) : Event
     /** Nod or double blink = yes, shake = no. Only while Mouna is asking (see [Engine.gesturesOn]). */
     data class Answer(val yes: Boolean, val via: String) : Event
     data class Looked(val zone: Zone) : Event
@@ -105,6 +110,21 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
 
     val analysis = Executors.newSingleThreadExecutor()
     private val worker = Executors.newSingleThreadExecutor()
+    /** Free talk owns its own thread: its first NPU compile takes minutes and must not hold up the lip encoder. */
+    private val freeWorker = Executors.newSingleThreadExecutor()
+    @Volatile private var openVsr: OpenVsr? = null
+    @Volatile var freeTalkStatus = "Free talk · Loading…"
+        private set
+    @Volatile private var freeOn = false
+    private var perfN = 0
+    private var perfDt = 0L
+    private var perfLm = 0f
+    private var perfAn = 0f
+    /**
+     * Sentences, not phrases: up to 10 s; pauses between words (under ~0.7 s at the ~20 fps the front camera gives)
+     * don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
+     */
+    private val freeSegmenter = Segmenter(preRoll = 6, minFrames = 22, maxFrames = 300, tail = 14, keepTail = 6)
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
@@ -209,6 +229,15 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             ready = true
             publish(report)
             Log.i(PERF, "encoder ready in ${SystemClock.elapsedRealtime() - t0} ms (${encoder.label})")
+            // Free talk after the lip encoder (start-up order above), on its own thread: a first NPU compile takes minutes.
+            submit(freeWorker) {
+                val (r, msg) = runCatching { OpenVsr.open(context) { ftLog(it) } }
+                    .getOrElse { null to "Free talk: ${it.message}" }
+                openVsr = r
+                freeTalkStatus = msg
+                ftLog(msg)
+                _knowledge.value = _knowledge.value.copy(freeTalk = msg.lineSequence().first(), freeReady = r != null)
+            }
 
             val t1 = SystemClock.elapsedRealtime()
             isl = runCatching { Isl.open(context) }.getOrNull()
@@ -236,6 +265,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         val blend = personalSwitch != null || setupSeen
         if (s.wantBlend != blend) s.wantBlend = blend
         if (s.signing != signMode) s.signing = signMode
+        if (s.wantAvsr != freeOn) s.wantAvsr = freeOn
     }
 
     // ---------------- analysis thread ----------------
@@ -272,6 +302,19 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             if (blink.push(f.eyeOpen, f.tMs)) _events.tryEmit(Event.Answer(true, "double blink"))
         }
 
+        if (freeOn && f.face) {
+            perfN++; perfDt += dt; perfLm += f.landmarkMs; perfAn += f.analyzeMs
+            if (perfN == 150) {
+                ftLog("camera: ${"%.1f".format(1000.0 * perfN / perfDt)} fps, face model ${"%.1f".format(perfLm / perfN)} ms, " +
+                    "analyze ${"%.1f".format(perfAn / perfN)} ms per frame (${sensor?.delegate})")
+                perfN = 0; perfDt = 0; perfLm = 0f; perfAn = 0f
+            }
+        }
+        if (freeOn && openVsr != null) {
+            freeSegmenter.push(f)?.let { c -> submit(freeWorker) { readClip(c) } }
+        } else {
+            freeSegmenter.reset()
+        }
         val mode = listen
         var clip: Clip? = null
         if (ready && mode != Listen.PAUSED) clip = segmenter.push(f) else segmenter.reset()
@@ -282,7 +325,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         val prev = _live.value
         _live.value = Live(
             face = f.face,
-            hearing = segmenter.recording,
+            hearing = segmenter.recording || freeSegmenter.recording,
             outer = f.outer,
             imageW = f.imageW,
             imageH = f.imageH,
@@ -408,6 +451,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             lastMs = lastMs,
             islReady = isl != null,
             islKnown = islKnown,
+            freeTalk = freeTalkStatus.lineSequence().first(),
+            freeReady = openVsr != null,
         )
     }
 
@@ -520,7 +565,101 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         gaze = if (on) gazeModel?.let { GazeSelector(it) } else null
     }
 
+    /**
+     * Free talk's log: logcat, and avsr/log.txt (vivo filters third-party logcat; `adb shell cat` reads the file).
+     */
+    private fun ftLog(msg: String, e: Throwable? = null) {
+        Log.i(TAG, msg, e)
+        runCatching {
+            val line = "${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())} $msg" +
+                (e?.let { " :: ${it.javaClass.simpleName}: ${it.message}" } ?: "") + "\n"
+            java.io.File(OpenVsr.folder(context), "log.txt").appendText(line)
+        }
+    }
+
+    /** Free talk listens (Speak screen, Free talk channel, no prompt open). */
+    fun freeTalk(on: Boolean) {
+        freeOn = on
+    }
+
+    /** QA (debug builds, adb broadcast): keep each free-talk clip's mouth crops in avsr/clips/ to replay on the laptop. */
+    @Volatile var saveClips = false
+
+    private fun readClip(c: Clip) {
+        val r = openVsr ?: return
+        val endMs = c.frames.last().tMs
+        runCatching {
+            val (crops, t) = c.avsrCrops()
+            if (saveClips) runCatching {
+                val dir = java.io.File(OpenVsr.folder(context), "clips").apply { mkdirs() }
+                val name = java.text.SimpleDateFormat("HHmmss", java.util.Locale.US).format(java.util.Date())
+                java.io.File(dir, "$name.bin").outputStream().use { o -> crops.forEach { o.write(it) } }
+                java.io.File(dir, "$name.t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
+                ftLog("free talk: saved clip $name (${crops.size} frames)")
+            }
+            val res = r.read(crops, t)
+            val ms = (SystemClock.uptimeMillis() - endMs).toDouble()
+            ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, decode ${"%.0f".format(res.decodeMs)} ms (${res.steps} steps), " +
+                "total ${"%.0f".format(ms)} ms -> " + res.sentences.take(3).joinToString(" | "))
+            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs))
+        }.onFailure { ftLog("free talk", it) }
+    }
+
+    /**
+     * QA: run each bucket on the pushed self-test input (avsr/selftest_t{T}_x.bin, _valid.bin) and compare with the
+     * laptop's CTC log-probs (_logp.bin): max difference over the real frames, mean NPU time over 5 runs.
+     */
+    fun freeTalkSelfTest() = freeWorker.execute {
+        val r = openVsr ?: run { ftLog("free talk self-test: $freeTalkStatus"); return@execute }
+        val dir = OpenVsr.folder(context)
+        for (t in app.mouna.core.FreeTalk.BUCKETS) {
+            val fx = java.io.File(dir, "selftest_t${t}_x.bin")
+            if (!fx.exists()) continue
+            runCatching {
+                val x = OpenVsr.readFloats(fx)
+                val valid = OpenVsr.readFloats(java.io.File(dir, "selftest_t${t}_valid.bin"))
+                val want = OpenVsr.readFloats(java.io.File(dir, "selftest_t${t}_logp.bin"))
+                r.logits(x, valid) // warm-up
+                val runs = List(5) { r.logits(x, valid) }
+                val got = runs.last().first
+                val n = valid.count { it > 0f }
+                var diff = 0f
+                var agree = 0
+                for (i in 0 until n) {
+                    var bg = 0; var bw = 0
+                    for (k in 0 until OpenVsr.UNITS) {
+                        val o = i * OpenVsr.UNITS + k
+                        diff = maxOf(diff, kotlin.math.abs(got[o] - want[o]))
+                        if (got[o] > got[i * OpenVsr.UNITS + bg]) bg = k
+                        if (want[o] > want[i * OpenVsr.UNITS + bw]) bw = k
+                    }
+                    if (bg == bw) agree++
+                }
+                ftLog("free talk self-test t$t: max |logp diff| ${"%.4f".format(diff)}, argmax agrees $agree/$n frames, " +
+                    "NPU ${"%.1f".format(runs.map { it.second }.average())} ms")
+            }.onFailure { ftLog("free talk self-test t$t", it) }
+        }
+    }
+
+    /** QA: read a clip of Auto-AVSR crops (uint8, frames x 96 x 96) recorded at [fps]; the sentences go to logcat. */
+    fun freeTalkRead(file: java.io.File, fps: Double) = freeWorker.execute {
+        val r = openVsr ?: run { ftLog("free talk read: $freeTalkStatus"); return@execute }
+        runCatching {
+            val bytes = file.readBytes()
+            val n = bytes.size / (96 * 96)
+            val crops = List(n) { bytes.copyOfRange(it * 96 * 96, (it + 1) * 96 * 96) }
+            val t = LongArray(n) { (it * 1000.0 / fps).toLong() }
+            r.dump = java.io.File(file.parentFile, "dump_" + file.nameWithoutExtension)
+            val res = try { r.read(crops, t) } finally { r.dump = null }
+            ftLog("free talk read ${file.name}: ${res.frames} frames (bucket ${res.bucket}), NPU ${"%.1f".format(res.npuMs)} ms, " +
+                "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps)")
+            res.sentences.take(5).forEachIndexed { i, s -> ftLog("  ${i + 1}. $s  (${"%.2f".format(res.scores[i])})") }
+        }.onFailure { ftLog("free talk read", it) }
+    }
+
     fun close() {
+        submit(freeWorker) { openVsr?.close() }
+        freeWorker.shutdown()
         onAnalysis { sensor?.close() }
         analysis.shutdown()
         onWorker { encoder.close(); isl?.close() }

@@ -49,9 +49,11 @@ sealed interface Prompt {
     data class Heard(val text: String) : Prompt
     /** Sign mode wasn't sure: the likeliest ISL words to pick from. */
     data class Signed(val words: List<String>) : Prompt
+    /** Free talk read a sentence: always confirmed before it is spoken; shake = the next candidate. */
+    data class Read(val sentences: List<String>, val index: Int = 0) : Prompt
 }
 
-enum class Channel { LIPS, VOICE, SIGN }
+enum class Channel { LIPS, VOICE, SIGN, FREE }
 
 data class Said(val phrase: Phrase?, val text: String, val via: String)
 
@@ -282,6 +284,7 @@ class MounaApp(
         engine.listen(if (speak && channel == Channel.LIPS) Listen.SPEAK else Listen.PAUSED)
         armGestures(prompt != null || screen == Screen.ASK)
         engine.signing(onSpeakSurface() && channel == Channel.SIGN)
+        engine.freeTalk(speak && channel == Channel.FREE)
         val mic = ((speak && channel == Channel.VOICE) || voiceTeaching != null) && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
@@ -447,7 +450,35 @@ class MounaApp(
             is Event.Signed -> signed(e.guesses)
             is Event.Answer -> if (e.yes) switched(e.via) else shook()
             is Event.Looked -> looked(e.zone)
+            is Event.Read -> read(e)
         }
+    }
+
+    // ---------------- free talk ----------------
+
+    private fun read(e: Event.Read) {
+        if (!onSpeakSurface() || prompt != null || channel != Channel.FREE) return
+        val sentences = e.sentences.map(::sentenceCase).distinct().take(4)
+        if (sentences.isEmpty()) {
+            said = Said(null, "I couldn't read that. Try again, a little slower.", "none")
+            return
+        }
+        prompt = Prompt.Read(sentences)
+        applyChannel() // free talk waits while the person confirms
+    }
+
+    /** Free talk: say the confirmed sentence in the phone's voice (English: the model reads English). */
+    fun sayRead(text: String) {
+        prompt = null
+        voice.say(null, text, Lang.EN, Voice.DEVICE)
+        said = Said(null, text, "free talk")
+        applyChannel()
+    }
+
+    /** "No" to the sentence on screen: show the next candidate, or give up after the last. */
+    fun nextRead() {
+        val pr = prompt as? Prompt.Read ?: return
+        if (pr.index + 1 < pr.sentences.size) prompt = pr.copy(index = pr.index + 1) else close()
     }
 
     private fun decided(d: Decision) {
@@ -521,6 +552,7 @@ class MounaApp(
             // Only from Speak, and never on a call: the call screen must stay where it is.
             pr == null -> if (via == "switch" && screen == Screen.SPEAK && !onCall) go(Screen.ASK)
             pr is Prompt.Heard -> sayHeard(pr.text)
+            pr is Prompt.Read -> sayRead(pr.sentences[pr.index])
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.CONFIRM -> choose(pr.d.options[0], via)
             // RESCUE: the switch confirms the side the eyes are on (the demo's "look left, raise an eyebrow").
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.RESCUE -> when (engine.live.value.gazeZone) {
@@ -539,6 +571,7 @@ class MounaApp(
         lastAnswerVia = "shake"
         when (val pr = prompt) {
             is Prompt.Heard -> close()
+            is Prompt.Read -> nextRead()
             is Prompt.FromCore -> if (pr.d.kind == DecisionKind.CONFIRM || pr.d.kind == DecisionKind.RESCUE) wrong()
             else -> Unit
         }
@@ -837,4 +870,11 @@ class MounaApp(
         const val SIGN_SPEAK = 0.6f
         const val SIGN_MARGIN = 0.25f
     }
+}
+
+/** The model reads in capitals ("I NEED SOME WATER"): show and speak it as a sentence. */
+fun sentenceCase(s: String): String {
+    val words = s.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        .map { w -> if (w == "i" || w.startsWith("i'")) w.replaceFirstChar { it.uppercase() } else w }
+    return words.joinToString(" ").replaceFirstChar { it.uppercase() }
 }
