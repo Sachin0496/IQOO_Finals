@@ -121,10 +121,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     private var perfLm = 0f
     private var perfAn = 0f
     /**
-     * Sentences, not phrases: up to 10 s; pauses between words (under ~0.7 s at the ~20 fps the front camera gives)
-     * don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
+     * Sentences, not phrases (frames at the 30 fps the camera now asks for): up to 10 s; pauses between words under
+     * ~0.7 s don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
+     * Waits for free talk's own crop: the lip encoder's crop is only made while Lips listens.
      */
-    private val freeSegmenter = Segmenter(preRoll = 6, minFrames = 22, maxFrames = 300, tail = 14, keepTail = 6)
+    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 30, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
