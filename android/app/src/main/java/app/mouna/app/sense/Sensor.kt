@@ -52,6 +52,8 @@ class Frame(
     val imageW: Int = 0,
     val imageH: Int = 0,
     val landmarkMs: Float = 0f,
+    /** Whole analyze() for this frame (conversion, face model, crops), for the frame-rate check. */
+    val analyzeMs: Float = 0f,
     /** Sign mode only: 27 body + hand points (x, y) for ISL, and how many hands were seen. */
     val sign: FloatArray? = null,
     val hands: Int = 0,
@@ -129,6 +131,7 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit) : ImageAnal
     override fun analyze(image: ImageProxy) {
         image.use { proxy ->
             val now = SystemClock.uptimeMillis()
+            val a0 = SystemClock.elapsedRealtimeNanos()
             val frame = upright(proxy)
             if (signing) {
                 val sg = signer ?: runCatching { Signer(context) }.onFailure { signerFailed = true; Log.e("Mouna", "signer", it) }.getOrNull()?.also { signer = it }
@@ -182,6 +185,7 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit) : ImageAnal
                     imageW = frame.width,
                     imageH = frame.height,
                     landmarkMs = lmMs,
+                    analyzeMs = (SystemClock.elapsedRealtimeNanos() - a0) / 1e6f,
                 ),
             )
         }

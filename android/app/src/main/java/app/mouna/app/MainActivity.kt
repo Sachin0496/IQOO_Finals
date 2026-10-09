@@ -204,13 +204,6 @@ class MainActivity : ComponentActivity() {
             val sensor = engine.sensor!!
             val future = ProcessCameraProvider.getInstance(this@MainActivity)
             future.addListener({
-                @Suppress("DEPRECATION")
-                val analyzer = ImageAnalysis.Builder()
-                    .setTargetResolution(android.util.Size(480, 640))
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                    .build()
-                    .also { it.setAnalyzer(engine.analysis, sensor) }
                 val provider = future.get()
                 // Front camera faces the person; any camera is better than none (some devices misreport facing).
                 val camera = listOf(CameraSelector.DEFAULT_FRONT_CAMERA, CameraSelector.DEFAULT_BACK_CAMERA)
@@ -220,10 +213,32 @@ class MainActivity : ComponentActivity() {
                     cameraDenied.value = true
                     return@addListener
                 }
+                @Suppress("DEPRECATION")
+                val builder = ImageAnalysis.Builder()
+                    .setTargetResolution(android.util.Size(480, 640))
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                // Lip reading wants >= 25 fps (Auto-AVSR is trained at 25). Indoors auto-exposure drops the front camera
+                // to 20 fps (measured on the iQOO 15); ask for the best supported range topping out at 30 fps instead.
+                fpsRange(provider, camera)?.let { r ->
+                    androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                        .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, r)
+                    android.util.Log.i("Mouna", "camera fps range $r")
+                }
+                val analyzer = builder.build().also { it.setAnalyzer(engine.analysis, sensor) }
                 provider.bindToLifecycle(this@MainActivity, camera, preview, analyzer)
             }, ContextCompat.getMainExecutor(this@MainActivity))
         }
     }
+
+    /** The supported AE range with the highest floor whose ceiling is 30 fps ([30, 30] if the camera has it). */
+    @androidx.annotation.OptIn(androidx.camera.camera2.interop.ExperimentalCamera2Interop::class)
+    private fun fpsRange(provider: ProcessCameraProvider, selector: CameraSelector): android.util.Range<Int>? = runCatching {
+        val info = selector.filter(provider.availableCameraInfos).firstOrNull() ?: return null
+        val ranges = androidx.camera.camera2.interop.Camera2CameraInfo.from(info)
+            .getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+        ranges?.filter { it.upper == 30 }?.maxByOrNull { it.lower }
+    }.getOrNull()
 
     override fun onResume() {
         super.onResume()

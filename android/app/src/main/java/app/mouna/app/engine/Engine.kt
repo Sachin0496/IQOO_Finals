@@ -109,6 +109,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     @Volatile var freeTalkStatus = "Free talk · Loading…"
         private set
     @Volatile private var freeOn = false
+    private var perfN = 0
+    private var perfDt = 0L
+    private var perfLm = 0f
+    private var perfAn = 0f
     /**
      * Sentences, not phrases: up to 10 s; pauses between words (under ~0.7 s at the ~20 fps the front camera gives)
      * don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
@@ -227,6 +231,14 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             if (blink.push(f.eyeOpen, f.tMs)) _events.tryEmit(Event.Answer(true, "double blink"))
         }
 
+        if (freeOn && f.face) {
+            perfN++; perfDt += dt; perfLm += f.landmarkMs; perfAn += f.analyzeMs
+            if (perfN == 150) {
+                ftLog("camera: ${"%.1f".format(1000.0 * perfN / perfDt)} fps, face model ${"%.1f".format(perfLm / perfN)} ms, " +
+                    "analyze ${"%.1f".format(perfAn / perfN)} ms per frame (${sensor?.delegate})")
+                perfN = 0; perfDt = 0; perfLm = 0f; perfAn = 0f
+            }
+        }
         if (freeOn && openVsr != null) {
             freeSegmenter.push(f)?.let { c -> freeWorker.execute { readClip(c) } }
         } else {
