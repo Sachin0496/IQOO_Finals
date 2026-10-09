@@ -158,7 +158,24 @@ def main() -> None:
     e.add_argument("--out", type=Path, default=Path("data/embeddings.npz"))
     e.add_argument("--frames", type=int, help="stretch every clip to this many frames (static shape)")
     e.add_argument("--model", choices=["dynamic", *STATIC_MODELS], default="dynamic", help="static models use 48 frames")
+    sub.add_parser("avsr-export", help="free talk: Auto-AVSR ONNX per bucket + phone files (docs/open-vocab-plan.md)")
+    r = sub.add_parser("avsr-read", help="free talk: read a video (joint CTC/attention and CTC beam)")
+    r.add_argument("video", type=Path, nargs="+")
+    sub.add_parser("avsr-vectors", help="free talk: harness/vectors/freetalk.json for android/core")
     a = ap.parse_args()
+    if a.cmd.startswith("avsr"):
+        from . import avsr
+
+        if a.cmd == "avsr-export":
+            m = avsr.load()
+            for t in avsr.BUCKETS:
+                avsr.export(t, m)
+            avsr.phone_files(m)
+        elif a.cmd == "avsr-read":
+            avsr.read_cli(a.video)
+        else:
+            avsr.vectors(ROOT.parent / "harness" / "vectors" / "freetalk.json")
+        return
     if a.cmd == "fetch":
         fetch()
     elif a.cmd == "convert":

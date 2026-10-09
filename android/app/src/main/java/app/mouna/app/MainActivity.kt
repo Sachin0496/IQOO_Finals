@@ -147,6 +147,12 @@ class MainActivity : ComponentActivity() {
                 voice.callUsage = if (i.getStringExtra("usage") == "media") CallUsage.MEDIA else CallUsage.VOICE
                 Log.i("MounaCall", "call audio usage = ${voice.callUsage}")
             }
+            // adb shell am broadcast -a app.mouna.AVSR --ez test true            free talk NPU self-test (logcat tag Mouna)
+            // adb shell am broadcast -a app.mouna.AVSR --es crops <file> [--ef fps 25]   read a clip of Auto-AVSR crops
+            debugReceiver("app.mouna.AVSR") { i ->
+                if (i.getBooleanExtra("test", false)) engine.freeTalkSelfTest()
+                i.getStringExtra("crops")?.let { engine.freeTalkRead(File(it), i.getFloatExtra("fps", 25f).toDouble()) }
+            }
             // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>
             debugReceiver("app.mouna.SIGN") { i ->
                 val path = i.getStringExtra("json") ?: return@debugReceiver

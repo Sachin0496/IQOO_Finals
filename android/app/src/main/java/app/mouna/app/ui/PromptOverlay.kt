@@ -68,6 +68,7 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
                 is Prompt.PickAny -> Pick(app, k, "What did you mean?", "PICK THE RIGHT ONE", k.pack, noneFirst = false)
                 is Prompt.Heard -> SayClearly(app, prompt.text)
                 is Prompt.Signed -> DidYouSign(app, prompt.words)
+                is Prompt.Read -> DidYouMean(app, prompt)
                 is Prompt.FromCore -> {
                     val d = prompt.d
                     when (d.kind) {
@@ -197,6 +198,32 @@ private fun ColumnScope.SayClearly(app: MounaApp, text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.close() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayHeard(text) }
+    }
+}
+
+/** Free talk: the sentence Mouna read, the other readings below; nothing is spoken until the person says yes. */
+@Composable
+private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
+    Header("FREE TALK · READ FROM YOUR LIPS", "Did you mean…")
+    Text("“${p.sentences[p.index]}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
+    val others = p.sentences.filterIndexed { i, _ -> i != p.index }
+    if (others.isNotEmpty()) {
+        Spacer(Modifier.height(20.dp))
+        Text("Or…", style = Type.label)
+        Spacer(Modifier.height(8.dp))
+        others.forEach { s ->
+            Text(
+                s,
+                style = Type.body.copy(fontSize = 20.sp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { app.sayRead(s) }.padding(vertical = 10.dp),
+            )
+        }
+    }
+    Spacer(Modifier.weight(1f))
+    Hint("Nod or blink twice = say it · shake = next reading · tap another to say it")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextRead() }
+        BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayRead(p.sentences[p.index]) }
     }
 }
 

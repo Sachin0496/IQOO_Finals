@@ -60,6 +60,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
         ) { live ->
             val voice = app.channel == Channel.VOICE
             val sign = app.channel == Channel.SIGN
+            val free = app.channel == Channel.FREE
             if (voice) VoiceRing(app.micLevel, app.hearingBusy, Modifier.align(Alignment.Center))
             Row(
                 Modifier.align(Alignment.TopStart).padding(14.dp).fillMaxWidth(),
@@ -72,6 +73,10 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                     voice && app.hearingBusy -> Pill("Understanding", Ink.turmeric, pulse = true)
                     voice && app.micLevel > 0.35f -> Pill("Hearing", Ink.turmeric, pulse = true)
                     voice -> Pill("Listening for your voice", Ink.leaf)
+                    free && !k.freeReady -> Pill(k.freeTalk, Ink.mute, pulse = k.freeTalk.contains("Loading"))
+                    free && !live.face -> Pill("Looking for your face", Ink.mute)
+                    free && live.hearing -> Pill("Reading your lips", Ink.turmeric, pulse = true)
+                    free -> Pill("Mouth a sentence", Ink.leaf)
                     !k.ready -> Pill("Starting", Ink.mute, pulse = true)
                     !live.face -> Pill("Looking for your face", Ink.mute)
                     live.hearing -> Pill("Hearing", Ink.turmeric, pulse = true)
@@ -80,6 +85,8 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                 if (sign) {
                     if (!k.islKnown) Pill("ISL · Loading…", Ink.mute, pulse = true)
                     else Pill(if (k.islReady) "ISL · 263 signs" else if (isEmulator) "ISL runs on the phone" else "No ISL model", if (k.islReady) Ink.leaf else Ink.mute)
+                } else if (free) {
+                    Pill(if (k.freeReady) "NPU · any English" else "Free talk · not ready", if (k.freeReady) Ink.leaf else Ink.mute)
                 } else if (voice) {
                     Pill(if (app.hearing.ready) "Whisper" else "No voice model", if (app.hearing.ready) Ink.leaf else Ink.mute)
                 } else {
@@ -117,7 +124,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                     label = "said",
                 ) { said ->
                     if (said == null) {
-                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; else -> "Mouth a phrase." }, style = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 34.sp))
+                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.FREE -> "Mouth anything, in English."; else -> "Mouth a phrase." }, style = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 34.sp))
                     } else {
                         Column {
                             Text(said.text, style = Type.display.copy(fontSize = 34.sp, lineHeight = 38.sp), maxLines = 2)
@@ -162,7 +169,7 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
         modifier.clip(CircleShape).background(Ink.bg.copy(alpha = 0.78f)).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        listOf(Channel.LIPS to "Lips", Channel.VOICE to "Voice", Channel.SIGN to "Sign").forEach { (c, label) ->
+        listOf(Channel.LIPS to "Lips", Channel.FREE to "Free talk", Channel.VOICE to "Voice", Channel.SIGN to "Sign").forEach { (c, label) ->
             val on = app.channel == c
             Text(
                 label,
@@ -171,7 +178,7 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
                     .clip(CircleShape)
                     .background(if (on) Ink.bone else Ink.bg.copy(alpha = 0f))
                     .clickable { app.chooseChannel(c) }
-                    .padding(horizontal = 18.dp, vertical = 9.dp),
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
             )
         }
     }
