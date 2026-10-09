@@ -25,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import app.mouna.app.engine.PhrasePack
@@ -232,7 +231,7 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                             Text(p.say(app.lang), style = Type.body.copy(color = Ink.bone), modifier = Modifier.weight(1f))
                             Dots(minOf(n, CoreConstants.MAX_SHOTS))
                             Spacer(Modifier.width(6.dp))
-                            IconButtonSoft(Icons.Rounded.Remove, "Remove ${p.say(app.lang)}") {
+                            IconButtonSoft(MounaIcons.Remove, "Remove ${p.say(app.lang)}") {
                                 // Removing forgets the examples too, so ask first unless nothing was taught.
                                 if (n > 0 || PhrasePack.isCustom(id)) asking = id
                                 else app.engine.setPack(k.pack - id)

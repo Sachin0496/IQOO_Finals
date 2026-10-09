@@ -12,8 +12,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
 import androidx.compose.material3.Icon
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
@@ -235,7 +233,7 @@ private fun VoiceRing(app: MounaApp, modifier: Modifier) {
     Box(modifier.size(150.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(150.dp).scale(scale).clip(CircleShape).background(Ink.turmeric.copy(alpha = if (busy) 0.30f else 0.14f)))
         Box(Modifier.size(84.dp).clip(CircleShape).background(Ink.bg.copy(alpha = 0.82f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.GraphicEq, null, tint = Ink.turmeric, modifier = Modifier.size(38.dp))
+            Icon(MounaIcons.GraphicEq, null, tint = Ink.turmeric, modifier = Modifier.size(38.dp))
         }
     }
 }

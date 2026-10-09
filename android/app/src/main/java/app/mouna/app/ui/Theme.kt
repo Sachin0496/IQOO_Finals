@@ -1,26 +1,9 @@
 package app.mouna.app.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Air
-import androidx.compose.material.icons.rounded.Bathroom
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ChatBubbleOutline
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.FamilyRestroom
-import androidx.compose.material.icons.rounded.Handshake
-import androidx.compose.material.icons.rounded.People
-import androidx.compose.material.icons.rounded.SentimentDissatisfied
-import androidx.compose.material.icons.rounded.SentimentSatisfied
-import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.LocalHospital
-import androidx.compose.material.icons.rounded.Medication
-import androidx.compose.material.icons.rounded.ModeFanOff
-import androidx.compose.material.icons.rounded.SevereCold
-import androidx.compose.material.icons.rounded.SingleBed
-import androidx.compose.material.icons.rounded.Thermostat
-import androidx.compose.material.icons.rounded.WaterDrop
-import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -88,24 +71,24 @@ fun MounaTheme(content: @Composable () -> Unit) {
 
 /** One picture per phrase: choices are made by looking or a switch, so they must read at a glance. */
 fun iconFor(id: String): ImageVector = when (id) {
-    "water" -> Icons.Rounded.WaterDrop
-    "pain" -> Icons.Rounded.Whatshot
-    "nurse" -> Icons.Rounded.LocalHospital
-    "breathe" -> Icons.Rounded.Air
-    "toilet" -> Icons.Rounded.Bathroom
-    "medicine" -> Icons.Rounded.Medication
-    "sit_up" -> Icons.Rounded.SingleBed
-    "cold" -> Icons.Rounded.SevereCold
-    "hot" -> Icons.Rounded.Thermostat
-    "family" -> Icons.Rounded.FamilyRestroom
+    "water" -> MounaIcons.WaterDrop
+    "pain" -> MounaIcons.Whatshot
+    "nurse" -> MounaIcons.LocalHospital
+    "breathe" -> MounaIcons.Air
+    "toilet" -> MounaIcons.Bathroom
+    "medicine" -> MounaIcons.Medication
+    "sit_up" -> MounaIcons.SingleBed
+    "cold" -> MounaIcons.SevereCold
+    "hot" -> MounaIcons.Thermostat
+    "family" -> MounaIcons.FamilyRestroom
     "yes" -> Icons.Rounded.Check
     "no" -> Icons.Rounded.Close
-    "thank_you" -> Icons.Rounded.VolunteerActivism
-    "fan_off" -> Icons.Rounded.ModeFanOff
+    "thank_you" -> MounaIcons.VolunteerActivism
+    "fan_off" -> MounaIcons.ModeFanOff
     "love" -> Icons.Rounded.Favorite
-    "okay" -> Icons.Rounded.SentimentSatisfied
-    "hold_hand" -> Icons.Rounded.Handshake
-    "scared" -> Icons.Rounded.SentimentDissatisfied
-    "stay" -> Icons.Rounded.People
-    else -> if (id.startsWith("my_")) Icons.Rounded.Favorite else Icons.Rounded.ChatBubbleOutline
+    "okay" -> MounaIcons.SentimentSatisfied
+    "hold_hand" -> MounaIcons.Handshake
+    "scared" -> MounaIcons.SentimentDissatisfied
+    "stay" -> MounaIcons.People
+    else -> if (id.startsWith("my_")) Icons.Rounded.Favorite else MounaIcons.ChatBubbleOutline
 }
