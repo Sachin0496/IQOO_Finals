@@ -1,5 +1,6 @@
 package app.mouna.app.ui
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedContent
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -37,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,15 +60,26 @@ fun MounaRoot(
     cameraDenied: Boolean,
     bindCamera: (PreviewView) -> Unit,
     openProbe: () -> Unit,
+    /** First launch: show the Welcome screen, and call [onWelcomeDone] on Continue (the caller then asks for the camera). */
+    welcome: Boolean = false,
+    onWelcomeDone: () -> Unit = {},
 ) {
     val k by app.engine.knowledge.collectAsState()
-    // Back closes a prompt, then returns towards Speak; only on Speak does it leave the app.
-    BackHandler(enabled = app.prompt != null || app.screen != Screen.SPEAK) {
+    val activity = LocalContext.current as? Activity
+    // Back closes a prompt, then returns towards Speak. On Speak it sends Mouna to the background instead of
+    // finishing the activity: finishing would stop the engine and hang up a call.
+    BackHandler {
         when {
+            welcome -> activity?.moveTaskToBack(true)
             app.prompt != null -> app.close()
             app.screen == Screen.EYES || app.screen == Screen.SWITCH -> app.go(Screen.SETTINGS)
-            else -> app.go(Screen.SPEAK)
+            app.screen != Screen.SPEAK -> app.go(Screen.SPEAK)
+            else -> activity?.moveTaskToBack(true)
         }
+    }
+    if (welcome) {
+        Welcome(onWelcomeDone)
+        return
     }
     Box(Modifier.fillMaxSize().background(Ink.bg)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
@@ -101,43 +116,65 @@ fun MounaRoot(
 
 private val MAIN = listOf(Screen.SPEAK, Screen.TEACH, Screen.ASK, Screen.CALL)
 
+private val ChipShape = CircleShape
+
 @Composable
 private fun TopBar(app: MounaApp) {
+    // The wordmark and the language chip never move: the way back sits in the slot where the gear is on the main screens.
     Row(
-        Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().height(64.dp).padding(start = 20.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (app.screen !in MAIN) {
-            IconButtonSoft(Icons.AutoMirrored.Rounded.ArrowBack, "Back") { app.go(if (app.screen == Screen.SETTINGS) Screen.SPEAK else Screen.SETTINGS) }
-            Spacer(Modifier.width(8.dp))
-        }
-        Text("mouna", style = Type.title.copy(fontSize = 30.sp, fontStyle = FontStyle.Italic))
+        Text("mouna", style = wordmark)
         Box(Modifier.padding(start = 3.dp, top = 10.dp).size(6.dp).clip(CircleShape).background(Ink.turmeric))
         Spacer(Modifier.weight(1f))
         LangChip(app.lang) { app.chooseLang(Lang.entries[(app.lang.ordinal + 1) % Lang.entries.size]) }
         Spacer(Modifier.width(6.dp))
-        if (app.screen in MAIN) IconButtonSoft(Icons.Rounded.Settings, "Settings") { app.go(Screen.SETTINGS) }
+        if (app.screen in MAIN) {
+            IconButtonSoft(Icons.Rounded.Settings, "Settings") { app.go(Screen.SETTINGS) }
+        } else {
+            BackButton { app.go(if (app.screen == Screen.SETTINGS) Screen.SPEAK else Screen.SETTINGS) }
+        }
     }
 }
 
-/** Tap to cycle the caregiver's language; the person's own input language never matters. */
+private val wordmark = Type.title.copy(fontSize = 30.sp, fontStyle = FontStyle.Italic)
+private val chipStyle = Type.body.copy(color = Ink.bone, fontSize = 14.sp, lineHeight = 20.sp)
+
+/** The way back: an arrow and the word, so nobody has to guess what it does. */
+@Composable
+private fun BackButton(onClick: () -> Unit) {
+    Row(
+        Modifier.height(48.dp).clip(ChipShape).clickable(onClick = onClick).padding(start = 10.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, tint = Ink.bone2, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("Back", style = chipStyle.copy(color = Ink.bone2))
+    }
+}
+
+/** Tap to cycle the caregiver's language; the person's own input language never matters. Always 48dp tall. */
 @Composable
 private fun LangChip(lang: Lang, onClick: () -> Unit) {
     Box(
         Modifier
-            .clip(CircleShape)
-            .border(1.dp, Ink.rule2, CircleShape)
+            .height(48.dp)
+            .widthIn(min = 48.dp)
+            .clip(ChipShape)
+            .border(1.dp, Ink.rule2, ChipShape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(lang.label, style = Type.body.copy(color = Ink.bone, fontSize = 14.sp))
+        Text(lang.label, style = chipStyle, maxLines = 1)
     }
 }
 
 @Composable
 fun IconButtonSoft(icon: ImageVector, label: String, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClick),
+        Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, label, tint = Ink.bone2, modifier = Modifier.size(24.dp)) }
 }
@@ -182,7 +219,7 @@ private fun NavItem(icon: ImageVector, label: String, on: Boolean, modifier: Mod
 private fun NoCamera(denied: Boolean) {
     Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            if (denied) "Mouna needs the camera to see your lips." else "Starting the camera…",
+            if (denied) "Mouna needs the camera to see you." else "Starting the camera…",
             style = Type.title.copy(fontStyle = FontStyle.Italic),
             textAlign = TextAlign.Center,
         )
