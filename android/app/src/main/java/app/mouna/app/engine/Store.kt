@@ -54,6 +54,10 @@ class Store(context: Context) {
     var careful: Boolean
         get() = prefs.getBoolean("careful", false)
         set(v) = prefs.edit().putBoolean("careful", v).apply()
+    /** The Welcome screen has been read (Continue): only then is the camera permission asked for. */
+    var welcomed: Boolean
+        get() = prefs.getBoolean("welcomed", false)
+        set(v) = prefs.edit().putBoolean("welcomed", v).apply()
 
     var gaze: GazeModel?
         get() = runCatching {

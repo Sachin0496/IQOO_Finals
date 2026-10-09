@@ -68,6 +68,8 @@ class MainActivity : ComponentActivity() {
     private val receivers = mutableListOf<BroadcastReceiver>()
     private val cameraDenied = mutableStateOf(false)
     private val cameraReady = mutableStateOf(false)
+    /** First launch (or after Start over): the Welcome screen, until Continue. Set in onCreate from the store. */
+    private val welcome = mutableStateOf(false)
 
     private val askCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         cameraDenied.value = !granted
@@ -118,12 +120,14 @@ class MainActivity : ComponentActivity() {
                 pickContactResult.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
             },
         )
+        welcome.value = !engine.store.welcomed
         engine.start()
         lifecycleScope.launch { engine.events.collect { app.onEvent(it) } }
 
+        // First launch: the Welcome screen says why Mouna needs the camera before Android asks for it.
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             cameraReady.value = true
-        } else {
+        } else if (!welcome.value) {
             askCamera.launch(Manifest.permission.CAMERA)
         }
 
@@ -175,9 +179,18 @@ class MainActivity : ComponentActivity() {
                     cameraDenied = cameraDenied.value,
                     bindCamera = ::bindCamera,
                     openProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
+                    welcome = welcome.value,
+                    onWelcomeDone = ::welcomeDone,
                 )
             }
         }
+    }
+
+    /** Continue on the Welcome screen: remember it, then ask for the camera (unless it was already allowed). */
+    private fun welcomeDone() {
+        engine.store.welcomed = true
+        welcome.value = false
+        if (!cameraReady.value) askCamera.launch(Manifest.permission.CAMERA)
     }
 
     /**
