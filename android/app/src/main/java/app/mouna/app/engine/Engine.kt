@@ -585,8 +585,16 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
      * phrases and the family's words in English. Capped so scoring stays within a few NPU runs.
      */
     private fun personalSentences(): List<String> =
-        (store.freeTalkSentences.asReversed() + phrases.phrases.map { it.say(Lang.EN) })
+        (store.freeTalkSentences.asReversed() + recordedSentences() + phrases.phrases.map { it.say(Lang.EN) })
             .map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.take(MAX_PERSONAL)
+
+    /** Sentences this person recorded for training (avsr/train/<session>/NNN.txt): what they want to say, so offered. */
+    @Volatile private var recorded: List<String>? = null
+
+    private fun recordedSentences(): List<String> = recorded ?: runCatching {
+        trainFolder().walkTopDown().filter { it.isFile && it.name.endsWith(".txt") && !it.name.endsWith(".t.txt") }
+            .sortedBy { it.path }.map { it.readText().trim() }.toList()
+    }.getOrDefault(emptyList()).also { recorded = it }
 
     /** A confirmed free-talk sentence: offered again next time by the model's own score. */
     fun rememberSentence(text: String) {
@@ -628,8 +636,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                 java.io.File(f.path + ".bin").outputStream().use { o -> crops.forEach { o.write(it) } }
                 java.io.File(f.path + ".t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
                 java.io.File(f.path + ".txt").writeText(text)
-                val read = runCatching { r.read(crops, t).sentences.firstOrNull() }.getOrNull()
+                val span = app.mouna.core.FreeTalk.activeSpan(crops) // the recording itself stays whole, for training
+                val read = runCatching { r.read(crops.slice(span), t.sliceArray(span)).sentences.firstOrNull() }.getOrNull()
                 ftLog("free talk: recorded ${f.name} (${crops.size} frames) \"$text\" -> ${read ?: "-"}")
+                recorded = null // the list is read again, with this sentence
                 _events.tryEmit(Event.Recorded(text, crops.size, read))
                 return@runCatching
             }
@@ -640,7 +650,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                 java.io.File(dir, "$name.t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
                 ftLog("free talk: saved clip $name (${crops.size} frames)")
             }
-            val res = r.read(crops, t, personal = personalSentences())
+            // read only the moving part: stillness around a sentence makes the decoder invent words (FreeTalk.activeSpan)
+            val span = app.mouna.core.FreeTalk.activeSpan(crops)
+            val res = r.read(crops.slice(span), t.sliceArray(span), personal = personalSentences())
             val ms = (SystemClock.uptimeMillis() - endMs).toDouble()
             ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, decode ${"%.0f".format(res.decodeMs)} ms (${res.steps} steps), " +
                 "yours ${"%.0f".format(res.personalMs)} ms, total ${"%.0f".format(ms)} ms -> " +
@@ -694,9 +706,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             val crops = List(n) { bytes.copyOfRange(it * 96 * 96, (it + 1) * 96 * 96) }
             val t = LongArray(n) { (it * 1000.0 / fps).toLong() }
             r.dump = java.io.File(file.parentFile, "dump_" + file.nameWithoutExtension)
-            val res = try { r.read(crops, t, personal = personalSentences()) } finally { r.dump = null }
+            val span = app.mouna.core.FreeTalk.activeSpan(crops)
+            val res = try { r.read(crops.slice(span), t.sliceArray(span), personal = personalSentences()) } finally { r.dump = null }
             ftLog("free talk read ${file.name}: ${res.frames} frames (bucket ${res.bucket}), NPU ${"%.1f".format(res.npuMs)} ms, " +
-                "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps)")
+                "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps), yours ${"%.0f".format(res.personalMs)} ms")
             res.options.forEach { o -> ftLog("  option ${if (o.personal) "(yours) " else ""}${o.text} (${"%.2f".format(o.score)})") }
             res.sentences.take(5).forEachIndexed { i, s -> ftLog("  ${i + 1}. $s  (${"%.2f".format(res.scores[i])})") }
         }.onFailure { ftLog("free talk read", it) }
@@ -714,7 +727,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     companion object {
         private const val TAG = "Mouna"
         private const val PERF = "MounaPerf"
-        private const val MAX_PERSONAL = 64 // 8 scorer runs on the NPU
+        private const val MAX_PERSONAL = 200 // 25 scorer runs on the NPU (~15 ms each)
         private const val MAX_LEARNED = 200
     }
 }

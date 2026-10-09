@@ -62,6 +62,27 @@ class FreeTalkParityTest {
     }
 
     @Test
+    fun activeSpanMatchesPython() {
+        val cases = v.getJSONArray("span")
+        val n = FreeTalk.CROP * FreeTalk.CROP
+        for (i in 0 until cases.length()) {
+            val c = cases.getJSONObject(i)
+            val a = c.getInt("still_a"); val moving = c.getInt("moving"); val amp = c.getInt("amp")
+            val total = a + moving + c.getInt("still_b")
+            val crops = List(total) { f ->
+                ByteArray(n) { px ->
+                    val base = (px * 7) % 200
+                    val wobble = if (f >= a && f < a + moving) (amp * kotlin.math.sin(f * 1.3 + px * 0.01)).toLong().toInt() else 0
+                    (base + wobble).coerceIn(0, 255).toByte()
+                }
+            }
+            val span = FreeTalk.activeSpan(crops)
+            assertEquals("span $i start", c.getInt("start"), span.first)
+            assertEquals("span $i end", c.getInt("end"), span.last + 1)
+        }
+    }
+
+    @Test
     fun detokenizeJoinsPieces() {
         val d = v.getJSONObject("detok")
         val toks = d.getJSONArray("tokens").let { a -> List(a.length()) { a.getString(it) } }

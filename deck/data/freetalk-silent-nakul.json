@@ -1,0 +1,38 @@
+{
+ "what": "Free talk on real silent mouthing: Nakul, 24 prompted sentences (session 1, 10 Oct 02:24), iQOO 15 front camera, recorded in the app (mouth crops only, kept on the laptop/phone, not in git)",
+ "caveats": "One person, one session, his own prompts; no held-out session yet. Open reading = any English; personal list = his recorded sentences' text (the clips themselves are never matched against, only the text).",
+ "open_reading_laptop": {
+  "as recorded, ctc 0.1": {
+   "wer": 1.143,
+   "exact": "2/24"
+  },
+  "trimmed, ctc 0.1": {
+   "wer": 0.848,
+   "exact": "3/24"
+  },
+  "trimmed, ctc 0.3": {
+   "wer": 0.92,
+   "exact": "3/24"
+  },
+  "trimmed, ctc 0.5": {
+   "wer": 0.884,
+   "exact": "1/24"
+  }
+ },
+ "why_trimming": "15/24 clips ran to the 10 s cap; around the sentence the decoder invented words ('I'LL SEE YOU IN THE NEXT VIDEO', 'I CANNOT SLEEP I CAN SLEEP I CAN SLEEP')",
+ "personal_list_154_prompts_laptop": {
+  "top1": "20/24",
+  "top3": "22/24",
+  "shown_first_by_merge_rule": "20/24"
+ },
+ "personal_list_on_phone": {
+  "measured": "02:39-02:40, NPU, trimmed, list = the 24 recorded sentences + the app's phrases",
+  "shown_first": "21/24",
+  "misses": [
+   "I am very tired -> I need some water",
+   "I want to sit up -> I am very tired",
+   "I feel sick -> I am very tired"
+  ],
+  "end_to_end_ms": "NPU 23-94 + decode 51-722 + personal 58-204 per clip"
+ }
+}

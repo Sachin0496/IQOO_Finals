@@ -534,7 +534,19 @@ def vectors(out: Path) -> Path:
         merge_cases.append({"open": [list(o) for o in openl], "listed": [list(o) for o in mine],
                             "out": [[t, sc, p] for t, sc, p in merge_options(openl, mine)]})
     rank_cases = [{"score": sc, "prior": pr, "rank": personal_rank(sc, pr)} for sc, pr in ((-20.0, -9.0), (-15.5, -3.25))]
+    # trimming: a still face, then a moving mouth, then stillness again (crops from a formula the test rebuilds)
+    span_cases = []
+    for still_a, moving, still_b, amp in ((20, 30, 25, 40), (0, 12, 40, 25), (10, 0, 10, 0)):
+        n_f = still_a + moving + still_b
+        f_idx = np.arange(n_f)[:, None]
+        px = np.arange(CROP * CROP)[None, :]
+        base = (px * 7) % 200
+        wobble = np.where((f_idx >= still_a) & (f_idx < still_a + moving), (amp * np.sin(f_idx * 1.3 + px * 0.01)).astype(np.int64), 0)
+        cc = np.clip(base + wobble, 0, 255).astype(np.uint8).reshape(n_f, CROP, CROP)
+        a, b = active_span(cc)
+        span_cases.append({"still_a": still_a, "moving": moving, "still_b": still_b, "amp": amp, "start": a, "end": b})
     v = {
+        "span": span_cases,
         "personal_rank": rank_cases,
         "personal": {"tokens": ptoks, "pieces": ppieces, "spm": spm_cases, "ctc_seq": seq_cases, "score": att_cases,
                      "merge": merge_cases},
@@ -986,3 +998,22 @@ def merge_options(open_: list[tuple[str, float]], listed: list[tuple[str, float,
             if i < len(lst):
                 out.setdefault(lst[i][0].lower(), (lst[i][0], lst[i][1], personal))
     return list(out.values())[:max_n]
+
+
+TRIM_REL, TRIM_MIN, TRIM_PAD = 0.35, 1.2, 6
+
+
+def active_span(crops: np.ndarray) -> tuple[int, int]:
+    """[start, end) of the moving part of a clip, from the mouth crops themselves: mean absolute frame-to-frame change
+    over the mouth (rows 24-71, columns 16-79 of the 96 px crop), averaged over 5 frames, above
+    max(TRIM_MIN, TRIM_REL * its 90th percentile), padded by TRIM_PAD frames. Reference for FreeTalk.activeSpan.
+    On 24 silent recordings the clips ran on for seconds (15/24 hit the 10 s cap) and the decoder filled the stillness
+    with invented words; trimming took WER 114% -> 85% (deck/data/freetalk-silent-nakul.json)."""
+    x = crops.astype(np.float32)[:, 24:72, 16:80]
+    mv = np.r_[0.0, np.abs(np.diff(x, axis=0)).mean(axis=(1, 2))]
+    sm = np.convolve(mv, np.ones(5) / 5, mode="same")
+    thr = max(TRIM_MIN, TRIM_REL * float(np.percentile(sm, 90)))
+    act = np.nonzero(sm > thr)[0]
+    if len(act) == 0:
+        return 0, len(crops)
+    return max(0, int(act[0]) - TRIM_PAD), min(len(crops), int(act[-1]) + TRIM_PAD + 1)
