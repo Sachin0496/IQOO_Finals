@@ -188,7 +188,7 @@ private fun NoCamera(denied: Boolean) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "No video or audio leaves this phone and none is stored. The internet is used only to fetch a clearer voice for the words you speak on a call.",
+            "No video or microphone audio leaves this phone and none is stored. The internet is used only to fetch a clearer voice for the words you speak on a call, and on a web call to carry that voice to the other person.",
             style = Type.body,
             textAlign = TextAlign.Center,
         )

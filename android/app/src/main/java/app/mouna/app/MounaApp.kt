@@ -8,6 +8,9 @@ import app.mouna.app.engine.CallPhrases
 import app.mouna.app.engine.CallState
 import app.mouna.app.engine.Engine
 import app.mouna.app.engine.Phones
+import app.mouna.app.engine.Rooms
+import app.mouna.app.engine.WebLink
+import app.mouna.BuildConfig
 import android.os.SystemClock
 import app.mouna.app.engine.Event
 import app.mouna.app.engine.Lang
@@ -30,6 +33,9 @@ enum class Screen { SPEAK, TEACH, ASK, CALL, SETTINGS, EYES, SWITCH }
 
 /** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
 enum class CallTab { PHRASES, MOUTH }
+
+/** How a call is placed: a carrier call to a number, or a web link the other person opens in a browser. */
+enum class CallMode { PHONE, WEB }
 
 /** What Mouna shows when it is not sure enough to speak (core.md: "What the app shows for each decision"). */
 sealed interface Prompt {
@@ -57,8 +63,12 @@ class MounaApp(
     val hearing: Hearing,
     /** Asks for the microphone if needed; calls back with the answer. */
     private val askMic: ((Boolean) -> Unit) -> Unit,
-    /** The phone call transport (the carrier today); Voice hands it audio if it asks for it. */
-    private val link: CallLink,
+    /** The carrier transport (a phone number); Voice plays on the speaker for it. */
+    private val carrier: CallLink,
+    /** The internet transport (a link the other person opens); Voice hands it audio. */
+    private val web: WebLink,
+    /** Whether this phone has a working SIM; without one, carrier calls are off and web calls are the default. */
+    private val hasSim: () -> Boolean,
     /** Asks for the permission to call; calls back with whether calling is allowed. */
     private val askCall: ((Boolean) -> Unit) -> Unit,
     /** Opens the contact picker; calls back with the name and number picked, or null. */
@@ -125,19 +135,53 @@ class MounaApp(
         private set
     val onCall get() = callState != CallState.IDLE
 
+    /** The transport of the current call (or the last one); both report here but only this one counts. */
+    private var link: CallLink = carrier
+    /** Phone or web: the person's choice, else web when there is no SIM to call from. */
+    var callMode by mutableStateOf(
+        when (store.callMode) {
+            "phone" -> CallMode.PHONE
+            "web" -> CallMode.WEB
+            else -> if (hasSim()) CallMode.PHONE else CallMode.WEB
+        },
+    )
+        private set
+    val simReady = hasSim()
+    /** The name typed for the person a web link is for ("Amma"); empty is fine. */
+    var webName by mutableStateOf("")
+        private set
+    var webFavourites by mutableStateOf(store.webFavourites)
+        private set
+    val usingWeb get() = link === web
+    val webPhase get() = web.phase
+    val webRoom get() = web.room
+    /** How loud the guest is on a web call, 0..1. */
+    val guestLevel get() = web.guestLevel
+    val webJoinUrl get() = web.joinUrl
+    val webShortUrl get() = web.shortUrl
+
     init {
+        web.server = ::callServer
+        web.callerName = { callerName }
         voice.link = link
-        link.onState = { st ->
-            callState = st
-            voice.callMode = st != CallState.IDLE
-            if (st == CallState.ACTIVE) callSince = SystemClock.elapsedRealtime()
-            if (st == CallState.IDLE) callSince = 0L
-            applyChannel() // the microphone stays off on a call: it would hear the other person
+        for (l in listOf(carrier, web)) {
+            l.onState = { st -> if (l === link) onLinkState(st) }
         }
         asr.execute {
             hearing.load()
             main.post { voiceStatus = hearing.status }
         }
+    }
+
+    private fun onLinkState(st: CallState) {
+        callState = st
+        voice.callMode = st != CallState.IDLE
+        if (st == CallState.ACTIVE) callSince = SystemClock.elapsedRealtime()
+        if (st == CallState.IDLE) {
+            callSince = 0L
+            if (link === web) web.note.value?.let { callNote = it }
+        }
+        applyChannel() // the microphone stays off on a call: it would hear the other person
     }
 
     var screen by mutableStateOf(Screen.SPEAK)
@@ -503,8 +547,10 @@ class MounaApp(
                 callNote = "Allow Mouna to make phone calls to call from here."
                 return@askCall
             }
+            link = carrier
+            voice.link = carrier
             callWith = dialName ?: Phones.pretty(number)
-            if (!link.dial(number)) {
+            if (!carrier.dial(number)) {
                 callNote = "The call could not be started."
                 return@askCall
             }
@@ -517,6 +563,62 @@ class MounaApp(
 
     fun hangUp() {
         if (!link.hangUp()) callNote = "Mouna can't end the call itself on this phone. End it on the phone's call screen."
+    }
+
+    // ---------------- web calls ----------------
+
+    /** The call relay: Settings wins over the one built in from local.properties; blank means web calls are off. */
+    fun callServer(): String = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
+
+    fun chooseCallServer(url: String) {
+        store.callServer = url
+    }
+
+    fun chooseCallMode(m: CallMode) {
+        callMode = m
+        store.callMode = m.name.lowercase()
+        callNote = null
+    }
+
+    fun chooseWebName(name: String) {
+        webName = name.take(40)
+    }
+
+    /** Opens a room on the relay and waits for the guest. [room] is a favourite's fixed one, else a new random id. */
+    fun startWebCall(room: String? = null, who: String = webName.trim()) {
+        if (onCall) return
+        callNote = null
+        link = web
+        voice.link = web
+        callWith = who.ifEmpty { "guest" }
+        if (!web.dial(room ?: Rooms.newId())) {
+            callNote = web.note.value ?: "The call could not be started."
+            return
+        }
+        callTab = CallTab.PHRASES
+        applyChannel()
+        voice.prefetch(CallPhrases.warm(lang, callerName), lang, voiceId)
+    }
+
+    /** Keeps this call's room as a fixed link under the name typed, so the family can bookmark it. */
+    fun saveWebFavourite() {
+        val room = web.room.value ?: return
+        val name = webName.trim().ifEmpty { return }
+        webFavourites = webFavourites.filter { it.second != room && it.first != name } + (name to room)
+        store.webFavourites = webFavourites
+    }
+
+    fun removeWebFavourite(room: String) {
+        webFavourites = webFavourites.filter { it.second != room }
+        store.webFavourites = webFavourites
+    }
+
+    /** QA: start a web call in [room] (adb: app.mouna.WEBCALL). */
+    fun debugWebCall(room: String?, who: String) {
+        if (onCall) return
+        if (screen != Screen.CALL) go(Screen.CALL)
+        chooseCallMode(CallMode.WEB)
+        startWebCall(room, who)
     }
 
     fun chooseCallTab(t: CallTab) {

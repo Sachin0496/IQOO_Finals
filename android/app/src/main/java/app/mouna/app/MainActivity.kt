@@ -32,6 +32,8 @@ import app.mouna.app.engine.Hearing
 import app.mouna.app.engine.PhrasePack
 import app.mouna.app.engine.Store
 import app.mouna.app.engine.Voice
+import app.mouna.app.engine.WebLink
+import android.telephony.TelephonyManager
 import app.mouna.app.ui.MounaRoot
 import app.mouna.app.ui.MounaTheme
 import app.mouna.probe.ProbeActivity
@@ -86,7 +88,9 @@ class MainActivity : ComponentActivity() {
                     askMicPermission.launch(Manifest.permission.RECORD_AUDIO)
                 }
             },
-            link = carrier,
+            carrier = carrier,
+            web = WebLink(applicationContext),
+            hasSim = ::hasSim,
             askCall = { answer ->
                 if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
                     answer(true)
@@ -123,11 +127,24 @@ class MainActivity : ComponentActivity() {
                 override fun onReceive(c: Context, i: Intent) {
                     val text = i.getStringExtra("text") ?: return
                     val lang = Lang.entries.firstOrNull { it.tag == i.getStringExtra("lang") } ?: Lang.EN
-                    voice.callMode = i.getBooleanExtra("call", false)
+                    voice.callMode = app.onCall || i.getBooleanExtra("call", false)
                     Log.i("MounaCall", "SAY \"$text\" ${lang.tag} callMode=${voice.callMode} usage=${voice.callUsage}")
                     app.debugSay(text, lang, i.getStringExtra("voice") ?: app.voiceId)
                 }
             }, IntentFilter("app.mouna.SAY"), ContextCompat.RECEIVER_EXPORTED)
+            // adb shell am broadcast -a app.mouna.CALLSERVER --es url https://....trycloudflare.com   (blank url: back to the build's)
+            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    app.chooseCallServer(i.getStringExtra("url").orEmpty())
+                    Log.i("MounaCall", "call server = ${app.callServer().ifEmpty { "(none)" }}")
+                }
+            }, IntentFilter("app.mouna.CALLSERVER"), ContextCompat.RECEIVER_EXPORTED)
+            // adb shell am broadcast -a app.mouna.WEBCALL [--es room K7M2QX] [--es name Amma]: starts a web call; the join link goes to logcat
+            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    app.debugWebCall(i.getStringExtra("room"), i.getStringExtra("name").orEmpty())
+                }
+            }, IntentFilter("app.mouna.WEBCALL"), ContextCompat.RECEIVER_EXPORTED)
             // adb shell am broadcast -a app.mouna.CALLAUDIO --es usage media|voice
             ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
                 override fun onReceive(c: Context, i: Intent) {
@@ -206,6 +223,11 @@ class MainActivity : ComponentActivity() {
         carrier.foreground = false
         super.onPause()
     }
+
+    /** A SIM that can place a call. Needs no permission; false on a phone with no SIM, or no telephony at all. */
+    private fun hasSim(): Boolean =
+        packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY) &&
+            getSystemService(TelephonyManager::class.java)?.simState == TelephonyManager.SIM_STATE_READY
 
     /** Name and number of the contact row the picker returned. */
     private fun readContact(uri: android.net.Uri): Pair<String, String>? = runCatching {

@@ -1,6 +1,16 @@
 package app.mouna.app.ui
 
+import android.content.Intent
 import android.os.SystemClock
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.aspectRatio
+import app.mouna.app.CallMode
+import app.mouna.app.engine.Qr
+import app.mouna.app.engine.WebPhase
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -59,7 +69,11 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun CallScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
-    if (app.onCall) InCall(app, k, bind) else Dialer(app)
+    when {
+        app.onCall && app.usingWeb && app.callState == CallState.DIALING -> WebRinging(app)
+        app.onCall -> InCall(app, k, bind)
+        else -> Dialer(app)
+    }
 }
 
 /** "On call with Amma · 01:23 · on speaker", ticking each second. */
@@ -86,9 +100,23 @@ private fun produceNow(key: Any) = remember(key) { mutableLongStateOf(SystemCloc
 
 // ---------------- not on a call ----------------
 
-@OptIn(ExperimentalFoundationApi::class)
+/** The mode switch, then the dial pad (phone number) or the link maker (web link). */
 @Composable
 private fun Dialer(app: MounaApp) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TabChip("Phone number", app.callMode == CallMode.PHONE) { app.chooseCallMode(CallMode.PHONE) }
+            TabChip("Web link", app.callMode == CallMode.WEB) { app.chooseCallMode(CallMode.WEB) }
+        }
+        Box(Modifier.weight(1f)) {
+            if (app.callMode == CallMode.PHONE) PhoneDialer(app) else WebDialer(app)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PhoneDialer(app: MounaApp) {
     val number = Phones.normalise(app.dialNumber)
     val saved = app.favourites.any { it.second == number }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
@@ -134,13 +162,116 @@ private fun Dialer(app: MounaApp) {
                     }
                 }
             }
+            if (!app.simReady) {
+                Spacer(Modifier.height(10.dp))
+                Text("This phone has no SIM, so it can't place a phone call. Use Web link: the other person opens a link instead.", style = Type.body.copy(color = Ink.turmeric))
+            }
             app.callNote?.let {
                 Spacer(Modifier.height(10.dp))
                 Text(it, style = Type.body.copy(color = Ink.turmeric))
             }
         }
         Spacer(Modifier.height(10.dp))
-        BigButton("Call", Tone.YES, Modifier.fillMaxWidth().padding(bottom = 4.dp), enabled = number != null) { app.dial() }
+        BigButton("Call", Tone.YES, Modifier.fillMaxWidth().padding(bottom = 4.dp), enabled = number != null && app.simReady) { app.dial() }
+    }
+}
+
+/** Web link, not on a call: who it is for (optional), their saved links, and Start call. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun WebDialer(app: MounaApp) {
+    val server = app.callServer()
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            Text("Call anyone from their browser", style = Type.title.copy(fontSize = 24.sp, lineHeight = 28.sp))
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Mouna makes a link and a QR code. The other person opens it on any phone, taps Answer, and talks. Nothing to install, no SIM needed.",
+                style = Type.body.copy(fontSize = 14.sp),
+            )
+            Spacer(Modifier.height(16.dp))
+            SectionLabel("Who is it for? (to save their link)")
+            TextBox(app.webName, { app.chooseWebName(it) }, "Amma", Modifier.fillMaxWidth())
+            if (app.webFavourites.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                SectionLabel("Saved links · hold to remove")
+                app.webFavourites.forEach { (name, room) ->
+                    Row(
+                        Modifier
+                            .padding(bottom = 8.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Ink.card)
+                            .border(1.dp, Ink.rule, RoundedCornerShape(18.dp))
+                            .combinedClickable(onClick = { app.startWebCall(room, name) }, onLongClick = { app.removeWebFavourite(room) })
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("$name's link", style = Type.phrase.copy(fontSize = 18.sp), modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("call", style = Type.label.copy(color = Ink.leaf))
+                    }
+                }
+            }
+            if (server.isEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Text("No call server is set. Add its address in Settings > Phone calls.", style = Type.body.copy(color = Ink.turmeric))
+            }
+            app.callNote?.let {
+                Spacer(Modifier.height(10.dp))
+                Text(it, style = Type.body.copy(color = Ink.turmeric))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        BigButton("Start call", Tone.YES, Modifier.fillMaxWidth().padding(bottom = 4.dp), enabled = server.isNotEmpty()) { app.startWebCall() }
+    }
+}
+
+// ---------------- web call, waiting for the guest ----------------
+
+/** The QR code and link, until the other person taps Answer. */
+@Composable
+private fun WebRinging(app: MounaApp) {
+    val phase by app.webPhase.collectAsState()
+    val room by app.webRoom.collectAsState()
+    val context = LocalContext.current
+    val url = app.webJoinUrl
+    val qr = remember(url) { url?.let { Qr.bitmap(it).asImageBitmap() } }
+    val saved = app.webFavourites.any { it.second == room }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        Text(
+            when (phase) {
+                WebPhase.CONNECTING -> "Connecting to the call server…"
+                WebPhase.RECONNECTING -> "Reconnecting…"
+                WebPhase.GUEST_OPENED -> "They opened the link. Waiting for them to tap Answer…"
+                else -> if (app.callWith == "guest") "Waiting for them to open the link…" else "Waiting for ${app.callWith} to open the link…"
+            },
+            style = Type.phrase.copy(fontSize = 19.sp, lineHeight = 23.sp),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text("Show this code, or send the link. It works in any phone browser.", style = Type.body.copy(fontSize = 13.sp))
+        Spacer(Modifier.height(14.dp))
+        if (qr != null) {
+            Image(
+                qr, "QR code of the call link",
+                filterQuality = FilterQuality.None,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(24.dp)),
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(app.webShortUrl.orEmpty(), style = Type.mono.copy(fontSize = 14.sp, color = Ink.bone), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BigButton("Share link", Tone.PRIMARY, Modifier.weight(1f)) {
+                val who = app.callerName.ifBlank { "I" }
+                val text = "$who would like to talk with you through Mouna. Mouna speaks for people who can't speak. Open this link and tap Answer: $url"
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+                context.startActivity(Intent.createChooser(send, "Share the call link").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            if (!saved && app.webName.isNotBlank()) BigButton("Save as ${app.webName.trim()}'s link", Tone.NO, Modifier.weight(1f)) { app.saveWebFavourite() }
+        }
+        Spacer(Modifier.height(10.dp))
+        BigButton("Cancel", Tone.DANGER, Modifier.fillMaxWidth()) { app.hangUp() }
+        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -179,8 +310,9 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             Text(
                 "voice: " + (via ?: "—") + (if (app.callState == CallState.DIALING) " · waiting for an answer" else ""),
                 style = Type.label.copy(letterSpacing = 0.sp),
-                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                modifier = Modifier.padding(top = 4.dp, bottom = if (app.usingWeb) 6.dp else 10.dp),
             )
+            if (app.usingWeb) GuestMeter(app)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 BigButton("Hang up", Tone.DANGER, Modifier.weight(1f)) { app.hangUp() }
                 BigButton("Intro", Tone.PRIMARY, Modifier.weight(1f)) { app.intro() }
@@ -195,6 +327,30 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (app.callTab == CallTab.PHRASES) Phrases(app) else SpeakScreen(app, k, bind)
+        }
+    }
+}
+
+/** "Guest is speaking": a bar that follows the other person's voice, so the person can see they are being heard. */
+@Composable
+private fun GuestMeter(app: MounaApp) {
+    val level by app.guestLevel.collectAsState()
+    val phase by app.webPhase.collectAsState()
+    val speaking = level > 0.08f
+    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(if (speaking) Ink.turmeric else Ink.rule2))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            when {
+                phase == WebPhase.RECONNECTING -> "Reconnecting…"
+                speaking -> "Guest is speaking"
+                else -> "Guest is listening"
+            },
+            style = Type.label.copy(letterSpacing = 0.sp, color = if (speaking) Ink.turmeric else Ink.mute),
+            modifier = Modifier.width(150.dp),
+        )
+        Box(Modifier.weight(1f).height(6.dp).clip(CircleShape).background(Ink.rule)) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(level.coerceIn(0f, 1f)).background(Ink.turmeric))
         }
     }
 }

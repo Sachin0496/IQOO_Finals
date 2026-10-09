@@ -7,8 +7,10 @@
     <!-- Voice mode only (weak or unclear speech): asked for when the person switches to Voice. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- The only network use is Sarvam text-to-speech on phone calls: the words to speak go out, a WAV comes back.
-         No audio or video leaves the phone. Network state stays removed (spike test S6), whatever a library merges in. -->
+    <!-- Network use: Sarvam text-to-speech on calls (the words go out, a WAV comes back), and web calls, where Mouna's
+         spoken voice goes to the other person and theirs comes back, through the call relay (call-server/).
+         Nothing from the camera or the microphone leaves the phone. Network state stays removed (spike test S6),
+         whatever a library merges in. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 

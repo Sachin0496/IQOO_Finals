@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mouna.app.MounaApp
@@ -94,6 +95,20 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 var name by remember { mutableStateOf(app.callerName) }
                 TextBox(name, { name = it.take(40); app.chooseCallerName(name) }, "Your name", Modifier.fillMaxWidth())
+                Spacer(Modifier.height(14.dp))
+                Text("Call server, for web link calls: the address of the relay (call-server/), like https://calls.example.com.", style = Type.body.copy(fontSize = 13.sp))
+                Spacer(Modifier.height(8.dp))
+                var server by remember { mutableStateOf(app.store.callServer) }
+                TextBox(server, { server = it; app.chooseCallServer(it) }, "https://…", Modifier.fillMaxWidth(), keyboard = KeyboardType.Uri)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    when {
+                        server.isNotBlank() -> "Using the address saved here."
+                        app.callServer().isNotBlank() -> "Using the address built into this app."
+                        else -> "No call server: web link calls are off."
+                    },
+                    style = Type.mono.copy(fontSize = 12.sp),
+                )
                 Spacer(Modifier.height(14.dp))
                 Text("Sarvam API key, for a natural voice on calls. Only the words to speak are sent, never audio or video.", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))
