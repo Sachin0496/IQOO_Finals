@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.RecordVoiceOver
-import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,9 +94,9 @@ fun Welcome(onContinue: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.height(36.dp))
-                Reveal(shown, 1) { Point(Icons.Rounded.RecordVoiceOver, "Mouth or sign", "Mouna speaks it aloud, in your caregiver’s language.") }
+                Reveal(shown, 1) { Point(MounaIcons.RecordVoiceOver, "Mouth or sign", "Mouna speaks it aloud, in your caregiver’s language.") }
                 Spacer(Modifier.height(24.dp))
-                Reveal(shown, 2) { Point(Icons.Rounded.School, "Teach it your phrases", "A minute of practice makes them yours.") }
+                Reveal(shown, 2) { Point(MounaIcons.School, "Teach it your phrases", "A minute of practice makes them yours.") }
                 Spacer(Modifier.height(24.dp))
                 Reveal(shown, 3) { Point(Icons.Rounded.Lock, "Private by design", "Nothing you show the camera leaves this phone.") }
                 Spacer(Modifier.height(24.dp))

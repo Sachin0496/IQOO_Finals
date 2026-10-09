@@ -45,8 +45,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -164,7 +162,7 @@ private fun PhoneDialer(app: MounaApp) {
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).combinedClickable(onClick = { app.backspace() }, onLongClick = { app.setDial("", null) }),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Rounded.Backspace, "Delete", tint = Ink.bone2) }
+                ) { Icon(MounaIcons.Backspace, "Delete", tint = Ink.bone2) }
             }
             Pad(app)
             Spacer(Modifier.height(12.dp))

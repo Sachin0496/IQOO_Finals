@@ -31,9 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Call
-import androidx.compose.material.icons.rounded.QuestionAnswer
-import androidx.compose.material.icons.rounded.RecordVoiceOver
-import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -191,9 +188,9 @@ private fun NavBar(app: MounaApp) {
             .padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        NavItem(Icons.Rounded.RecordVoiceOver, "Speak", app.screen == Screen.SPEAK, Modifier.weight(1f)) { app.go(Screen.SPEAK) }
-        NavItem(Icons.Rounded.School, "Teach", app.screen == Screen.TEACH, Modifier.weight(1f)) { app.go(Screen.TEACH) }
-        NavItem(Icons.Rounded.QuestionAnswer, "Ask", app.screen == Screen.ASK, Modifier.weight(1f)) { app.go(Screen.ASK) }
+        NavItem(MounaIcons.RecordVoiceOver, "Speak", app.screen == Screen.SPEAK, Modifier.weight(1f)) { app.go(Screen.SPEAK) }
+        NavItem(MounaIcons.School, "Teach", app.screen == Screen.TEACH, Modifier.weight(1f)) { app.go(Screen.TEACH) }
+        NavItem(MounaIcons.QuestionAnswer, "Ask", app.screen == Screen.ASK, Modifier.weight(1f)) { app.go(Screen.ASK) }
         NavItem(Icons.Rounded.Call, "Call", app.screen == Screen.CALL, Modifier.weight(1f)) { app.go(Screen.CALL) }
     }
 }
