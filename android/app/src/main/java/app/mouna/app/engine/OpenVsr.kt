@@ -282,6 +282,24 @@ class OpenVsr private constructor(
             val notes = mutableListOf<String>()
             val decoders = LinkedHashMap<Int, OrtSession>()
             val scorers = LinkedHashMap<Int, OrtSession>()
+            // Compile what is missing first, one graph at a time, releasing each: compiling the 10 s graph while six
+            // others were loaded got the app killed for memory (lmkd, measured on the iQOO 15). Then load from cache.
+            for (t in FreeTalk.BUCKETS) for (kind in listOf("vsr", "dec", "score")) {
+                val name = "avsr_${kind}_t$t"
+                val plain = File(dir, "$name.onnx")
+                val ctx = File(dir, "$name.qnn_ctx_fp16.onnx")
+                val mark = File(dir, ".$name.crashed")
+                if (ctx.exists() || !plain.exists() || mark.exists()) continue
+                mark.writeText("compiling")
+                log("free talk $name: compiling for the NPU (first start, takes minutes)…")
+                val t0 = SystemClock.elapsedRealtimeNanos()
+                val compiled = runCatching { env.createSession(plain.absolutePath, qnn(compileTo = ctx)).close() }
+                mark.delete()
+                compiled.exceptionOrNull()?.let {
+                    ctx.delete()
+                    log("free talk $name failed: ${it.message}")
+                } ?: log("free talk $name compiled in ${"%.0f".format((SystemClock.elapsedRealtimeNanos() - t0) / 1e6)} ms")
+            }
             for (t in FreeTalk.BUCKETS) {
                 for ((kind, into) in listOf("vsr" to sessions, "dec" to decoders, "score" to scorers)) {
                     val name = "avsr_${kind}_t$t"
