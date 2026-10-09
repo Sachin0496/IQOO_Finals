@@ -8,8 +8,10 @@ plugins {
 
 // The Sarvam key for live voice on calls: `sarvam.key=...` in android/local.properties (gitignored). Empty if absent;
 // Settings can override it. A debug APK built with a key carries it: don't share such an APK.
-val sarvamKey = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
-    .getProperty("sarvam.key", "").trim()
+val localProps = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
+val sarvamKey = localProps.getProperty("sarvam.key", "").trim()
+// The web-call relay (call-server/): `call.server=https://...` in android/local.properties. Empty if absent; Settings can override it.
+val callServer = localProps.getProperty("call.server", "").trim()
 
 android {
     namespace = "app.mouna"
@@ -22,6 +24,7 @@ android {
         versionCode = 2
         versionName = "0.2-finale"
         buildConfigField("String", "SARVAM_KEY", "\"${sarvamKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "CALL_SERVER", "\"${callServer.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         ndk { abiFilters += "arm64-v8a" } // the OnePlus 13R and iQOO 15; QNN ships arm64 only
     }
 
@@ -108,6 +111,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+
+    // Web calls: the WebSocket to the relay (call-server/), and the QR code of the join link
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.google.zxing:core:3.5.3")
 
     implementation(project(":core")) // decision core (harness/mouna_harness/core.py port)
     testImplementation("junit:junit:4.13.2")

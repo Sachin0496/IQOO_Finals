@@ -27,4 +27,7 @@ interface CallLink {
      * returns true if the transport took it, false to let Voice play it on the speaker.
      */
     fun sendAudio(data: ByteArray, mime: String): Boolean = false
+
+    /** The words about to be spoken, sent ahead of the audio so the other side can show them as a caption. */
+    fun sendText(text: String) = Unit
 }

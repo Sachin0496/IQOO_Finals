@@ -100,6 +100,8 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
     /** Plays the natural clip if the pack has one, else Sarvam live, else the phone's voice. Returns at once. */
     fun say(phraseId: String?, text: String, lang: Lang, voice: String) {
         stop()
+        // The other side of an internet call reads the sentence while it hears it.
+        link?.takeIf { it.takesAudio && it.state == CallState.ACTIVE }?.sendText(text)
         val gen = generation
         val path = phraseId?.let { clips[voice]?.get(lang.tag)?.get(it) }
         if (path != null) {
