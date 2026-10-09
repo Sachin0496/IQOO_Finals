@@ -36,6 +36,7 @@ import app.mouna.app.Screen
 import app.mouna.app.engine.CallUsage
 import app.mouna.app.engine.Knowledge
 import app.mouna.app.engine.Lang
+import app.mouna.app.engine.Sarvam
 import app.mouna.core.DecisionKind
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -99,10 +100,12 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 Text("Call server, for web link calls: the address of the relay (call-server/), like https://calls.example.com.", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))
                 var server by remember { mutableStateOf(app.store.callServer) }
-                TextBox(server, { server = it; app.chooseCallServer(it) }, "https://…", Modifier.fillMaxWidth(), keyboard = KeyboardType.Uri)
+                var serverRefused by remember { mutableStateOf<String?>(null) }
+                TextBox(server, { server = it; serverRefused = app.chooseCallServer(it) }, "https://…", Modifier.fillMaxWidth(), keyboard = KeyboardType.Uri)
                 Spacer(Modifier.height(6.dp))
                 Text(
                     when {
+                        serverRefused != null -> "Not saved. $serverRefused"
                         server.isNotBlank() -> "Using the address saved here."
                         app.callServer().isNotBlank() -> "Using the address built into this app."
                         else -> "No call server: web link calls are off."
@@ -123,6 +126,19 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                     },
                     style = Type.mono.copy(fontSize = 12.sp),
                 )
+                Spacer(Modifier.height(14.dp))
+                Text(
+                    "Sentences spoken in the natural voice are kept on this phone (the newest ${Sarvam.CACHE_KEEP}, typed ones too) so a repeated phrase is instant. Nothing else is stored.",
+                    style = Type.body.copy(fontSize = 13.sp),
+                )
+                Spacer(Modifier.height(8.dp))
+                var kept by remember { mutableStateOf(app.voice.cacheStats()) }
+                Text("${kept.first} sentences kept · ${(kept.second + 1023) / 1024} KB", style = Type.mono.copy(fontSize = 12.sp))
+                Spacer(Modifier.height(8.dp))
+                BigButton("Clear voice cache", Tone.NO, Modifier.fillMaxWidth(), enabled = kept.first > 0) {
+                    app.clearVoiceCache()
+                    kept = app.voice.cacheStats()
+                }
             }
         }
 
