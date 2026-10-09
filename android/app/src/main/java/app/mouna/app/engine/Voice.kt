@@ -118,13 +118,19 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) = Unit
-            override fun onError(id: String?) { linkJobs.remove(id)?.delete() }
+            override fun onError(id: String?) {
+                Log.w(TAG, "phone voice could not render $id for the call")
+                linkJobs.remove(id)?.delete()
+            }
             override fun onDone(id: String?) {
                 val f = linkJobs.remove(id) ?: return
+                // Still on the TTS engine's thread: compress here, off the main thread, then hand over.
+                val wav = runCatching { f.readBytes() }.getOrNull()
+                f.delete()
+                val m4a = wav?.let { Aac.fromWav(it, File(context.cacheDir, "tts-$id.m4a")) }
                 main.post {
-                    val sent = id == "link:$generation" && toLink { f.readBytes() to "audio/wav" }
-                    if (sent) used(PHONE)
-                    f.delete()
+                    val sent = wav != null && id == "link:$generation" && toLink { if (m4a != null) m4a to "audio/mp4" else wav to "audio/wav" }
+                    if (sent) used(PHONE) else Log.w(TAG, "rendered $id not sent: now link:$generation")
                 }
             }
         })
@@ -190,7 +196,10 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
     fun cacheStats(): Pair<Int, Long> = Sarvam.cacheStats(context.cacheDir)
 
     /** Forgets every kept sentence; returns how many. */
-    fun clearCache(): Int = Sarvam.clearCache(context.cacheDir)
+    fun clearCache(): Int {
+        File(context.cacheDir, CALL_AUDIO).deleteRecursively()
+        return Sarvam.clearCache(context.cacheDir)
+    }
 
     /** Fetches [texts] into the cache without speaking them, so they are instant later. Best effort, one at a time. */
     fun prefetch(texts: List<String>, lang: Lang, voice: String) {
@@ -215,8 +224,19 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         return runCatching { val (data, mime) = render(); l.sendAudio(data, mime) }.getOrDefault(false)
     }
 
+    /** A Sarvam WAV as it goes into a call: its m4a, encoded once and kept beside the cache (see [Aac]). */
+    private fun callAudio(f: File): Pair<ByteArray, String> {
+        val dir = File(context.cacheDir, CALL_AUDIO).apply { mkdirs() }
+        val m4a = File(dir, f.nameWithoutExtension + ".m4a")
+        if (m4a.length() > 0) return m4a.readBytes() to "audio/mp4"
+        val wav = f.readBytes()
+        val enc = Aac.fromWav(wav, File(dir, "${f.nameWithoutExtension}.tmp.m4a")) ?: return wav to "audio/wav"
+        runCatching { m4a.writeBytes(enc) }
+        return enc to "audio/mp4"
+    }
+
     private fun playSarvam(f: File): Boolean {
-        val ok = toLink { f.readBytes() to "audio/wav" } || runCatching { play { setDataSource(f.path) } }.onFailure { Log.w(TAG, "sarvam clip won't play", it) }.isSuccess
+        val ok = toLink { callAudio(f) } || runCatching { play { setDataSource(f.path) } }.onFailure { Log.w(TAG, "sarvam clip won't play", it) }.isSuccess
         if (ok) used(SARVAM)
         return ok
     }
@@ -252,6 +272,7 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
             val f = File(context.cacheDir, "tts-$id.wav")
             linkJobs[id] = f
             if (t.synthesizeToFile(text, null, f, id) == TextToSpeech.SUCCESS) return
+            Log.w(TAG, "phone voice can't render for the call: speaking on the speaker instead")
             linkJobs.remove(id)
         }
         t.speak(text, TextToSpeech.QUEUE_FLUSH, null, phraseId ?: "say")
@@ -296,6 +317,8 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
 
     companion object {
         const val DEVICE = "device"
+        /** Where the m4a copies of Sarvam sentences sent into calls are kept (cleared with the voice cache). */
+        private const val CALL_AUDIO = "call-m4a"
         const val PACK = "phrase pack"
         const val SARVAM = "Sarvam"
         const val PHONE = "phone voice"
