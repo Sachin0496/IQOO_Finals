@@ -73,7 +73,7 @@ class Isl private constructor(private val session: OrtSession, private val env: 
                 JSONArray(s).let { a -> List(a.length()) { a.getString(it) } }
             } ?: return null
             val env = OrtEnvironment.getEnvironment()
-            return crashGuarded(dir, model.name) {
+            return crashGuarded(context, dir, model.name) {
                 runCatching {
                     Isl(env.createSession(model.absolutePath, cpuOptions(2)), env, labels).also { m ->
                         m.classify(List(16) { FloatArray(V * 2) { k -> (k % 7).toFloat() } }) // warm-up inside the guard

@@ -1,6 +1,7 @@
 package app.mouna.app.engine
 
 import android.content.Context
+import android.util.Log
 import app.mouna.core.GazeModel
 import app.mouna.core.SwitchChannel
 import app.mouna.core.SwitchModel
@@ -16,19 +17,12 @@ class Store(context: Context) {
     private val dir = File(context.filesDir, "person").apply { mkdirs() }
     private val prefs = context.getSharedPreferences("mouna", Context.MODE_PRIVATE)
 
+    /** A stored string, or [default] if the preference is missing or of another type: a bad value must not stop the app starting. */
+    private fun text(key: String, default: String): String = runCatching { prefs.getString(key, default) }.getOrNull() ?: default
+
     data class Examples(val samples: MutableMap<String, MutableList<FloatArray>>, val negatives: MutableList<FloatArray>)
 
-    fun load(encoderId: String): Examples {
-        val f = File(dir, "examples-$encoderId.json")
-        if (!f.exists()) return Examples(LinkedHashMap(), mutableListOf())
-        return runCatching {
-            val o = JSONObject(f.readText())
-            val s = o.getJSONObject("samples")
-            val samples = LinkedHashMap<String, MutableList<FloatArray>>()
-            for (k in s.keys()) samples[k] = vectors(s.getJSONArray(k))
-            Examples(samples, vectors(o.getJSONArray("negatives")))
-        }.getOrElse { Examples(LinkedHashMap(), mutableListOf()) }
-    }
+    fun load(encoderId: String): Examples = loadExamples(dir, encoderId) { Log.e("Mouna", it) }
 
     fun save(encoderId: String, e: Examples) {
         val s = JSONObject()
@@ -46,7 +40,7 @@ class Store(context: Context) {
     }
 
     var pack: List<String>?
-        get() = prefs.getString("pack", null)?.split(",")?.filter { it.isNotBlank() }
+        get() = runCatching { prefs.getString("pack", null)?.split(",")?.filter { it.isNotBlank() } }.getOrNull()
         set(v) = prefs.edit().putString("pack", v?.joinToString(",")).apply()
 
     var lang: Lang
@@ -54,17 +48,21 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString("lang", v.name).apply()
 
     var voice: String
-        get() = prefs.getString("voice", "kavitha")!!
+        get() = text("voice", "kavitha")
         set(v) = prefs.edit().putString("voice", v).apply()
 
     var careful: Boolean
         get() = prefs.getBoolean("careful", false)
         set(v) = prefs.edit().putBoolean("careful", v).apply()
+    /** The Welcome screen has been read (Continue): only then is the camera permission asked for. */
+    var welcomed: Boolean
+        get() = prefs.getBoolean("welcomed", false)
+        set(v) = prefs.edit().putBoolean("welcomed", v).apply()
 
     var gaze: GazeModel?
-        get() = prefs.getString("gaze", null)?.let { s ->
-            s.split(",").map { it.toDouble() }.let { GazeModel(it[0], it[1], it[2]) }
-        }
+        get() = runCatching {
+            prefs.getString("gaze", null)?.let { s -> s.split(",").map { it.toDouble() }.let { GazeModel(it[0], it[1], it[2]) } }
+        }.getOrNull()
         set(v) = prefs.edit().putString("gaze", v?.let { "${it.center},${it.left},${it.right}" }).apply()
 
     var switchModel: SwitchModel?
@@ -101,24 +99,24 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString("custom", JSONArray(v.map { (id, t) -> JSONObject().put("id", id).put("text", t) }).toString()).apply()
 
     var listenWith: String
-        get() = prefs.getString("listenWith", "lips")!!
+        get() = text("listenWith", "lips")
         set(v) = prefs.edit().putString("listenWith", v).apply()
 
     // ---------------- calls ----------------
 
     /** Spoken in the intro on a call ("this is Ravi speaking through the Mouna app"). */
     var callerName: String
-        get() = prefs.getString("callerName", "")!!
+        get() = text("callerName", "")
         set(v) = prefs.edit().putString("callerName", v.trim()).apply()
 
     /** A Sarvam key typed in Settings; overrides the one built in from local.properties. Never logged. */
     var sarvamKey: String
-        get() = prefs.getString("sarvamKey", "")!!
+        get() = text("sarvamKey", "")
         set(v) = prefs.edit().putString("sarvamKey", v.trim()).apply()
 
     /** Which AudioAttributes usage carries Mouna's voice into a call: "voice" or "media" (see [CallUsage]). */
     var callUsage: String
-        get() = prefs.getString("callUsage", "voice")!!
+        get() = text("callUsage", "voice")
         set(v) = prefs.edit().putString("callUsage", v).apply()
 
     /** People the person calls most: name to number. */
@@ -130,12 +128,12 @@ class Store(context: Context) {
 
     /** The call relay typed in Settings; overrides the one built in from local.properties (blank means use that one). */
     var callServer: String
-        get() = prefs.getString("callServer", "")!!
+        get() = text("callServer", "")
         set(v) = prefs.edit().putString("callServer", v.trim()).apply()
 
     /** "phone" or "web" once the person has chosen; blank means pick by whether the phone has a SIM. */
     var callMode: String
-        get() = prefs.getString("callMode", "")!!
+        get() = text("callMode", "")
         set(v) = prefs.edit().putString("callMode", v).apply()
 
     /** People who keep a fixed web-call link ("Amma's link"): name to room id. */
@@ -156,8 +154,32 @@ class Store(context: Context) {
         set(v) = prefs.edit().putString("webTokens", JSONObject(v).toString()).apply()
 
     private fun json(xs: List<FloatArray>) = JSONArray(xs.map { x -> JSONArray(x.map { it.toDouble() }) })
-    private fun vectors(a: JSONArray): MutableList<FloatArray> = MutableList(a.length()) { i ->
-        val v = a.getJSONArray(i)
-        FloatArray(v.length()) { v.getDouble(it).toFloat() }
+
+    companion object {
+        /**
+         * The saved examples for [encoderId] in [dir]; none yet is an empty set. A file that won't parse is the person's
+         * hours of teaching: it is moved aside as `<name>.corrupt-<time>` for rescue, never overwritten by the next save.
+         */
+        fun loadExamples(dir: File, encoderId: String, nowMs: Long = System.currentTimeMillis(), log: (String) -> Unit = {}): Examples {
+            val f = File(dir, "examples-$encoderId.json")
+            if (!f.exists()) return Examples(LinkedHashMap(), mutableListOf())
+            return runCatching {
+                val o = JSONObject(f.readText())
+                val s = o.getJSONObject("samples")
+                val samples = LinkedHashMap<String, MutableList<FloatArray>>()
+                for (k in s.keys()) samples[k] = vectors(s.getJSONArray(k))
+                Examples(samples, vectors(o.getJSONArray("negatives")))
+            }.getOrElse {
+                val aside = File(dir, "${f.name}.corrupt-$nowMs")
+                val moved = runCatching { f.renameTo(aside) }.getOrDefault(false)
+                log("examples file unreadable (${it.javaClass.simpleName}); ${if (moved) "kept as ${aside.name}" else "could not be moved aside"}")
+                Examples(LinkedHashMap(), mutableListOf())
+            }
+        }
+
+        private fun vectors(a: JSONArray): MutableList<FloatArray> = MutableList(a.length()) { i ->
+            val v = a.getJSONArray(i)
+            FloatArray(v.length()) { v.getDouble(it).toFloat() }
+        }
     }
 }

@@ -7,6 +7,18 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextDecoration
+import kotlinx.coroutines.launch
+import app.mouna.app.Screen
 import androidx.compose.foundation.layout.aspectRatio
 import app.mouna.app.CallMode
 import app.mouna.app.engine.Qr
@@ -33,8 +45,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,6 +98,24 @@ fun callStatus(app: MounaApp): String {
     }
 }
 
+/** "On call with Amma" / "Calling Amma…": the big line of the in-call header. */
+@Composable
+private fun callTitle(app: MounaApp): String {
+    val who = app.callWith.ifEmpty { "call" }
+    return if (app.callState == CallState.DIALING) "Calling $who…" else "On call with $who"
+}
+
+/** "00:04 · ON SPEAKER": the small line under it. */
+@Composable
+private fun callClock(app: MounaApp): String {
+    val now by produceNow(app.callState)
+    return when (app.callState) {
+        CallState.ACTIVE -> Phones.clock(((now - app.callSince) / 1000).toInt().coerceAtLeast(0)) + " · ON SPEAKER"
+        CallState.DIALING -> "WAITING FOR AN ANSWER"
+        CallState.IDLE -> ""
+    }
+}
+
 @Composable
 private fun produceNow(key: Any) = remember(key) { mutableLongStateOf(SystemClock.elapsedRealtime()) }.also { s ->
     LaunchedEffect(key) {
@@ -104,7 +132,7 @@ private fun produceNow(key: Any) = remember(key) { mutableLongStateOf(SystemCloc
 @Composable
 private fun Dialer(app: MounaApp) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TabChip("Phone number", app.callMode == CallMode.PHONE) { app.chooseCallMode(CallMode.PHONE) }
             TabChip("Web link", app.callMode == CallMode.WEB) { app.chooseCallMode(CallMode.WEB) }
         }
@@ -134,7 +162,7 @@ private fun PhoneDialer(app: MounaApp) {
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).combinedClickable(onClick = { app.backspace() }, onLongClick = { app.setDial("", null) }),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.AutoMirrored.Rounded.Backspace, "Delete", tint = Ink.bone2) }
+                ) { Icon(MounaIcons.Backspace, "Delete", tint = Ink.bone2) }
             }
             Pad(app)
             Spacer(Modifier.height(12.dp))
@@ -214,7 +242,16 @@ private fun WebDialer(app: MounaApp) {
             }
             if (server.isEmpty()) {
                 Spacer(Modifier.height(14.dp))
-                Text("No call server is set. Add its address in Settings > Phone calls.", style = Type.body.copy(color = Ink.turmeric))
+                Text("Web calls aren't set up on this phone yet.", style = Type.body.copy(color = Ink.turmeric))
+                if (Stage.debug) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("No call server address. Add it in Settings › Advanced.", style = Type.mono.copy(fontSize = 12.sp))
+                    Text(
+                        "Open Advanced settings",
+                        style = Type.mono.copy(fontSize = 12.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline),
+                        modifier = Modifier.clickable { app.go(Screen.SETTINGS) }.padding(vertical = 8.dp),
+                    )
+                }
             }
             app.callNote?.let {
                 Spacer(Modifier.height(10.dp))
@@ -258,7 +295,9 @@ private fun WebRinging(app: MounaApp) {
             )
         }
         Spacer(Modifier.height(12.dp))
-        Text(app.webShortUrl.orEmpty(), style = Type.mono.copy(fontSize = 14.sp, color = Ink.bone), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        val (host, path) = linkLines(app.webShortUrl.orEmpty())
+        Text(host, style = Type.mono.copy(fontSize = linkHostSize(host.length).sp, color = Ink.bone2), textAlign = TextAlign.Center, softWrap = false, maxLines = 1, modifier = Modifier.fillMaxWidth())
+        if (path.isNotEmpty()) Text(path, style = Type.mono.copy(fontSize = 22.sp, color = Ink.bone), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BigButton("Share link", Tone.PRIMARY, Modifier.weight(1f)) {
@@ -270,10 +309,19 @@ private fun WebRinging(app: MounaApp) {
             if (!saved && app.webName.isNotBlank()) BigButton("Save as ${app.webName.trim()}'s link", Tone.NO, Modifier.weight(1f)) { app.saveWebFavourite() }
         }
         Spacer(Modifier.height(10.dp))
-        BigButton("Cancel", Tone.DANGER, Modifier.fillMaxWidth()) { app.hangUp() }
+        BigButton("Cancel", Tone.QUIET, Modifier.fillMaxWidth()) { app.hangUp() }
         Spacer(Modifier.height(16.dp))
     }
 }
+
+/** The join link as two lines: the server on one, "/c/ROOM" on the next, so it never breaks inside a domain name. */
+internal fun linkLines(short: String): Pair<String, String> {
+    val i = short.indexOf("/c/")
+    return if (i < 0) short to "" else short.substring(0, i) to short.substring(i)
+}
+
+/** Monospace size (sp) for a server name of [chars] characters to stay on one 320 dp line. */
+internal fun linkHostSize(chars: Int): Int = (310 / (0.6 * chars.coerceAtLeast(1))).toInt().coerceIn(10, 15)
 
 private val PAD = listOf("123", "456", "789", "*0#")
 
@@ -304,24 +352,30 @@ private fun Pad(app: MounaApp) {
 @Composable
 private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     val via by app.voice.via.collectAsState()
+    var hint by remember { mutableStateOf(false) }
+    LaunchedEffect(hint) { if (hint) { delay(2200); hint = false } }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 20.dp)) {
-            Text(callStatus(app), style = Type.phrase.copy(fontSize = 19.sp, lineHeight = 23.sp), maxLines = 2)
-            Text(
-                "voice: " + (via ?: "—") + (if (app.callState == CallState.DIALING) " · waiting for an answer" else ""),
-                style = Type.label.copy(letterSpacing = 0.sp),
-                modifier = Modifier.padding(top = 4.dp, bottom = if (app.usingWeb) 6.dp else 10.dp),
-            )
-            if (app.usingWeb) GuestMeter(app)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BigButton("Hang up", Tone.DANGER, Modifier.weight(1f)) { app.hangUp() }
-                BigButton("Intro", Tone.PRIMARY, Modifier.weight(1f)) { app.intro() }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(callTitle(app), style = Type.phrase.copy(fontSize = 20.sp, lineHeight = 24.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(callClock(app), style = Type.label.copy(fontSize = 12.sp, color = Ink.bone2), modifier = Modifier.padding(top = 2.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                HoldToHangUp(onHangUp = { app.hangUp() }, onEarlyRelease = { hint = true })
             }
+            if (Stage.debug) {
+                Text("voice: " + (via ?: "—"), style = Type.label.copy(letterSpacing = 0.sp), modifier = Modifier.padding(top = 4.dp))
+            }
+            Spacer(Modifier.height(10.dp))
+            if (app.usingWeb) GuestMeter(app)
+            BigButton("Introduce me", Tone.PRIMARY, Modifier.fillMaxWidth().height(54.dp)) { app.intro() }
+            if (hint) Text("Hold the button to hang up", style = Type.body.copy(color = Ink.turmeric, fontSize = 13.sp), modifier = Modifier.padding(top = 8.dp))
             app.callNote?.let { Text(it, style = Type.body.copy(color = Ink.turmeric, fontSize = 13.sp), modifier = Modifier.padding(top = 8.dp)) }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TabChip("Phrases", app.callTab == CallTab.PHRASES) { app.chooseCallTab(CallTab.PHRASES) }
-                TabChip("Mouth · Sign", app.callTab == CallTab.MOUTH) { app.chooseCallTab(CallTab.MOUTH) }
+                TabChip("Lips · Sign", app.callTab == CallTab.MOUTH) { app.chooseCallTab(CallTab.MOUTH) }
             }
             Spacer(Modifier.height(10.dp))
         }
@@ -331,28 +385,75 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     }
 }
 
-/** "Guest is speaking": a bar that follows the other person's voice, so the person can see they are being heard. */
+/** How long the button must be held to end a call: long enough that a brush or a stray tap does nothing. */
+private const val HOLD_MS = 600
+
+/** A small, separate hang-up: it fills while held and only ends the call when full. A quick tap just explains itself. */
+@Composable
+private fun HoldToHangUp(onHangUp: () -> Unit, onEarlyRelease: () -> Unit) {
+    val fill = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    Box(
+        Modifier
+            .height(48.dp)
+            .clip(CircleShape)
+            .border(1.dp, Ink.kumkum, CircleShape)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    val job = scope.launch {
+                        fill.animateTo(1f, tween(HOLD_MS, easing = LinearEasing))
+                        onHangUp()
+                    }
+                    tryAwaitRelease()
+                    if (fill.value < 1f) {
+                        job.cancel()
+                        scope.launch { fill.snapTo(0f) }
+                        onEarlyRelease()
+                    }
+                })
+            }
+            .padding(horizontal = 18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.matchParentSize().fillMaxHeight()) {
+            Box(Modifier.fillMaxHeight().fillMaxWidth(fill.value).background(Ink.kumkum.copy(alpha = 0.55f)))
+        }
+        Text("Hang up", style = Type.button.copy(fontSize = 15.sp, color = Ink.bone))
+    }
+}
+
+/** "Amma is speaking": a bar that follows the other person's voice, so the person can see they are being heard. */
 @Composable
 private fun GuestMeter(app: MounaApp) {
     val level by app.guestLevel.collectAsState()
     val phase by app.webPhase.collectAsState()
     val speaking = level > 0.08f
+    val who = app.callWith.takeIf { it.isNotBlank() && it != "guest" }
     Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(if (speaking) Ink.turmeric else Ink.rule2))
         Spacer(Modifier.width(8.dp))
         Text(
             when {
                 phase == WebPhase.RECONNECTING -> "Reconnecting…"
-                speaking -> "Guest is speaking"
-                else -> "Guest is listening"
+                speaking -> guestLine(who, true)
+                else -> guestLine(who, false)
             },
-            style = Type.label.copy(letterSpacing = 0.sp, color = if (speaking) Ink.turmeric else Ink.mute),
-            modifier = Modifier.width(150.dp),
+            style = Type.label.copy(letterSpacing = 0.sp, fontSize = 12.sp, color = if (speaking) Ink.turmeric else Ink.bone2),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(0.6f),
         )
-        Box(Modifier.weight(1f).height(6.dp).clip(CircleShape).background(Ink.rule)) {
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(0.4f).height(6.dp).clip(CircleShape).background(Ink.rule)) {
             Box(Modifier.fillMaxHeight().fillMaxWidth(level.coerceIn(0f, 1f)).background(Ink.turmeric))
         }
     }
+}
+
+/** "Amma is speaking" by name, "They're speaking" when the call has no name. */
+internal fun guestLine(name: String?, speaking: Boolean): String {
+    val what = if (speaking) "speaking" else "listening"
+    return if (name.isNullOrBlank()) "They're $what" else "$name is $what"
 }
 
 @Composable
@@ -374,25 +475,38 @@ private fun Phrases(app: MounaApp) {
     var text by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp)) {
         CallPhrases.quick.chunked(2).forEach { pair ->
-            Row(Modifier.padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Both buttons of a row are as tall as the taller one, so a long Tamil phrase never makes a ragged row.
+            Row(Modifier.padding(bottom = 10.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 pair.forEach { q ->
                     val tone = when (q.id) {
                         "yes" -> Ink.leaf
                         "no" -> Ink.kumkum
                         else -> Ink.rule2
                     }
+                    val say = q.say(app.lang)
+                    val size = CallPhrases.quickSize(say)
                     Box(
                         Modifier
                             .weight(1f)
-                            .height(68.dp)
+                            .fillMaxHeight()
+                            .heightIn(min = 68.dp)
                             .clip(RoundedCornerShape(22.dp))
                             .background(if (q.id == "yes" || q.id == "no") tone.copy(alpha = 0.14f) else Ink.card)
                             .border(1.dp, tone, RoundedCornerShape(22.dp))
                             .clickable { app.quick(q) }
-                            .padding(horizontal = 10.dp),
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center,
-                    ) { Text(q.say(app.lang), style = Type.phrase.copy(fontSize = 19.sp, lineHeight = 22.sp), textAlign = TextAlign.Center, maxLines = 2) }
+                    ) {
+                        Text(
+                            say,
+                            style = Type.phrase.copy(fontSize = size.sp, lineHeight = (size * 1.25f).sp),
+                            textAlign = TextAlign.Center,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
         Spacer(Modifier.height(6.dp))

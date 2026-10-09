@@ -21,6 +21,8 @@ import app.mouna.app.engine.Isl
 import app.mouna.app.engine.Listener
 import app.mouna.app.engine.Voice
 import app.mouna.app.engine.VoiceMatcher
+import app.mouna.app.engine.CallUsage
+import app.mouna.app.ui.Stage
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.Executors
@@ -52,6 +54,19 @@ sealed interface Prompt {
 enum class Channel { LIPS, VOICE, SIGN }
 
 data class Said(val phrase: Phrase?, val text: String, val via: String)
+
+/**
+ * How long Mouna's last words stay on screen. Long enough to read (at least 4 s), short enough that a stale line never
+ * greets the next person or the next call. Ask keeps its answer until "Ask again" (it is the whole screen there).
+ */
+object SaidRules {
+    const val SHOW_MS = 8_000L
+    fun fades(screen: Screen) = screen != Screen.ASK
+    fun expired(shownAt: Long, now: Long, screen: Screen) = fades(screen) && now - shownAt >= SHOW_MS
+}
+
+/** Nod and double blink answer a prompt only after it has been on screen this long, so a movement right after mouthing can't. */
+const val GESTURE_ARM_MS = 1_000L
 
 /**
  * The app's state and the rules that connect the engine's events to screens. Lives as long as the activity.
@@ -87,8 +102,13 @@ class MounaApp(
         private set
     var hearingBusy by mutableStateOf(false)
         private set
-    var voiceStatus by mutableStateOf(hearing.status)
+    /** What the voice model is doing, in plain words: "Getting ready…" while it loads, the model's own status after. */
+    var voiceStatus by mutableStateOf(IDLE_VOICE)
         private set
+    /** True from the first request for the voice model until it has loaded (or failed). */
+    var voiceLoading by mutableStateOf(false)
+        private set
+    private var hearingRequested = false
     /** Voice teaching: the phrase whose next utterance becomes a template. */
     var voiceTeaching by mutableStateOf<String?>(null)
         private set
@@ -138,15 +158,9 @@ class MounaApp(
     /** The transport of the current call (or the last one); both report here but only this one counts. */
     private var link: CallLink = carrier
     /** Phone or web: the person's choice, else web when there is no SIM to call from. */
-    var callMode by mutableStateOf(
-        when (store.callMode) {
-            "phone" -> CallMode.PHONE
-            "web" -> CallMode.WEB
-            else -> if (hasSim()) CallMode.PHONE else CallMode.WEB
-        },
-    )
-        private set
     val simReady = hasSim()
+    var callMode by mutableStateOf(storedCallMode())
+        private set
     /** The name typed for the person a web link is for ("Amma"); empty is fine. */
     var webName by mutableStateOf("")
         private set
@@ -160,6 +174,12 @@ class MounaApp(
     val webJoinUrl get() = web.joinUrl
     val webShortUrl get() = web.shortUrl
 
+    private val encoderPoll = object : Runnable {
+        override fun run() {
+            if (engine.knowledge.value.ready) ensureHearing() else main.postDelayed(this, 1000)
+        }
+    }
+
     init {
         web.server = ::callServer
         web.callerName = { callerName }
@@ -168,15 +188,33 @@ class MounaApp(
         for (l in listOf(carrier, web)) {
             l.onState = { st -> if (l === link) onLinkState(st) }
         }
+        // Whisper competes with the NPU encoder for the CPU at start-up, so it loads only when it is needed: the Voice
+        // channel (chosen now or restored from last time), voice teaching, or once the encoder is ready.
+        if (channel == Channel.VOICE) ensureHearing() else waitForEncoder()
+    }
+
+    /** Loads the voice model once, off the main thread. */
+    private fun ensureHearing() {
+        if (hearingRequested) return
+        hearingRequested = true
+        voiceLoading = true
+        voiceStatus = LOADING_VOICE
         asr.execute {
             hearing.load()
-            main.post { voiceStatus = hearing.status }
+            main.post {
+                voiceStatus = hearing.status
+                voiceLoading = false
+            }
         }
     }
 
+    private fun waitForEncoder() = main.postDelayed(encoderPoll, 1000)
+
     private fun onLinkState(st: CallState) {
+        val before = callState
         callState = st
         voice.callMode = st != CallState.IDLE
+        if ((before == CallState.IDLE) != (st == CallState.IDLE)) showSaid(null) // a call starts or ends: its words are its own
         if (st == CallState.ACTIVE) callSince = SystemClock.elapsedRealtime()
         if (st == CallState.IDLE) {
             callSince = 0L
@@ -191,6 +229,18 @@ class MounaApp(
         private set
     var said by mutableStateOf<Said?>(null)
         private set
+    private var saidAt = 0L
+    private val expireSaid = Runnable { if (said != null && SaidRules.expired(saidAt, SystemClock.elapsedRealtime(), screen)) said = null }
+
+    /** The one place [said] changes: a new line restarts the clock, and every line leaves the screen by itself. */
+    private fun showSaid(s: Said?) {
+        said = s
+        main.removeCallbacks(expireSaid)
+        if (s != null) {
+            saidAt = SystemClock.elapsedRealtime()
+            main.postDelayed(expireSaid, SaidRules.SHOW_MS)
+        }
+    }
     var lang by mutableStateOf(store.lang)
         private set
     var voiceId by mutableStateOf(store.voice)
@@ -215,6 +265,7 @@ class MounaApp(
     private fun onSpeakSurface() = screen == Screen.SPEAK || (screen == Screen.CALL && callTab == CallTab.MOUTH)
 
     fun go(s: Screen) {
+        if (s != screen) showSaid(null) // what was said belongs to the screen it was said on
         screen = s
         prompt = null
         voiceTeaching = null
@@ -226,17 +277,36 @@ class MounaApp(
     private fun applyChannel() {
         val speak = onSpeakSurface() && prompt == null
         engine.listen(if (speak && channel == Channel.LIPS) Listen.SPEAK else Listen.PAUSED)
-        engine.gesturesOn(prompt != null || screen == Screen.ASK)
+        armGestures(prompt != null || screen == Screen.ASK)
         engine.signing(onSpeakSurface() && channel == Channel.SIGN)
         val mic = ((speak && channel == Channel.VOICE) || voiceTeaching != null) && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
     }
 
+    private var gesturesArmed = false
+    private val armNow = Runnable {
+        gesturesArmed = true
+        engine.gesturesOn(true)
+    }
+
+    /** Nod and double blink answer only after a prompt has been up for [GESTURE_ARM_MS]; they switch off the moment it goes. */
+    private fun armGestures(want: Boolean) {
+        if (!want) {
+            main.removeCallbacks(armNow)
+            gesturesArmed = false
+            engine.gesturesOn(false)
+        } else if (!gesturesArmed) {
+            main.removeCallbacks(armNow)
+            main.postDelayed(armNow, GESTURE_ARM_MS)
+        }
+    }
+
     fun chooseChannel(c: Channel) {
         if (c == Channel.VOICE) {
             askMic { granted ->
                 if (!granted) return@askMic
+                ensureHearing()
                 channel = c
                 store.listenWith = "voice"
                 applyChannel()
@@ -261,7 +331,7 @@ class MounaApp(
         }
         if (!onSpeakSurface() || prompt != null || text.isBlank()) return
         val ranked = VoiceMatcher.rank(text, voiceCandidates())
-        android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
+        if (Stage.debug) android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
         val best = ranked.firstOrNull()
         val second = ranked.getOrNull(1)?.score ?: 0.0
         lastHeard = text
@@ -306,6 +376,7 @@ class MounaApp(
     fun teachVoice(id: String) {
         askMic { granted ->
             if (!granted) return@askMic
+            ensureHearing()
             heard = null
             voiceTeaching = id
             applyChannel()
@@ -320,7 +391,7 @@ class MounaApp(
     /** A sign: speak a clear winner, otherwise offer the likeliest words. Words are spoken by the phone's voice. */
     private fun signed(g: List<Isl.Guess>) {
         if (!onSpeakSurface() || prompt != null || channel != Channel.SIGN || g.isEmpty()) return
-        android.util.Log.i("Mouna", "signed -> " + g.take(3).joinToString { "${it.word} %.2f".format(it.p) })
+        if (Stage.debug) android.util.Log.i("Mouna", "signed -> " + g.take(3).joinToString { "${it.word} %.2f".format(it.p) })
         val best = g[0]
         val second = g.getOrNull(1)?.p ?: 0f
         if (best.p >= SIGN_SPEAK && best.p - second >= SIGN_MARGIN) {
@@ -334,7 +405,7 @@ class MounaApp(
     fun sayWord(word: String) {
         prompt = null
         voice.say(null, word, Lang.EN, Voice.DEVICE)
-        said = Said(null, word.replaceFirstChar { it.uppercase() }, "sign")
+        showSaid(Said(null, word.replaceFirstChar { it.uppercase() }, "sign"))
         applyChannel()
     }
 
@@ -342,7 +413,7 @@ class MounaApp(
     fun sayHeard(text: String) {
         prompt = null
         voice.say(null, text, Lang.EN, Voice.DEVICE)
-        said = Said(null, text, "voice")
+        showSaid(Said(null, text, "voice"))
         applyChannel()
     }
 
@@ -384,7 +455,7 @@ class MounaApp(
             return
         }
         if (d.kind == DecisionKind.ASK && d.options.isEmpty()) {
-            go(Screen.ASK)
+            if (!onCall) go(Screen.ASK) // never walk away from a call
             return
         }
         lastHeard = null
@@ -406,7 +477,7 @@ class MounaApp(
         if (lastHeard == null) engine.noneOfThese()
         lastHeard = null
         close()
-        said = Said(null, "Not one of my phrases", "none")
+        showSaid(Said(null, "Not one of my phrases", "none"))
     }
 
     /** "No" to a confirm, or "Wrong?" after speaking: show every phrase. */
@@ -426,14 +497,14 @@ class MounaApp(
         val p = phrases[id]
         val text = p?.say(lang) ?: id
         voice.say(id, text, lang, voiceId)
-        said = Said(p, text, via)
+        showSaid(Said(p, text, via))
     }
 
     fun speakAsk(node: AskNode) {
         val p = node.phrase?.let { phrases[it] }
         val text = p?.say(lang) ?: node.say?.get(lang.tag) ?: node.say?.get("en") ?: node.ask[lang.tag] ?: node.id
         voice.say(node.phrase, text, lang, voiceId)
-        said = Said(p, text, "ask")
+        showSaid(Said(p, text, "ask"))
     }
 
     /** A "yes" from the body: the personal switch, a nod or a double blink ([via]). */
@@ -444,7 +515,8 @@ class MounaApp(
         if (!onSpeakSurface()) return
         when {
             // Idle: the person's own movement means "I need something" -> the yes/no questions.
-            pr == null -> if (via == "switch") go(Screen.ASK)
+            // Only from Speak, and never on a call: the call screen must stay where it is.
+            pr == null -> if (via == "switch" && screen == Screen.SPEAK && !onCall) go(Screen.ASK)
             pr is Prompt.Heard -> sayHeard(pr.text)
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.CONFIRM -> choose(pr.d.options[0], via)
             // RESCUE: the switch confirms the side the eyes are on (the demo's "look left, raise an eyebrow").
@@ -491,6 +563,65 @@ class MounaApp(
         store.voice = id
     }
 
+    /**
+     * Settings: plays a short sample of the chosen voice. Never on a call (it would go to the other person), and it is
+     * not "said": nothing appears on the Speak screen.
+     */
+    fun hearVoice(): Boolean {
+        if (onCall) return false
+        val p = phrases["thank_you"]
+        voice.say("thank_you", p?.say(lang) ?: "Thank you", lang, voiceId)
+        return true
+    }
+
+    /**
+     * "Start over with a new person": forgets everything this phone learned or was told, in the engine, the store and
+     * here. The store is cleared on this thread first so the state read back below is already the empty one.
+     */
+    fun startOver() {
+        if (onCall) return
+        for ((id, _) in store.custom) engine.removeCustom(id) // the engine keeps its own copy of the phrase list
+        store.wipe()
+        voice.clearCache() // typed sentences are personal too
+        voice.callUsage = CallUsage.VOICE
+        engine.wipe() // the learner and the examples (async: it clears the store again, which is already empty)
+        reloadFromStore()
+    }
+
+    /** Re-reads every piece of state this class keeps from the store (after a wipe); screens follow because they are states. */
+    fun reloadFromStore() {
+        phrases = engine.phrases
+        voiceTemplates = store.voiceTemplates
+        favourites = store.favourites
+        webFavourites = store.webFavourites
+        callerName = store.callerName
+        lang = store.lang
+        voiceId = store.voice
+        careful = store.careful
+        channel = runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
+        callMode = storedCallMode()
+        callServerNow = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
+        lastTeach = null
+        teachSeq = 0
+        heard = null
+        lastHeard = null
+        voiceTeaching = null
+        prompt = null
+        webName = ""
+        dialNumber = ""
+        dialName = null
+        callNote = null
+        showSaid(null)
+        engine.gazeOn(false)
+        applyChannel()
+    }
+
+    private fun storedCallMode() = when (store.callMode) {
+        "phone" -> CallMode.PHONE
+        "web" -> CallMode.WEB
+        else -> if (simReady) CallMode.PHONE else CallMode.WEB
+    }
+
     fun chooseCareful(on: Boolean) {
         careful = on
         store.careful = on
@@ -498,6 +629,7 @@ class MounaApp(
 
     /** QA and rehearsal: show what the person would see for a decision of [kind], with phrases from their pack. */
     fun preview(kind: DecisionKind) {
+        if (onCall) return // a preview must never take over a call
         val pack = engine.knowledge.value.pack
         val n = when (kind) {
             DecisionKind.CONFIRM -> 1
@@ -544,6 +676,7 @@ class MounaApp(
         if (onCall) return // a second tap while the first call is dialing
         val number = Phones.normalise(dialNumber) ?: return
         callNote = null
+        showSaid(null)
         askCall { allowed ->
             if (!allowed) {
                 callNote = "Allow Mouna to make phone calls to call from here."
@@ -569,13 +702,17 @@ class MounaApp(
 
     // ---------------- web calls ----------------
 
+    /** The relay's address as a state, so the Call screen follows Settings (or adb) the moment it changes. */
+    private var callServerNow by mutableStateOf(Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER }))
+
     /** The call relay: Settings wins over the one built in from local.properties; blank means web calls are off. */
-    fun callServer(): String = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
+    fun callServer(): String = callServerNow
 
     /** Saves the relay's address; returns why not (an http:// address cannot be used) or null when it is saved. */
     fun chooseCallServer(url: String): String? {
         if (Rooms.isCleartext(url)) return Rooms.HTTPS_ONLY
         store.callServer = url
+        callServerNow = Rooms.base(url.ifBlank { BuildConfig.CALL_SERVER })
         return null
     }
 
@@ -596,6 +733,7 @@ class MounaApp(
     fun startWebCall(room: String? = null, who: String = webName.trim()) {
         if (onCall) return
         callNote = null
+        showSaid(null)
         link = web
         voice.link = web
         callWith = who.ifEmpty { "guest" }
@@ -663,15 +801,18 @@ class MounaApp(
 
     private fun sayCall(packId: String?, text: String, l: Lang, via: String, voiceId: String = this.voiceId) {
         voice.say(packId, text, l, voiceId)
-        said = Said(null, text, via)
+        showSaid(Said(null, text, via))
     }
 
     fun clearSaid() {
-        said = null
+        showSaid(null)
     }
 
     /** The screen is going away (the activity is destroyed): end the call so the room, the speaker and the volume are given back. */
     fun shutdown() {
+        main.removeCallbacks(encoderPoll)
+        main.removeCallbacks(expireSaid)
+        main.removeCallbacks(armNow)
         carrier.shutdown()
         web.shutdown()
         listener.stop()
@@ -680,6 +821,9 @@ class MounaApp(
     }
 
     companion object {
+        const val IDLE_VOICE = "Starts when you first use Voice"
+        const val LOADING_VOICE = "Getting ready…"
+
         /** ISL: speak only a clear winner (model probability, not a measured accuracy). */
         const val SIGN_SPEAK = 0.6f
         const val SIGN_MARGIN = 0.25f

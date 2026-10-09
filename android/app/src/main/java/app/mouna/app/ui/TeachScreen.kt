@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import app.mouna.app.engine.PhrasePack
@@ -60,6 +61,7 @@ private const val NEGATIVES_WANTED = 5 // measured: 5 "none of these" lifts taug
 @Composable
 fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     var session by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf<String?>(null) } // the phrase being confirmed for removal
     val busy = k.listen == Listen.TEACH || k.listen == Listen.NEGATIVE
     val taught = app.lastTeach
 
@@ -75,16 +77,16 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Text("Teach Mouna", style = Type.title)
         Spacer(Modifier.height(6.dp))
-        Text("Mouth each phrase the way you'll use it. Any language works. Mouna asks only for what it still needs.", style = Type.body)
+        Text("Mouth each phrase the way you’ll use it. Any language works. Mouna asks only for what it still needs.", style = Type.body)
         Spacer(Modifier.height(18.dp))
 
         Card {
             Column {
-                CameraCard(app.engine.live, bind, Modifier.fillMaxWidth().height(210.dp)) { live ->
+                CameraCard(app.engine.live, bind, Modifier.fillMaxWidth().height(210.dp)) { st ->
                     Box(Modifier.align(Alignment.TopStart).padding(12.dp)) {
                         when {
-                            !live.face -> Pill("Looking for your face")
-                            busy && live.hearing -> Pill("Hearing", Ink.turmeric, pulse = true)
+                            !st.face -> Pill("Looking for your face")
+                            busy && st.hearing -> Pill("Reading your lips…", Ink.turmeric, pulse = true)
                             busy -> Pill("Mouth it now", Ink.turmeric, pulse = true)
                             else -> Pill("Ready", Ink.leaf)
                         }
@@ -110,7 +112,7 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                         Spacer(Modifier.width(14.dp))
                         Column {
                             Text(p?.say(app.lang) ?: next.intent, style = Type.phrase.copy(fontSize = 22.sp))
-                            Text(reason(next.reason, app), style = Type.mono.copy(fontSize = 12.sp, color = Ink.turmeric))
+                            Text(reason(next.reason, app), style = reasonStyle)
                         }
                     }
                 }
@@ -123,7 +125,7 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                             true -> "Recognised “$name” before learning it ✓"
                             false -> "Missed “$name” that time; learned it anyway."
                         },
-                        style = Type.mono.copy(fontSize = 12.sp, color = if (t.check == false) Ink.kumkum else Ink.leaf),
+                        style = if (t.check == false) taughtMiss else taughtOk,
                     )
                 }
                 Spacer(Modifier.height(16.dp))
@@ -158,13 +160,17 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                             )
                             Text(
                                 "Rephrase",
-                                style = Type.mono.copy(color = Ink.turmeric, fontSize = 12.sp),
-                                modifier = Modifier.clickable { app.engine.reteach(if ((k.counts[pr.a] ?: 0) <= (k.counts[pr.b] ?: 0)) pr.a else pr.b) },
+                                style = reasonStyle,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .clickable { app.engine.reteach(if ((k.counts[pr.a] ?: 0) <= (k.counts[pr.b] ?: 0)) pr.a else pr.b) }
+                                    .padding(horizontal = 8.dp)
+                                    .wrapContentHeight(Alignment.CenterVertically),
                             )
                         }
                     }
                     Spacer(Modifier.height(4.dp))
-                    Text("Red pairs get mixed up. Mouna asks for more of these, or tap Rephrase and mouth that one differently.", style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute))
+                    Text("Red pairs get mixed up. Mouna asks for more of these, or tap Rephrase and mouth that one differently.", style = Type.hint)
                 }
             }
         }
@@ -186,7 +192,7 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("So Mouna says “not taught” instead of guessing.", style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute))
+                Text("So Mouna says “not taught” instead of guessing.", style = Type.hint)
             }
         }
 
@@ -202,14 +208,34 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                 SectionLabel("Your phrases")
                 k.pack.mapNotNull { app.phrases[it] }.forEach { p ->
                     val id = p.id
-                    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(iconFor(id), null, tint = if (p.urgent) Ink.kumkum else Ink.bone2, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(p.say(app.lang), style = Type.body.copy(color = Ink.bone), modifier = Modifier.weight(1f))
-                        Dots(minOf(k.counts[id] ?: 0, CoreConstants.MAX_SHOTS))
-                        Spacer(Modifier.width(6.dp))
-                        IconButtonSoft(Icons.Rounded.Remove, "Remove") {
-                            if (PhrasePack.isCustom(id)) app.removeCustom(id) else app.engine.setPack(k.pack - id)
+                    val n = k.counts[id] ?: 0
+                    if (asking == id) {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Remove “${p.say(app.lang)}” and what Mouna learned for it?",
+                                style = Type.body.copy(color = Ink.bone, fontSize = 14.sp),
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            ChipButton("Keep", Ink.bone2) { asking = null }
+                            Spacer(Modifier.width(6.dp))
+                            ChipButton("Remove", Ink.kumkumInk) {
+                                asking = null
+                                if (PhrasePack.isCustom(id)) app.removeCustom(id) else app.engine.setPack(k.pack - id)
+                            }
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(iconFor(id), null, tint = if (p.urgent) Ink.kumkumInk else Ink.bone2, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(p.say(app.lang), style = Type.body.copy(color = Ink.bone), modifier = Modifier.weight(1f))
+                            Dots(minOf(n, CoreConstants.MAX_SHOTS))
+                            Spacer(Modifier.width(6.dp))
+                            IconButtonSoft(MounaIcons.Remove, "Remove ${p.say(app.lang)}") {
+                                // Removing forgets the examples too, so ask first unless nothing was taught.
+                                if (n > 0 || PhrasePack.isCustom(id)) asking = id
+                                else app.engine.setPack(k.pack - id)
+                            }
                         }
                     }
                 }
@@ -221,15 +247,16 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                         more.forEach { id ->
                             Row(
                                 Modifier
+                                    .heightIn(min = 48.dp)
                                     .clip(CircleShape)
                                     .border(1.dp, Ink.rule2, CircleShape)
                                     .clickable { app.engine.setPack(k.pack + id) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    .padding(horizontal = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(Icons.Rounded.Add, null, tint = Ink.bone2, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text(app.phrases[id]?.say(app.lang) ?: id, style = Type.body.copy(fontSize = 13.sp, color = Ink.bone2))
+                                Text(app.phrases[id]?.say(app.lang) ?: id, style = chipText)
                             }
                         }
                     }
@@ -239,7 +266,7 @@ fun TeachScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text(
             "Examples stay on this phone. Nothing is uploaded; no video is kept.",
-            style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute, fontStyle = FontStyle.Italic),
+            style = footnote,
         )
         Spacer(Modifier.height(24.dp))
     }
@@ -260,7 +287,7 @@ private fun OwnWords(app: MounaApp) {
     Card {
         Column {
             SectionLabel("Your own words")
-            Text("Anything you want to be able to say. Mouna will say it in your phone's voice.", style = Type.body.copy(fontSize = 13.sp))
+            Text("Anything you want to be able to say. Mouna will say it in your phone’s voice.", style = Type.body.copy(fontSize = 13.sp))
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -287,45 +314,67 @@ private fun OwnWords(app: MounaApp) {
     }
 }
 
+private val taughtOk = Type.mono.copy(fontSize = 13.sp, color = Ink.leaf)
+private val taughtMiss = Type.mono.copy(fontSize = 13.sp, color = Ink.kumkumInk)
+private val reasonStyle = Type.mono.copy(fontSize = 13.sp, color = Ink.turmeric)
+private val chipText = Type.body.copy(fontSize = 14.sp, color = Ink.bone2)
+private val footnote = Type.hint.copy(fontStyle = FontStyle.Italic)
+
+/** A small outlined text button, 48dp tall. */
+@Composable
+private fun ChipButton(text: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
+    Text(
+        text,
+        style = Type.mono.copy(color = color, fontSize = 13.sp),
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(CircleShape)
+            .border(1.dp, Ink.rule2, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp)
+            .wrapContentHeight(Alignment.CenterVertically),
+    )
+}
+
 /**
- * Voice: say each phrase a couple of times. Mouna keeps what it heard, so a soft or slurred "water" still finds water
- * next time. No model is trained.
+ * Speech recognition, for someone who can still say a little: say each phrase a couple of times. Mouna keeps the
+ * words it understood (not the audio), so a soft or slurred "water" still finds water next time. No model is trained.
  */
 @Composable
 private fun VoiceCard(app: MounaApp, pack: List<String>) {
+    app.voiceStatus // re-read "ready" when the model finishes loading
     Card {
         Column {
-            SectionLabel("Your voice")
+            SectionLabel("Speech recognition")
             Text(
-                if (app.hearing.ready) "If you can speak a little, even softly or unclearly, say each phrase twice." else "Voice model not on this phone yet. ${app.voiceStatus}",
-                style = Type.body.copy(fontSize = 13.sp),
+                if (app.hearing.ready) "If you can say a few words, even softly or unclearly, say each phrase twice. Mouna learns how you sound; it keeps the words it understood, not the audio."
+                else "Speech recognition isn’t available on this phone.",
+                style = Type.body.copy(fontSize = 14.sp),
             )
-            if (!app.hearing.ready) return@Column
+            if (!app.hearing.ready) {
+                if (Stage.debug) Text(app.voiceStatus, style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute))
+                return@Column
+            }
             Spacer(Modifier.height(8.dp))
             pack.mapNotNull { app.phrases[it] }.forEach { p ->
                 val teaching = app.voiceTeaching == p.id
-                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(iconFor(p.id), null, tint = Ink.bone2, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(p.say(app.lang), style = Type.body.copy(color = Ink.bone, fontSize = 14.sp))
-                        app.voiceTemplates[p.id]?.lastOrNull()?.let { Text("heard: “$it”", style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute)) }
+                        app.voiceTemplates[p.id]?.lastOrNull()?.let { Text("heard: “$it”", style = Type.mono.copy(fontSize = 12.sp, color = Ink.mute), maxLines = 1) }
                     }
                     Dots(minOf(app.voiceTemplates[p.id]?.size ?: 0, 3), 3, Ink.leaf)
                     Spacer(Modifier.width(8.dp))
-                    Text(
+                    ChipButton(
                         when {
                             teaching && app.hearingBusy -> "…"
                             teaching -> "Say it"
                             else -> "Record"
                         },
-                        style = Type.mono.copy(color = if (teaching) Ink.turmeric else Ink.bone2, fontSize = 13.sp),
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .border(1.dp, if (teaching) Ink.turmeric else Ink.rule2, CircleShape)
-                            .clickable { if (teaching) app.stopVoiceTeaching() else app.teachVoice(p.id) }
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
-                    )
+                        if (teaching) Ink.turmeric else Ink.bone2,
+                    ) { if (teaching) app.stopVoiceTeaching() else app.teachVoice(p.id) }
                 }
             }
         }

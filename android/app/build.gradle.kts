@@ -41,7 +41,18 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true; buildConfig = true }
     androidResources { noCompress += listOf("task", "onnx", "bin") }
-    packaging { jniLibs { useLegacyPackaging = true } } // QNN loads its HTP skel libs from the native lib dir
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true // QNN loads its HTP skel libs from the native lib dir
+            // Only the Hexagon generations we ship to: V75 (SM8650, OnePlus 13R) and V81 (SM8850, iQOO 15). The others
+            // (and the DSP / GPU backends) are ~85 MB of dead weight; libQnnHtp, libQnnSystem and libQnnHtpPrepare
+            // (the on-device compile fallback) stay.
+            excludes += listOf(
+                "**/libQnnHtpV68*", "**/libQnnHtpV69*", "**/libQnnHtpV73*", "**/libQnnHtpV79*",
+                "**/libQnnDspV66*", "**/libQnnDsp.so", "**/libQnnGpu.so",
+            )
+        }
+    }
 }
 
 // The face landmarker model is vendored once by the Lab (lab/scripts/vendor.mjs); reuse it.
@@ -106,7 +117,6 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.animation:animation")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")

@@ -4,7 +4,8 @@ package app.mouna.app.engine
  * What Mouna says on a phone call: an introduction, quick phrases for the common turns of a conversation, and the
  * helpers for numbers and typed words. Pure (no Android types) so it is unit-tested on the JVM.
  *
- * Hindi and Tamil are written neutrally (Hindi avoids gendered verbs) but have not been reviewed by a native speaker.
+ * Hindi and Tamil are written neutrally (Hindi avoids gendered verbs) but have not been reviewed by a native speaker:
+ * a native check is still due, above all for "Bye" in Hindi (अलविदा is formal) and the Tamil "I'll message you".
  */
 data class QuickPhrase(
     val id: String,
@@ -22,7 +23,7 @@ object CallPhrases {
         QuickPhrase("repeat", null, mapOf(Lang.EN to "Please repeat", Lang.HI to "कृपया दोबारा बोलिए", Lang.TA to "தயவுசெய்து மீண்டும் சொல்லுங்கள்")),
         QuickPhrase("wait", null, mapOf(Lang.EN to "Wait a moment", Lang.HI to "एक मिनट रुकिए", Lang.TA to "ஒரு நிமிடம் பொறுங்கள்")),
         QuickPhrase("slow", null, mapOf(Lang.EN to "Speak slowly please", Lang.HI to "कृपया धीरे बोलिए", Lang.TA to "தயவுசெய்து மெதுவாகப் பேசுங்கள்")),
-        QuickPhrase("message", null, mapOf(Lang.EN to "I'll message you", Lang.HI to "बाद में मैसेज पर बात करते हैं", Lang.TA to "நான் உங்களுக்கு மெசேஜ் செய்கிறேன்")),
+        QuickPhrase("message", null, mapOf(Lang.EN to "I'll message you", Lang.HI to "बाद में मैसेज पर बात करते हैं", Lang.TA to "உங்களுக்கு மெசேஜ் செய்கிறேன்")),
         QuickPhrase("thanks", "thank_you", mapOf(Lang.EN to "Thank you", Lang.HI to "धन्यवाद", Lang.TA to "நன்றி")),
         QuickPhrase("bye", null, mapOf(Lang.EN to "Bye", Lang.HI to "अलविदा", Lang.TA to "வருகிறேன்")),
     )
@@ -46,6 +47,18 @@ object CallPhrases {
     /** Everything worth fetching before it is needed, so the first tap in a call is as fast as the tenth. */
     fun warm(lang: Lang, name: String): List<String> =
         quick.filter { it.packId == null }.map { it.say(lang) } + intro(name, lang)
+
+    /**
+     * Text size (sp) for a quick-phrase button so every phrase shows whole in at most three lines: Tamil and Hindi are
+     * wider and taller than English, so the longer the text the smaller the type, never below 15.
+     */
+    fun quickSize(text: String): Int = when {
+        text.length <= 8 -> 22
+        text.length <= 14 -> 20
+        text.length <= 20 -> 18
+        text.length <= 28 -> 17
+        else -> 16
+    }
 
     /** Typed words in Devanagari or Tamil script are spoken in that language whatever the caregiver language is. */
     fun langOf(text: String, fallback: Lang): Lang = when {
