@@ -20,8 +20,34 @@ object Sarvam {
     const val MODEL = "bulbul:v3"
     const val PACE = 0.9 // same pace as the pre-rendered pack (voices/render.py)
 
-    /** The whole answer must be in this long, or the phone's own voice speaks instead (the person is on a live call). */
+    /** One request gives up after this long (the file still lands in the cache if it comes late: next time it is instant). */
     const val TIMEOUT_MS = 4000
+
+    /** On a call the other person is waiting: past this the phone's own voice speaks instead. */
+    const val CALL_WAIT_MS = 1500
+
+    /** What [Voice] does with a phrase the pre-rendered pack doesn't have. */
+    enum class Plan {
+        /** The phone's own offline voice, now. */
+        PHONE_NOW,
+        /** A sentence Sarvam spoke before, from the cache: instant. */
+        CACHED,
+        /** Ask Sarvam and wait up to [CALL_WAIT_MS], then the phone's voice. Only on a call. */
+        FETCH,
+    }
+
+    /**
+     * Nobody waits for the network to hear their own words: off a call the phone's voice speaks at once unless the
+     * sentence is already cached; on a call a natural voice is worth a short wait, but only a short one.
+     * [phoneVoiceChosen]: the person picked "Phone voice" for ordinary speech (a call still prefers Sarvam).
+     */
+    fun plan(hasKey: Boolean, phoneVoiceChosen: Boolean, onCall: Boolean, cached: Boolean): Plan = when {
+        !hasKey -> Plan.PHONE_NOW
+        phoneVoiceChosen && !onCall -> Plan.PHONE_NOW
+        cached -> Plan.CACHED
+        onCall -> Plan.FETCH
+        else -> Plan.PHONE_NOW
+    }
 
     /** The cache holds the newest this-many spoken sentences (typed text included); Settings can clear it. */
     const val CACHE_KEEP = 300
