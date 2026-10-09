@@ -131,7 +131,7 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
             Column {
                 SectionLabel("Lip encoder")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Pill(k.encoder.label, if (k.encoder.label.startsWith("NPU")) Ink.leaf else if (k.encoder.label.startsWith("CPU")) Ink.turmeric else Ink.mute)
+                    Pill(if (k.ready) k.encoder.label else "Loading…", if (!k.ready) Ink.mute else if (k.encoder.label.startsWith("NPU")) Ink.leaf else if (k.encoder.label.startsWith("CPU")) Ink.turmeric else Ink.mute)
                     k.encoder.warmMs?.let { Text("  ${"%.1f".format(it)} ms / window", style = Type.mono) }
                 }
                 Spacer(Modifier.height(10.dp))
