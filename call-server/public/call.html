@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0d0b">
+<meta name="robots" content="noindex">
+<title>Call through Mouna</title>
+<style>
+  :root {
+    --bg:#0e0d0b; --raised:#171613; --card:#1f1d19; --rule:#2c2924; --rule2:#3d3a33;
+    --bone:#ede6d6; --bone2:#b9b2a3; --mute:#7d776b;
+    --turmeric:#f0aa2e; --kumkum:#e4472b; --leaf:#8fbf8a;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--bone); font:16px/1.5 system-ui, -apple-system, sans-serif; -webkit-text-size-adjust:100%; }
+  body { display:flex; flex-direction:column; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom); }
+  header { padding:20px 4px 8px; display:flex; align-items:center; gap:10px; }
+  header .dot { width:9px; height:9px; border-radius:50%; background:var(--mute); flex:none; }
+  header .dot.on { background:var(--leaf); }
+  header .dot.ring { background:var(--turmeric); animation:pulse 1.2s infinite; }
+  header .dot.bad { background:var(--kumkum); }
+  header .status { font:12px/1 ui-monospace, Menlo, monospace; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); flex:1; }
+  header .clock { font:14px/1 ui-monospace, Menlo, monospace; color:var(--bone2); }
+  @keyframes pulse { 50% { opacity:.25; } }
+  main { flex:1; display:flex; flex-direction:column; min-height:0; }
+  h1 { font:400 2rem/1.15 Georgia, 'Times New Roman', serif; margin:12px 4px 10px; }
+  .lead { color:var(--bone2); margin:0 4px 20px; font-size:1.05rem; }
+  .lead b { color:var(--bone); font-weight:500; }
+  button { font:inherit; font-weight:500; color:var(--bone); border:0; border-radius:999px; padding:16px 24px; min-height:56px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  button:disabled { opacity:.4; }
+  .answer { background:var(--leaf); color:#0e0d0b; font-size:1.3rem; min-height:76px; width:100%; box-shadow:0 0 0 0 rgba(143,191,138,.5); animation:ring 1.8s infinite; }
+  @keyframes ring { 70% { box-shadow:0 0 0 22px rgba(143,191,138,0); } 100% { box-shadow:0 0 0 0 rgba(143,191,138,0); } }
+  .hang { background:var(--kumkum); color:#fff; flex:1; }
+  .mute { background:var(--card); border:1px solid var(--rule2); flex:none; padding:16px 20px; }
+  .mute[aria-pressed=true] { background:var(--bone); color:var(--bg); }
+  .row { display:flex; gap:10px; padding:10px 0 14px; }
+  .hidden { display:none !important; }
+  #log { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:6px 2px 12px; min-height:0; }
+  .bubble { align-self:flex-start; max-width:88%; background:var(--card); border:1px solid var(--rule); border-radius:20px 20px 20px 6px; padding:12px 16px; font:1.2rem/1.35 Georgia, 'Times New Roman', serif; animation:in .25s ease-out; word-break:break-word; }
+  @keyframes in { from { opacity:0; transform:translateY(6px); } }
+  .hint { color:var(--mute); font-size:.9rem; margin:0 4px; }
+  .level { height:6px; border-radius:3px; background:var(--rule); overflow:hidden; margin:4px 4px 0; }
+  .level i { display:block; height:100%; width:0; background:var(--turmeric); transition:width .08s linear; }
+  .note { color:var(--turmeric); font-size:.95rem; margin:0 4px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <span id="dot" class="dot"></span>
+  <span id="status" class="status">Connecting</span>
+  <span id="clock" class="clock"></span>
+</header>
+
+<main>
+  <!-- before answering -->
+  <section id="ring" class="hidden">
+    <h1 id="who">Someone is calling you through Mouna</h1>
+    <p class="lead"><b id="whoName">They</b> can't speak. Mouna speaks for them, and you will hear it. <b>They can hear you.</b></p>
+    <button id="answer" class="answer">Answer</button>
+    <p class="hint" style="margin-top:14px">Your phone will ask to use the microphone, so they can hear you. Nothing is recorded.</p>
+  </section>
+
+  <!-- waiting / ended -->
+  <section id="wait">
+    <h1 id="waitTitle">Connecting…</h1>
+    <p id="waitText" class="lead"></p>
+  </section>
+
+  <!-- in the call -->
+  <section id="live" class="hidden" style="flex:1; display:flex; flex-direction:column; min-height:0">
+    <p id="micNote" class="note hidden"></p>
+    <div id="log" aria-live="polite"></div>
+    <p class="hint">Your voice level</p>
+    <div class="level"><i id="lvl"></i></div>
+    <div class="row">
+      <button id="mute" class="mute" aria-pressed="false">Mute</button>
+      <button id="hang" class="hang">Hang up</button>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+/*
+ * Mouna web call, guest side. No build step, no libraries.
+ * Wire format (see call-server/README.md):
+ *   text   {"t":"peer","joined":bool}   from the relay
+ *          {"t":"hello","name":"Ravi"}  Mouna, who is calling
+ *          {"t":"say","text":"..."}     Mouna, the sentence it is about to speak (caption)
+ *          {"t":"bye"} / {"t":"answered"}  either side
+ *   binary byte0 = 1 WAV | 2 MP4/AAC (Mouna -> here, rest is the file)
+ *                  16 = PCM16 LE 16 kHz mono (here -> Mouna, ~40 ms per frame)
+ */
+const $ = (id) => document.getElementById(id);
+const room = (location.pathname.match(/\/c\/([A-Za-z0-9]+)/) || [])[1] || '';
+const KIND = { WAV: 1, MP4: 2, PCM: 16 };
+const FRAME = 640; // samples per frame at 16 kHz = 40 ms
+
+const S = { ws:null, mouna:false, name:'', answered:false, ended:false, tries:0, retry:null, since:0, tick:null,
+            ctx:null, stream:null, node:null, muted:false, nextAt:0, chain:Promise.resolve(), wake:null };
+
+function show(view, title, text) {
+  $('ring').classList.toggle('hidden', view !== 'ring');
+  $('wait').classList.toggle('hidden', view !== 'wait');
+  $('live').classList.toggle('hidden', view !== 'live');
+  if (view === 'wait') { $('waitTitle').textContent = title; $('waitText').textContent = text || ''; }
+}
+function status(text, mood) {
+  $('status').textContent = text;
+  $('dot').className = 'dot' + (mood ? ' ' + mood : '');
+}
+function refresh() {
+  if (S.ended) return;
+  if (!S.ws || S.ws.readyState !== 1) {
+    status(S.tries ? 'Reconnecting' : 'Connecting', 'bad');
+    if (!S.answered) show('wait', S.tries ? 'Reconnecting…' : 'Connecting…', 'Hold on, the call is being set up.');
+    return;
+  }
+  if (!S.mouna) {
+    status('Waiting for Mouna', '');
+    if (!S.answered) show('wait', 'Waiting for the caller…', 'The caller has not connected yet. This page will ring when they do. Keep it open.');
+    return;
+  }
+  if (!S.answered) {
+    status('Calling you', 'ring');
+    $('whoName').textContent = S.name || 'They';
+    $('who').textContent = (S.name ? S.name : 'Someone') + ' is calling you through Mouna';
+    show('ring');
+    return;
+  }
+  status('Connected', 'on');
+  show('live');
+}
+
+// ---------- socket ----------
+function connect() {
+  clearTimeout(S.retry);
+  const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=guest&room=' + encodeURIComponent(room);
+  const ws = new WebSocket(url);
+  ws.binaryType = 'arraybuffer';
+  S.ws = ws;
+  ws.onopen = () => { S.tries = 0; refresh(); if (S.answered) send({ t: 'answered' }); };
+  ws.onmessage = (e) => (typeof e.data === 'string' ? onText(JSON.parse(e.data)) : onBinary(e.data));
+  ws.onclose = (e) => {
+    if (S.ws !== ws) return;
+    S.mouna = false;
+    if (S.ended) return;
+    if (e.code === 4409) return end('This link is already in use', 'Someone else has this call open. Ask for a new link if that is not you.');
+    if (e.code === 4400) return end('This link does not work', 'The link looks wrong or has expired. Ask for a new one.');
+    S.tries++;
+    refresh();
+    S.retry = setTimeout(connect, Math.min(1000 * 2 ** (S.tries - 1), 8000));
+  };
+  ws.onerror = () => {};
+}
+function send(obj) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(obj)); }
+
+function onText(m) {
+  if (m.t === 'peer') {
+    S.mouna = !!m.joined;
+    if (!m.joined && S.answered) { status('Mouna is reconnecting', 'bad'); S.nextAt = 0; }
+    else refresh();
+    if (m.joined && S.answered) send({ t: 'answered' }); // Mouna came back: tell it we are here
+  } else if (m.t === 'hello') {
+    S.name = String(m.name || '').slice(0, 60);
+    refresh();
+  } else if (m.t === 'say') {
+    caption(String(m.text || ''));
+  } else if (m.t === 'bye') {
+    end('Mouna hung up', 'The call has ended.');
+  }
+}
+
+// ---------- audio from Mouna ----------
+function caption(text) {
+  if (!text) return;
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  b.textContent = text;
+  const log = $('log');
+  log.appendChild(b);
+  while (log.children.length > 60) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+function onBinary(buf) {
+  const kind = new Uint8Array(buf, 0, 1)[0];
+  if (kind !== KIND.WAV && kind !== KIND.MP4) return;
+  const body = buf.slice(1);
+  if (!S.ctx) return;
+  // Decode one at a time, in order, and schedule each right after the one before.
+  S.chain = S.chain.then(() => decode(body)).then(play).catch(() => {});
+}
+function decode(body) {
+  return new Promise((res, rej) => { const p = S.ctx.decodeAudioData(body, res, rej); if (p && p.catch) p.catch(rej); });
+}
+function play(audio) {
+  const src = S.ctx.createBufferSource();
+  src.buffer = audio;
+  src.connect(S.ctx.destination);
+  const at = Math.max(S.ctx.currentTime + 0.05, S.nextAt);
+  src.start(at);
+  S.nextAt = at + audio.duration + 0.15;
+}
+
+// ---------- the guest's microphone ----------
+const WORKLET = `
+class Down extends AudioWorkletProcessor {
+  constructor() { super(); this.pos = 0; this.acc = 0; this.n = 0; this.buf = new Int16Array(${FRAME}); this.i = 0; this.step = sampleRate / 16000; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    // Box filter: average the input samples that fall into each 16 kHz sample (a cheap low-pass).
+    for (let k = 0; k < ch.length; k++) {
+      this.acc += ch[k]; this.n++; this.pos += 1;
+      if (this.pos >= this.step) {
+        this.pos -= this.step;
+        const v = Math.max(-1, Math.min(1, this.acc / this.n));
+        this.acc = 0; this.n = 0;
+        this.buf[this.i++] = v < 0 ? v * 32768 : v * 32767;
+        if (this.i === ${FRAME}) { this.port.postMessage(this.buf.slice().buffer, []); this.i = 0; }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('mouna-down', Down);`;
+
+function sendPcm(int16buf) {
+  if (S.muted || !S.ws || S.ws.readyState !== 1 || !S.mouna) return;
+  const out = new Uint8Array(1 + int16buf.byteLength);
+  out[0] = KIND.PCM;
+  out.set(new Uint8Array(int16buf), 1);
+  S.ws.send(out);
+  const s = new Int16Array(int16buf);
+  let sum = 0;
+  for (let i = 0; i < s.length; i += 4) sum += s[i] * s[i];
+  const rms = Math.sqrt(sum / (s.length / 4)) / 32768;
+  $('lvl').style.width = Math.min(100, rms * 400) + '%';
+}
+
+async function startMic() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  S.stream = stream;
+  const src = S.ctx.createMediaStreamSource(stream);
+  if (S.ctx.audioWorklet) {
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: 'text/javascript' }));
+    await S.ctx.audioWorklet.addModule(url);
+    const node = new AudioWorkletNode(S.ctx, 'mouna-down', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+    node.port.onmessage = (e) => sendPcm(e.data);
+    const mute = S.ctx.createGain(); mute.gain.value = 0; // keep the graph pulling without playing the mic back
+    src.connect(node); node.connect(mute); mute.connect(S.ctx.destination);
+    S.node = node;
+  } else {
+    // Older Safari: ScriptProcessor on the main thread, same downsampling.
+    const sp = S.ctx.createScriptProcessor(2048, 1, 1);
+    const step = S.ctx.sampleRate / 16000;
+    let pos = 0, acc = 0, n = 0, buf = new Int16Array(FRAME), i = 0;
+    sp.onaudioprocess = (e) => {
+      const ch = e.inputBuffer.getChannelData(0);
+      for (let k = 0; k < ch.length; k++) {
+        acc += ch[k]; n++; pos++;
+        if (pos >= step) {
+          pos -= step;
+          const v = Math.max(-1, Math.min(1, acc / n)); acc = 0; n = 0;
+          buf[i++] = v < 0 ? v * 32768 : v * 32767;
+          if (i === FRAME) { sendPcm(buf.slice().buffer); i = 0; }
+        }
+      }
+    };
+    const mute = S.ctx.createGain(); mute.gain.value = 0;
+    src.connect(sp); sp.connect(mute); mute.connect(S.ctx.destination);
+    S.node = sp;
+  }
+}
+
+// ---------- the call ----------
+async function answer() {
+  $('answer').disabled = true;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  S.ctx = new AC({ latencyHint: 'interactive' });
+  try { await S.ctx.resume(); } catch (e) {}
+  // A silent tick unlocks playback on iOS inside this tap.
+  try { const b = S.ctx.createBuffer(1, 1, 22050), s = S.ctx.createBufferSource(); s.buffer = b; s.connect(S.ctx.destination); s.start(0); } catch (e) {}
+  S.answered = true;
+  S.since = Date.now();
+  S.tick = setInterval(() => {
+    const t = Math.floor((Date.now() - S.since) / 1000);
+    $('clock').textContent = String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0');
+  }, 500);
+  send({ t: 'answered' });
+  refresh();
+  try { if (navigator.wakeLock) S.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  try {
+    await startMic();
+  } catch (e) {
+    const n = $('micNote');
+    n.textContent = 'The microphone is off, so they cannot hear you. Allow the microphone for this page, then reload.';
+    n.classList.remove('hidden');
+  }
+}
+
+function stopAudio() {
+  clearInterval(S.tick);
+  try { if (S.stream) S.stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  try { if (S.node) S.node.disconnect(); } catch (e) {}
+  try { if (S.ctx) S.ctx.close(); } catch (e) {}
+  try { if (S.wake) S.wake.release(); } catch (e) {}
+  S.stream = S.node = S.ctx = null;
+}
+
+function end(title, text) {
+  if (S.ended) return;
+  S.ended = true;
+  clearTimeout(S.retry);
+  stopAudio();
+  status('Call ended', 'bad');
+  show('wait', title, text);
+  try { if (S.ws) S.ws.close(1000); } catch (e) {}
+}
+
+$('answer').onclick = answer;
+$('mute').onclick = () => {
+  S.muted = !S.muted;
+  $('mute').setAttribute('aria-pressed', S.muted);
+  $('mute').textContent = S.muted ? 'Unmute' : 'Mute';
+  if (S.muted) $('lvl').style.width = '0';
+};
+$('hang').onclick = () => { send({ t: 'bye' }); end('Call ended', 'You hung up.'); };
+
+if (!room) end('This link does not work', 'The room is missing from the link.');
+else { refresh(); connect(); }
+</script>
+</body>
+</html>
