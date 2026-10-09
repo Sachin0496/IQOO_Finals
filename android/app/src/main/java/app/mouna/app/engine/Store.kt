@@ -81,6 +81,13 @@ class Store(context: Context) {
             }).toString()
         }).apply()
 
+    /** Free talk: sentences this person confirmed (issue #5 A), offered again by the model's own score. Newest last. */
+    var freeTalkSentences: List<String>
+        get() = runCatching {
+            prefs.getString("freeTalk", null)?.let { s -> org.json.JSONArray(s).let { a -> List(a.length()) { a.getString(it) } } }
+        }.getOrNull() ?: emptyList()
+        set(v) = prefs.edit().putString("freeTalk", org.json.JSONArray(v).toString()).apply()
+
     /** What Whisper heard each time the person said a phrase: their personal voice templates. */
     var voiceTemplates: Map<String, List<String>>
         get() = prefs.getString("voiceTemplates", null)?.let { s ->

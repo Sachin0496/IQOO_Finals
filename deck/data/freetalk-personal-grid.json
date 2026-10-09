@@ -1,0 +1,40 @@
+{
+ "what": "Free talk, personal sentences (issue #5 part A): the person's own sentences scored by the model itself (0.9 attention + 0.1 CTC, the search's objective) next to the open reading",
+ "measured": "2026-10-10, laptop, PyTorch static graphs (StaticVsr, ScoreDecoder, joint_search), GRID s1, 30 clips (seed 0), personal list of 20 GRID sentences",
+ "caveats": "GRID is voiced, one fixed grammar: list sentences are near-duplicates of each other (harder than a real personal list) and the open reading has no context. Not silent mouthing. Threshold to be recalibrated on our own recordings (part B).",
+ "truth_in_list_top1": "29/30",
+ "open_reading_exact": "0/30",
+ "open_reading_wer": 0.7056,
+ "list_first_rule": {
+  "gap_open_threshold": -20.0,
+  "in_list_recall": "23/30",
+  "not_in_list_false_first": "0/30",
+  "gap_open_in_list_median": -14.776684872611066,
+  "gap_open_not_in_list_median": -31.267821104374235
+ },
+ "prior_correction": {
+  "note": "same 30 clips, list = truth + 19 GRID sentences + 18 care phrases (the app's pack + warm phrases); listed sentences ranked by score - a * 0.9 * prior (no-video attention score)",
+  "a=0": {
+   "truth_top1": "6/30",
+   "care_phrase_on_top": "24/30",
+   "false_first_thr_-20": "30/30"
+  },
+  "a=0.5": {
+   "truth_top1": "29/30",
+   "care_phrase_on_top": "1/30",
+   "false_first_thr_-20": "16/30"
+  },
+  "a=0.7..1.0": {
+   "truth_top1": "30/30",
+   "care_phrase_on_top": "0/30",
+   "false_first_thr_-20": "0/30",
+   "in_list_first_thr_-20": "23/30"
+  },
+  "chosen": 0.8
+ },
+ "on_the_phone": {
+  "measured": "2026-10-10 02:15, iQOO 15 NPU (scorer graphs fp16), 3 GRID clips with their sentences remembered + the app's phrases",
+  "true_sentence_first": "3/3",
+  "note": "before the prior correction 'Thank you very much' led on all 3"
+ }
+}

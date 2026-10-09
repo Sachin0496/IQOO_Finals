@@ -508,7 +508,36 @@ def vectors(out: Path) -> Path:
         return np.stack([jtab[p[-1], len(p) - 1] for p in prefixes])
 
     jhyps = joint_search(jctc.astype(np.float64), jdecode, sos=jv - 1, beam=3, pre_beam=4, max_len=jl)
+    # personal sentences: a small piece table (tokenizer), CTC sequence scores, whole-sentence scores, the merge rule
+    ptoks = ["<blank>", "<unk>", "\u2581I", "\u2581NEED", "\u2581WA", "TER", "\u2581WATER", "\u2581A", "B", "C", "\u2581AB", "<eos>"]
+    ppieces = {"\u2581I": -2.0, "\u2581NEED": -4.0, "\u2581WA": -6.0, "TER": -5.0, "\u2581WATER": -9.5, "\u2581A": -3.0,
+               "B": -4.0, "C": -4.5, "\u2581AB": -6.5, "\u2581": -7.0, "E": -3.5, "D": -3.9, "N": -3.1}
+    spm_cases = [{"text": t, "ids": text_units(t, ppieces, ptoks)} for t in ("I need water", "  i NEED   water ", "abc", "ab cab", "I need xyz", "")]
+    seq_cases = []
+    for ids in ([1, 3, 5], [2, 2], [4], []):
+        if not ids:
+            continue
+        seq_cases.append({"ids": ids, "logp": ctc_sequence_logp(jctc.astype(np.float64), ids)})
+    att_cases = []
+    for ids in ([1, 3, 5], [2, 2, 4]):
+        att = rng.normal(-1.0, 0.7, len(ids) + 1).tolist()
+        att_cases.append({"ids": ids, "att": att, "score": 0.9 * sum(att) + 0.1 * ctc_sequence_logp(jctc.astype(np.float64), ids)})
+    merge_cases = []
+    for openl, mine in (
+        ([("A", -8.0), ("B", -9.0)], [("X", -20.0, -5.0), ("Y", -30.0, -9.0)]),
+        ([("A", -8.0), ("B", -9.0)], [("X", -29.0, -5.0), ("Y", -50.0, -1.0)]),
+        ([("A", -8.0)], [("a", -10.0, -3.0), ("X", -12.0, -4.0)]),
+        ([], [("X", -40.0, -2.0), ("Y", -20.0, -6.0)]),
+        ([("A", -8.0), ("B", -9.0), ("C", -9.5)], []),
+        ([("A", -8.0)], [("Thank you", -15.0, -14.0), ("Z", -24.0, -2.0)]),
+    ):
+        merge_cases.append({"open": [list(o) for o in openl], "listed": [list(o) for o in mine],
+                            "out": [[t, sc, p] for t, sc, p in merge_options(openl, mine)]})
+    rank_cases = [{"score": sc, "prior": pr, "rank": personal_rank(sc, pr)} for sc, pr in ((-20.0, -9.0), (-15.5, -3.25))]
     v = {
+        "personal_rank": rank_cases,
+        "personal": {"tokens": ptoks, "pieces": ppieces, "spm": spm_cases, "ctc_seq": seq_cases, "score": att_cases,
+                     "merge": merge_cases},
         "joint": {
             "frames": jt, "units": jv, "max_len": jl, "ctc": jctc.ravel().tolist(), "table": jtab.ravel().tolist(),
             "hyps": [{"ids": h, "score": sc} for h, sc in jhyps],
@@ -785,3 +814,175 @@ def joint_search(ctc: np.ndarray, decode, sos: int, beam: int = DEC_BATCH, pre_b
         ended = [(h[0][1:], h[1]) for h in running]
     ended.sort(key=lambda e: -e[1])
     return ended
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Personal sentences (issue #5, part A): text -> units, and the model's own score of a whole sentence
+
+SPM_MODEL = AVSR_DIR / "spm" / "unigram" / "unigram5000.model"
+
+
+def spm_pieces() -> dict[str, float]:
+    """SentencePiece unigram pieces and their log-prob scores (written to the phone as spm_pieces.tsv)."""
+    import sentencepiece as spm
+
+    sp = spm.SentencePieceProcessor(model_file=str(SPM_MODEL))
+    return {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.get_piece_size()) if not sp.is_control(i) and not sp.is_unknown(i)}
+
+
+def text_units(text: str, pieces: dict[str, float], toks: list[str]) -> list[int]:
+    """Text -> Auto-AVSR unit ids: upper case, words joined with '▁', then the unigram Viterbi segmentation
+    (best total piece score; a character no piece covers becomes <unk>). Port target for android/core Spm."""
+    words = text.upper().split()
+    if not words:
+        return []
+    s = "".join("▁" + w for w in words)
+    unk_score = min(pieces.values()) - 10.0
+    max_len = max(len(p) for p in pieces)
+    best = [0.0] + [-math.inf] * len(s)
+    back: list[tuple[int, str | None]] = [(0, None)] * (len(s) + 1)
+    for end in range(1, len(s) + 1):
+        for start in range(max(0, end - max_len), end):
+            if best[start] == -math.inf:
+                continue
+            piece = s[start:end]
+            sc = pieces.get(piece)
+            if sc is None:
+                if end - start != 1:
+                    continue
+                sc, piece = unk_score, None  # an unknown single character
+            if best[start] + sc > best[end]:
+                best[end] = best[start] + sc
+                back[end] = (start, piece)
+    out, end = [], len(s)
+    while end > 0:
+        start, piece = back[end]
+        out.append(piece)
+        end = start
+    index = {t: i for i, t in enumerate(toks)}
+    return [index.get(p, index["<unk>"]) if p is not None else index["<unk>"] for p in reversed(out)]
+
+
+def ctc_sequence_logp(ctc: np.ndarray, ids: list[int]) -> float:
+    """log P(ids | frames) under CTC (forward algorithm over the blank-extended label sequence)."""
+    t_len = len(ctc)
+    ext = [BLANK]
+    for i in ids:
+        ext += [i, BLANK]
+    s_len = len(ext)
+    alpha = np.full(s_len, NEG_INF)
+    alpha[0] = ctc[0, BLANK]
+    if s_len > 1:
+        alpha[1] = ctc[0, ext[1]]
+    for t in range(1, t_len):
+        new = np.full(s_len, NEG_INF)
+        for s in range(s_len):
+            a = alpha[s]
+            if s >= 1:
+                a = np.logaddexp(a, alpha[s - 1])
+            if s >= 2 and ext[s] != BLANK and ext[s] != ext[s - 2]:
+                a = np.logaddexp(a, alpha[s - 2])
+            new[s] = a + ctc[t, ext[s]]
+        alpha = new
+    return float(np.logaddexp(alpha[-1], alpha[-2]) if s_len > 1 else alpha[-1])
+
+
+class ScoreDecoder(StaticDecoder):
+    """The decoder at every position at once, for scoring whole sentences (8 per NPU run).
+
+    Same inputs as StaticDecoder minus sel. Out: h (B, L, 768) final states and lse (B, L) the log-sum-exp of the
+    logits, so log p(token | prefix) = h . W[token] + b[token] - lse (W, b in dec_out_w.bin / dec_out_b.bin on the
+    phone: one dot product per token instead of shipping B x L x 5049 log-probs off the NPU)."""
+
+    def forward(self, x: torch.Tensor, memory: torch.Tensor, valid: torch.Tensor):
+        mem = memory.expand(self.b, self.t, D_MODEL)
+        heads = self.layers[0].self_attn.h
+        causal = self.causal.expand(self.b, heads, self.l, self.l)
+        mem_bias = ((1.0 - valid) * -1e4).view(1, 1, 1, self.t).expand(self.b, heads, self.l, self.t)
+        for layer in self.layers:
+            h = layer.norm1(x)
+            x = x + _mha(layer.self_attn, h, h, causal)
+            h = layer.norm2(x)
+            x = x + _mha(layer.src_attn, h, mem, mem_bias)
+            x = x + layer.feed_forward(layer.norm3(x))
+        h = self.after_norm(x)
+        z = self.out(h)
+        top = z.max(dim=-1, keepdim=True).values  # log-sum-exp spelled out: ReduceLogSumExp does not compile for the NPU
+        return h, (top + torch.log(torch.exp(z - top).sum(dim=-1, keepdim=True))).squeeze(-1)
+
+
+def score_sentences(ctc: np.ndarray, score_rows, sentences: list[list[int]], sos: int, w: np.ndarray, b: np.ndarray,
+                    ctc_weight: float = CTC_WEIGHT) -> list[float]:
+    """Joint score of whole sentences, the same objective joint_search maximises:
+    (1 - w) * sum log p_att(token | prefix) over the tokens and eos + w * log p_ctc(sentence).
+    score_rows(prefixes) -> (h (n, L, 768), lse (n, L)) for up to DEC_BATCH prefixes [sos, t1..tk]."""
+    out = []
+    for i in range(0, len(sentences), DEC_BATCH):
+        chunk = sentences[i : i + DEC_BATCH]
+        h, lse = score_rows([[sos] + s for s in chunk])
+        for r, s in enumerate(chunk):
+            targets = s + [sos]  # eos = sos id
+            att = sum(float(h[r, j] @ w[t] + b[t] - lse[r, j]) for j, t in enumerate(targets))
+            out.append((1 - ctc_weight) * att + ctc_weight * ctc_sequence_logp(ctc, s))
+    return out
+
+
+def export_scorer(frames: int, model=None, out_dir: Path = OUT) -> Path:
+    """ONNX of ScoreDecoder at one bucket, checked against PyTorch, plus dec_out_w.bin / dec_out_b.bin / spm_pieces.tsv."""
+    import onnxruntime as ort
+
+    model = model or load()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"avsr_score_t{frames}.onnx"
+    d = ScoreDecoder(model, frames).eval()
+    rng = np.random.default_rng(3)
+    n = frames * 3 // 4
+    mem = np.zeros((1, frames, D_MODEL), np.float32)
+    mem[0, :n] = rng.standard_normal((n, D_MODEL)).astype(np.float32)
+    valid = np.zeros((1, frames), np.float32)
+    valid[0, :n] = 1
+    sos = len(tokens()) - 1
+    ys = rng.integers(1, sos, (DEC_BATCH, DEC_LEN)).astype(np.int32)
+    ys[:, 0] = sos
+    xe = d.embed_inputs(ys)
+    args = [torch.from_numpy(a) for a in (xe, mem, valid)]
+    with torch.no_grad():
+        ref_h, ref_l = (t.numpy() for t in d(*args))
+        torch.onnx.export(d, tuple(args), path, input_names=["x", "memory", "valid"], output_names=["h", "lse"],
+                          opset_version=17, do_constant_folding=True)
+        (model.decoder.output_layer.weight.numpy()).astype("<f4").tofile(out_dir / "dec_out_w.bin")
+        (model.decoder.output_layer.bias.numpy()).astype("<f4").tofile(out_dir / "dec_out_b.bin")
+    (out_dir / "spm_pieces.tsv").write_text("".join(f"{p}\t{s!r}\n" for p, s in spm_pieces().items()), encoding="utf8")
+    sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
+    h, lse = sess.run(None, {"x": xe, "memory": mem, "valid": valid})
+    print(f"{path.name}: {path.stat().st_size / 1e6:.0f} MB, ONNX vs PyTorch h {np.abs(h - ref_h).max():.2e} lse {np.abs(lse - ref_l).max():.2e}")
+    return path
+
+
+FIRST_WITHIN, OFFER_WITHIN = -20.0, -35.0  # deck/data/freetalk-personal-grid.json
+PRIOR_WEIGHT = 0.8  # listed sentences rank by score - PRIOR_WEIGHT * (1 - CTC_WEIGHT) * prior (no-video attention score)
+
+
+def personal_rank(score: float, prior: float) -> float:
+    """How listed sentences are ranked against each other: their score minus part of what the decoder expects with no
+    video at all, so a short common sentence ("Thank you very much") can't win every clip (GRID + care phrases:
+    without it a care phrase came first 24/30, with 0.7-1.0 never; the true sentence first 6/30 -> 30/30)."""
+    return score - PRIOR_WEIGHT * (1 - CTC_WEIGHT) * prior
+
+
+def merge_options(open_: list[tuple[str, float]], listed: list[tuple[str, float, float]], max_n: int = 4) -> list[tuple[str, float, bool]]:
+    """What "Did you mean…?" shows (reference for Personal.merge). listed: (text, score, rank). Listed sentences go in
+    rank order; the best leads when its score is within FIRST_WITHIN of the open best, else the open reading leads;
+    then they alternate; listed sentences scoring further than OFFER_WITHIN behind are dropped; the same text (any
+    case) keeps its first place."""
+    open_best = open_[0][1] if open_ else -math.inf
+    mine = [(t, sc) for t, sc, _ in sorted(listed, key=lambda o: -o[2])]
+    mine = [o for o in mine if not open_ or o[1] - open_best > OFFER_WITHIN]
+    mine_first = bool(mine) and (not open_ or mine[0][1] - open_best > FIRST_WITHIN)
+    a, b = ((mine, True), (open_, False)) if mine_first else ((open_, False), (mine, True))
+    out: dict[str, tuple[str, float, bool]] = {}
+    for i in range(max(len(a[0]), len(b[0]))):
+        for lst, personal in (a, b):
+            if i < len(lst):
+                out.setdefault(lst[i][0].lower(), (lst[i][0], lst[i][1], personal))
+    return list(out.values())[:max_n]

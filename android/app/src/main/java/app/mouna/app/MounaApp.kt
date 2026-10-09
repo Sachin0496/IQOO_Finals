@@ -50,7 +50,7 @@ sealed interface Prompt {
     /** Sign mode wasn't sure: the likeliest ISL words to pick from. */
     data class Signed(val words: List<String>) : Prompt
     /** Free talk read a sentence: always confirmed before it is spoken; shake = the next candidate. */
-    data class Read(val sentences: List<String>, val index: Int = 0) : Prompt
+    data class Read(val sentences: List<String>, val index: Int = 0, val personal: List<Boolean> = emptyList()) : Prompt
 }
 
 enum class Channel { LIPS, VOICE, SIGN, FREE }
@@ -455,17 +455,20 @@ class MounaApp(
 
     private fun read(e: Event.Read) {
         if (!onSpeakSurface() || prompt != null || channel != Channel.FREE) return
-        val sentences = e.sentences.map(::sentenceCase).distinct().take(4)
-        if (sentences.isEmpty()) {
+        // open readings and the person's own sentences, merged by the model's score (Personal.merge); else open only
+        val opts = e.options.ifEmpty { e.sentences.map { app.mouna.core.Personal.Option(it, 0.0, false) } }
+            .map { it.copy(text = sentenceCase(it.text)) }.distinctBy { it.text }.take(4)
+        if (opts.isEmpty()) {
             said = Said(null, "I couldn't read that. Try again, a little slower.", "none")
             return
         }
-        prompt = Prompt.Read(sentences)
+        prompt = Prompt.Read(opts.map { it.text }, personal = opts.map { it.personal })
         applyChannel() // free talk waits while the person confirms
     }
 
     /** Free talk: say the confirmed sentence in the phone's voice (English: the model reads English). */
     fun sayRead(text: String) {
+        engine.rememberSentence(text) // offered again next time, scored by the model (issue #5 A)
         prompt = null
         voice.say(null, text, Lang.EN, Voice.DEVICE)
         said = Said(null, text, "free talk")

@@ -89,7 +89,7 @@ sealed interface Event {
     /** A sign was seen; the most likely words from the ISL model, best first. */
     data class Signed(val guesses: List<Isl.Guess>, val ms: Double) : Event
     /** Free talk read a sentence: candidates best first (empty: nothing readable). [ms]: end of mouthing to sentences. */
-    data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double) : Event
+    data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double, val options: List<app.mouna.core.Personal.Option> = emptyList()) : Event
     /** Nod or double blink = yes, shake = no. Only while Mouna is asking (see [Engine.gesturesOn]). */
     data class Answer(val yes: Boolean, val via: String) : Event
     data class Looked(val zone: Zone) : Event
@@ -552,6 +552,21 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         }
     }
 
+    /**
+     * The person's own sentences for free talk (issue #5 A): what they confirmed before (newest first), then their
+     * phrases and the family's words in English. Capped so scoring stays within a few NPU runs.
+     */
+    private fun personalSentences(): List<String> =
+        (store.freeTalkSentences.asReversed() + phrases.phrases.map { it.say(Lang.EN) })
+            .map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.take(MAX_PERSONAL)
+
+    /** A confirmed free-talk sentence: offered again next time by the model's own score. */
+    fun rememberSentence(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        store.freeTalkSentences = (store.freeTalkSentences.filter { !it.equals(t, ignoreCase = true) } + t).takeLast(MAX_LEARNED)
+    }
+
     /** Free talk listens (Speak screen, Free talk channel, no prompt open). */
     fun freeTalk(on: Boolean) {
         freeOn = on
@@ -572,11 +587,12 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                 java.io.File(dir, "$name.t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
                 ftLog("free talk: saved clip $name (${crops.size} frames)")
             }
-            val res = r.read(crops, t)
+            val res = r.read(crops, t, personal = personalSentences())
             val ms = (SystemClock.uptimeMillis() - endMs).toDouble()
             ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, decode ${"%.0f".format(res.decodeMs)} ms (${res.steps} steps), " +
-                "total ${"%.0f".format(ms)} ms -> " + res.sentences.take(3).joinToString(" | "))
-            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs))
+                "yours ${"%.0f".format(res.personalMs)} ms, total ${"%.0f".format(ms)} ms -> " +
+                res.options.joinToString(" | ") { (if (it.personal) "*" else "") + it.text + " %.1f".format(it.score) })
+            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs, res.options))
         }.onFailure { ftLog("free talk", it) }
     }
 
@@ -625,9 +641,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             val crops = List(n) { bytes.copyOfRange(it * 96 * 96, (it + 1) * 96 * 96) }
             val t = LongArray(n) { (it * 1000.0 / fps).toLong() }
             r.dump = java.io.File(file.parentFile, "dump_" + file.nameWithoutExtension)
-            val res = try { r.read(crops, t) } finally { r.dump = null }
+            val res = try { r.read(crops, t, personal = personalSentences()) } finally { r.dump = null }
             ftLog("free talk read ${file.name}: ${res.frames} frames (bucket ${res.bucket}), NPU ${"%.1f".format(res.npuMs)} ms, " +
                 "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps)")
+            res.options.forEach { o -> ftLog("  option ${if (o.personal) "(yours) " else ""}${o.text} (${"%.2f".format(o.score)})") }
             res.sentences.take(5).forEachIndexed { i, s -> ftLog("  ${i + 1}. $s  (${"%.2f".format(res.scores[i])})") }
         }.onFailure { ftLog("free talk read", it) }
     }
@@ -644,5 +661,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     companion object {
         private const val TAG = "Mouna"
         private const val PERF = "MounaPerf"
+        private const val MAX_PERSONAL = 64 // 8 scorer runs on the NPU
+        private const val MAX_LEARNED = 200
     }
 }

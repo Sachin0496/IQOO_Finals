@@ -209,14 +209,16 @@ private fun ColumnScope.SayClearly(app: MounaApp, text: String) {
 private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
     Header(app, "FREE TALK: READ FROM YOUR LIPS", "Did you mean…?")
     Text("“${p.sentences[p.index]}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
-    val others = p.sentences.filterIndexed { i, _ -> i != p.index }
+    if (p.personal.getOrElse(p.index) { false }) Text("ONE OF YOUR SENTENCES", style = Type.label.copy(color = Ink.leaf))
+    val others = p.sentences.indices.filter { it != p.index }
     if (others.isNotEmpty()) {
         Spacer(Modifier.height(20.dp))
         Text("Or…", style = Type.label)
         Spacer(Modifier.height(8.dp))
-        others.forEach { s ->
+        others.forEach { i ->
+            val s = p.sentences[i]
             Text(
-                s,
+                if (p.personal.getOrElse(i) { false }) "$s  ·  yours" else s,
                 style = Type.body.copy(fontSize = 20.sp),
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { app.sayRead(s) }.padding(vertical = 10.dp),
             )
