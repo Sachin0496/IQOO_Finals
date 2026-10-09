@@ -1,0 +1,112 @@
+package app.mouna.app.engine
+
+import android.content.Context
+import app.mouna.core.GazeModel
+import app.mouna.core.SwitchChannel
+import app.mouna.core.SwitchModel
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * This person's taught examples, kept on the phone only (app-private storage, no backup, no network).
+ * Embeddings are stored per encoder: a landmark example can't be compared with an NPU one.
+ */
+class Store(context: Context) {
+    private val dir = File(context.filesDir, "person").apply { mkdirs() }
+    private val prefs = context.getSharedPreferences("mouna", Context.MODE_PRIVATE)
+
+    data class Examples(val samples: MutableMap<String, MutableList<FloatArray>>, val negatives: MutableList<FloatArray>)
+
+    fun load(encoderId: String): Examples {
+        val f = File(dir, "examples-$encoderId.json")
+        if (!f.exists()) return Examples(LinkedHashMap(), mutableListOf())
+        return runCatching {
+            val o = JSONObject(f.readText())
+            val s = o.getJSONObject("samples")
+            val samples = LinkedHashMap<String, MutableList<FloatArray>>()
+            for (k in s.keys()) samples[k] = vectors(s.getJSONArray(k))
+            Examples(samples, vectors(o.getJSONArray("negatives")))
+        }.getOrElse { Examples(LinkedHashMap(), mutableListOf()) }
+    }
+
+    fun save(encoderId: String, e: Examples) {
+        val s = JSONObject()
+        for ((k, xs) in e.samples) s.put(k, json(xs))
+        val o = JSONObject().put("samples", s).put("negatives", json(e.negatives))
+        val f = File(dir, "examples-$encoderId.json")
+        val tmp = File(dir, "${f.name}.tmp")
+        tmp.writeText(o.toString())
+        tmp.renameTo(f)
+    }
+
+    fun wipe() {
+        dir.listFiles()?.forEach { it.delete() }
+        prefs.edit().clear().apply()
+    }
+
+    var pack: List<String>?
+        get() = prefs.getString("pack", null)?.split(",")?.filter { it.isNotBlank() }
+        set(v) = prefs.edit().putString("pack", v?.joinToString(",")).apply()
+
+    var lang: Lang
+        get() = runCatching { Lang.valueOf(prefs.getString("lang", "EN")!!) }.getOrDefault(Lang.EN)
+        set(v) = prefs.edit().putString("lang", v.name).apply()
+
+    var voice: String
+        get() = prefs.getString("voice", "kavitha")!!
+        set(v) = prefs.edit().putString("voice", v).apply()
+
+    var careful: Boolean
+        get() = prefs.getBoolean("careful", false)
+        set(v) = prefs.edit().putBoolean("careful", v).apply()
+
+    var gaze: GazeModel?
+        get() = prefs.getString("gaze", null)?.let { s ->
+            s.split(",").map { it.toDouble() }.let { GazeModel(it[0], it[1], it[2]) }
+        }
+        set(v) = prefs.edit().putString("gaze", v?.let { "${it.center},${it.left},${it.right}" }).apply()
+
+    var switchModel: SwitchModel?
+        get() = prefs.getString("switch", null)?.let { s ->
+            runCatching {
+                val a = JSONArray(s)
+                SwitchModel(List(a.length()) { i ->
+                    val c = a.getJSONObject(i)
+                    SwitchChannel(c.getInt("index"), c.getString("name"), c.getDouble("rest"), c.getDouble("peak"), c.getDouble("z"))
+                })
+            }.getOrNull()
+        }
+        set(v) = prefs.edit().putString("switch", v?.let { m ->
+            JSONArray(m.channels.map { c ->
+                JSONObject().put("index", c.index).put("name", c.name).put("rest", c.rest).put("peak", c.peak).put("z", c.z)
+            }).toString()
+        }).apply()
+
+    /** What Whisper heard each time the person said a phrase: their personal voice templates. */
+    var voiceTemplates: Map<String, List<String>>
+        get() = prefs.getString("voiceTemplates", null)?.let { s ->
+            runCatching {
+                val o = JSONObject(s)
+                o.keys().asSequence().associateWith { k -> o.getJSONArray(k).let { a -> List(a.length()) { a.getString(it) } } }
+            }.getOrNull()
+        } ?: emptyMap()
+        set(v) = prefs.edit().putString("voiceTemplates", JSONObject().apply { v.forEach { (k, xs) -> put(k, JSONArray(xs)) } }.toString()).apply()
+
+    /** Words the family added ("I love you, Amma"): id -> English text. */
+    var custom: List<Pair<String, String>>
+        get() = prefs.getString("custom", null)?.let { s ->
+            runCatching { JSONArray(s).let { a -> List(a.length()) { a.getJSONObject(it).let { o -> o.getString("id") to o.getString("text") } } } }.getOrNull()
+        } ?: emptyList()
+        set(v) = prefs.edit().putString("custom", JSONArray(v.map { (id, t) -> JSONObject().put("id", id).put("text", t) }).toString()).apply()
+
+    var listenWith: String
+        get() = prefs.getString("listenWith", "lips")!!
+        set(v) = prefs.edit().putString("listenWith", v).apply()
+
+    private fun json(xs: List<FloatArray>) = JSONArray(xs.map { x -> JSONArray(x.map { it.toDouble() }) })
+    private fun vectors(a: JSONArray): MutableList<FloatArray> = MutableList(a.length()) { i ->
+        val v = a.getJSONArray(i)
+        FloatArray(v.length()) { v.getDouble(it).toFloat() }
+    }
+}

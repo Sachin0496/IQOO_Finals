@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-feature android:name="android.hardware.camera.front" android:required="true" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Voice mode only (weak or unclear speech): asked for when the person switches to Voice. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Spike test S6: the app must not be able to reach the network, whatever a library merges in. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
+    <!-- Lets the app ask the system TTS engine which voices exist (fallback voice). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="Mouna"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.Probe">
+
+        <!-- QNN HTP backend: the vendor DSP libraries are loaded by name from the system. -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+
+        <activity
+            android:name="app.mouna.app.MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait"
+            android:keepScreenOn="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- QA tools: the spike probe (S1 crop/fps, S5 voices, S6 permissions + soak), opened from Settings. -->
+        <activity
+            android:name="app.mouna.probe.ProbeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:keepScreenOn="true" />
+    </application>
+</manifest>
