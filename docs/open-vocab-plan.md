@@ -3,18 +3,18 @@
 *9 Oct 2026, Nakul (`nakul-claude`), branch `nakul/open-vocab-lipreading`. Status: **plan, nothing measured yet.**
 Every number below is either a published figure (cited) or a target (labelled).*
 
-## Status (10 Oct, 00:30)
+## Status (10 Oct, 01:40)
 
 | Step | State | Result |
 |---|---|---|
-| Model rebuilt for the NPU (`python -m mouna_encoder avsr-export`) | done | Auto-AVSR encoder + CTC at 64 / 128 / 256 frames; padded clip vs exact-length PyTorch within 1.3e-4 (log-prob); ONNX vs PyTorch within 2.8e-3. ~745 MB fp32 per bucket (gitignored) |
-| Attention decoder at fixed shapes (`StaticDecoder`) | exported, not in the app | 1.1e-5 vs espnet. Not wired in: on GRID, joint decoding beat CTC only by 1.6 points |
-| Kotlin core: `Ctc`, `FreeTalk` + `harness/vectors/freetalk.json` | done | 4 parity tests pass (crop matrix, 25 fps input, greedy, prefix beam, detokenize) |
-| App: `OpenVsr` (NPU only), Auto-AVSR crop in `Sensor`, sentence segmenter, Free talk channel + confirm prompt | built, installed on the iQOO 15 | First NPU compile not finished: the phone was locked, so Android parked the app in the background |
-| Crop check on GRID (`deck/data/openvocab-grid.json`) | measured | Our face-mesh crop 70.6% WER vs Auto-AVSR's official crop 71.7% on the same 30 clips: the phone crop is fine without smoothing |
-| Accuracy, GRID s1, 30 clips, laptop | measured | **WER 71.7% joint, 73.3% CTC beam.** GRID is voiced, low-res, fixed nonsense grammar (letters, digits): out of domain, not our users, not comparable to LRS3 |
-| Accuracy on our own silent English sentences (E-OV1) | **not measured** | needs recordings |
-| Latency on the iQOO 15 NPU (E-OV4) | **not measured** | needs the phone unlocked |
+| Model rebuilt for the NPU (`python -m mouna_encoder avsr-export`) | done | Auto-AVSR encoder + CTC at 64 / 128 / 256 frames; padded vs exact-length PyTorch within 1.3e-4; ONNX vs PyTorch within 2.8e-3 |
+| Attention decoder on the NPU (`StaticDecoder`, batch 8 x 48 tokens) | done | 1e-5 vs espnet. **Needed:** on live phone clips the CTC head alone read one word ("HELLO"), the joint search the sentence ("GOOD EVENING", "CAN YOU DO MORE") |
+| Kotlin core: `Ctc`, `FreeTalk`, `JointBeam` + `harness/vectors/freetalk.json` | done | 5 parity tests pass (crop, 25 fps input, greedy, prefix beam, detokenize, joint search incl. eos) |
+| On the iQOO 15 (`deck/data/openvocab-device.json`) | done | All graphs on the NPU, CPU fallback disabled. First start compiles ~15 min once; later ~3 s. **End of mouthing to sentences: 124-326 ms** (10 live clips) |
+| Segmentation for sentences | done | clips < ~1 s dropped (read as THE / THAT), sentence ends after ~0.7 s still |
+| Camera frame rate | built, **not measured** | front camera ran at 20 fps indoors (auto-exposure); app now asks for a 30 fps range |
+| GRID check, laptop (`deck/data/openvocab-grid.json`) | measured | 71.7% WER joint, 73.3% CTC, 30 voiced out-of-domain clips; our crop 70.6% vs official 71.7% |
+| Accuracy on our own silent sentences (E-OV1) | **not measured** | needs prompted recordings (next: in-app recorder) |
 
 ## 1. The ask and the honest starting point
 
