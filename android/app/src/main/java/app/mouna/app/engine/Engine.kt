@@ -624,7 +624,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             val n = bytes.size / (96 * 96)
             val crops = List(n) { bytes.copyOfRange(it * 96 * 96, (it + 1) * 96 * 96) }
             val t = LongArray(n) { (it * 1000.0 / fps).toLong() }
-            val res = r.read(crops, t)
+            r.dump = java.io.File(file.parentFile, "dump_" + file.nameWithoutExtension)
+            val res = try { r.read(crops, t) } finally { r.dump = null }
             ftLog("free talk read ${file.name}: ${res.frames} frames (bucket ${res.bucket}), NPU ${"%.1f".format(res.npuMs)} ms, " +
                 "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps)")
             res.sentences.take(5).forEachIndexed { i, s -> ftLog("  ${i + 1}. $s  (${"%.2f".format(res.scores[i])})") }

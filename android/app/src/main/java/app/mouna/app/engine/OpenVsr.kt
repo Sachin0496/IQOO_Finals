@@ -12,7 +12,6 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
-import java.nio.IntBuffer
 
 /**
  * Free talk (docs/open-vocab-plan.md): open-vocabulary English from silent mouthing. Auto-AVSR's visual encoder +
@@ -30,6 +29,9 @@ class OpenVsr private constructor(
     /** Attention decoder per bucket (avsr_dec_t*.onnx). Without one, that bucket reads with CTC alone (much worse). */
     private val decoders: Map<Int, OrtSession>,
     val tokens: List<String>,
+    /** Decoder lookup tables (dec_embed.bin: 5049 x 768 embeddings * sqrt(768); dec_pos.bin: 48 x 768 positions). */
+    private val embed: FloatArray,
+    private val pos: FloatArray,
 ) : AutoCloseable {
 
     data class Reading(
@@ -52,6 +54,24 @@ class OpenVsr private constructor(
         val t0 = SystemClock.elapsedRealtimeNanos()
         val dec = decoders[t]
         var steps = 0
+        dump?.let { d ->
+            writeFloats(File(d.parentFile, d.name + "_ctc.bin"), logp.copyOfRange(0, n * UNITS))
+            if (dec != null) writeFloats(File(d.parentFile, d.name + "_dec1.bin"), decode(dec, listOf(intArrayOf(SOS)), enc, valid)[0])
+            val pf = File(d.parentFile, d.name + "_prefix.txt")
+            if (dec != null && pf.exists()) {
+                val ids = intArrayOf(SOS) + pf.readText().trim().split(Regex("\\s+")).map { it.toInt() }
+                val prefixes = List(minOf(ids.size, DEC_BATCH)) { ids.copyOfRange(0, it + 1) }
+                val out = decode(dec, prefixes, enc, valid)
+                writeFloats(File(d.parentFile, d.name + "_decp.bin"), out.fold(FloatArray(0)) { a, b -> a + b })
+                // the same graph on the CPU (QA only): separates the NPU compile from this file's input packing
+                runCatching {
+                    env.createSession(File(d.parentFile, "avsr_dec_t$t.onnx").absolutePath, OrtSession.SessionOptions()).use { cpu ->
+                        val outCpu = decode(cpu, prefixes, enc, valid)
+                        writeFloats(File(d.parentFile, d.name + "_decp_cpu.bin"), outCpu.fold(FloatArray(0)) { a, b -> a + b })
+                    }
+                }
+            }
+        }
         val hyps: List<Pair<IntArray, Double>> = if (dec != null) {
             JointBeam.search(logp, n, UNITS, SOS, decode = { ps -> steps++; decode(dec, ps, enc, valid) }, maxLen = minOf(DEC_LEN - 1, n))
                 .map { it.ids to it.score }
@@ -93,8 +113,16 @@ class OpenVsr private constructor(
             sel[b * DEC_LEN + p.size - 1] = 1f
         }
         for (b in prefixes.size until DEC_BATCH) sel[b * DEC_LEN] = 1f
+        // the embedding lookup runs here, not on the NPU (its compile of the Gather gave wrong rows past sos)
+        val x = FloatArray(DEC_BATCH * DEC_LEN * D)
+        for (i in 0 until DEC_BATCH * DEC_LEN) {
+            val e = ys[i] * D
+            val p = (i % DEC_LEN) * D
+            val o = i * D
+            for (k in 0 until D) x[o + k] = embed[e + k] + pos[p + k]
+        }
         val inputs = mapOf(
-            "ys" to OnnxTensor.createTensor(env, IntBuffer.wrap(ys), longArrayOf(DEC_BATCH.toLong(), DEC_LEN.toLong())),
+            "x" to OnnxTensor.createTensor(env, FloatBuffer.wrap(x), longArrayOf(DEC_BATCH.toLong(), DEC_LEN.toLong(), D.toLong())),
             "memory" to OnnxTensor.createTensor(env, FloatBuffer.wrap(enc), longArrayOf(1, t.toLong(), 768)),
             "valid" to OnnxTensor.createTensor(env, FloatBuffer.wrap(valid), longArrayOf(1, t.toLong())),
             "sel" to OnnxTensor.createTensor(env, FloatBuffer.wrap(sel), longArrayOf(DEC_BATCH.toLong(), DEC_LEN.toLong())),
@@ -126,6 +154,15 @@ class OpenVsr private constructor(
         }
     }
 
+    /** QA: when set, the next read writes its CTC log-probs and the first decoder step next to this path. */
+    @Volatile var dump: File? = null
+
+    private fun writeFloats(f: File, a: FloatArray) {
+        val b = ByteBuffer.allocate(a.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+        b.asFloatBuffer().put(a)
+        f.writeBytes(b.array())
+    }
+
     override fun close() = (sessions.values + decoders.values).forEach { it.close() }
 
     companion object {
@@ -133,6 +170,7 @@ class OpenVsr private constructor(
         const val SOS = UNITS - 1
         const val DEC_BATCH = 8
         const val DEC_LEN = 48
+        private const val D = 768
         private const val ROI = FreeTalk.ROI.toLong()
 
         fun folder(context: Context): File = File(context.getExternalFilesDir(null), "avsr").apply { mkdirs() }
@@ -182,7 +220,16 @@ class OpenVsr private constructor(
                 }
             }
             if (sessions.isEmpty()) return null to (listOf("Free talk: no graph opened on the NPU") + notes).joinToString("\n")
-            return OpenVsr(env, sessions, decoders, tokens) to "Free talk: NPU · fp16 · buckets ${sessions.keys.joinToString("/")}" +
+            val embedF = File(dir, "dec_embed.bin")
+            val posF = File(dir, "dec_pos.bin")
+            if (decoders.isNotEmpty() && (!embedF.exists() || !posF.exists())) {
+                decoders.values.forEach { it.close() }
+                decoders.clear()
+                notes += "decoder tables (dec_embed.bin, dec_pos.bin) missing: CTC only"
+            }
+            val embed = if (decoders.isEmpty()) FloatArray(0) else readFloats(embedF)
+            val pos = if (decoders.isEmpty()) FloatArray(0) else readFloats(posF)
+            return OpenVsr(env, sessions, decoders, tokens, embed, pos) to "Free talk: NPU · fp16 · buckets ${sessions.keys.joinToString("/")}" +
                 " · decoder ${if (decoders.isEmpty()) "none (CTC only)" else decoders.keys.joinToString("/")}" +
                 if (notes.isEmpty()) "" else "\n" + notes.joinToString("\n")
         }

@@ -556,8 +556,9 @@ DEC_BATCH, DEC_LEN = 8, 48  # beam hypotheses per run, tokens per hypothesis (so
 class StaticDecoder(nn.Module):
     """Auto-AVSR's 6-layer Transformer decoder at fixed shapes, all positions at once (causal).
 
-    In:  ys (B, L) int32 token ids (sos first, anything after the prefix); memory (1, T, 768) = StaticVsr's enc;
-         valid (1, T) as for the encoder.
+    In:  x (B, L, 768) = token embeddings * sqrt(768) + positions (embed_inputs: the lookup runs on the CPU; the
+         phone's NPU compile of the embedding Gather gave wrong rows for every token after sos); memory (1, T, 768) =
+         StaticVsr's enc; valid (1, T) as for the encoder; sel (B, L) one-hot position per row.
     Out: logp (B, L, 5049): row i is the next-token distribution after ys[:, : i + 1].
     """
 
@@ -576,14 +577,22 @@ class StaticDecoder(nn.Module):
         causal = torch.triu(torch.full((length, length), -1e4), diagonal=1)
         self.register_buffer("causal", causal.view(1, 1, length, length))
 
-    def forward(self, ys: torch.Tensor, memory: torch.Tensor, valid: torch.Tensor, sel: torch.Tensor):
+    def embed_inputs(self, ys: np.ndarray) -> np.ndarray:
+        """(B, L) token ids -> the decoder's x input (what the phone computes from embed.bin + pos.bin)."""
+        with torch.no_grad():
+            return (self.emb(torch.from_numpy(ys).long()) * self.scale + self.pe).numpy()
+
+    def forward(self, x: torch.Tensor, memory: torch.Tensor, valid: torch.Tensor, sel: torch.Tensor):
         """sel (B, L) one-hot: the position whose next-token distribution each row wants -> logp (B, 5049)."""
-        x = self.emb(ys.long()) * self.scale + self.pe
         mem = memory.expand(self.b, self.t, D_MODEL)
-        mem_bias = ((1.0 - valid) * -1e4).view(1, 1, 1, self.t)
+        # Masks at full shape (B, heads, L, keys): the phone's NPU compiler applied a mask broadcast over the batch to
+        # row 0 only (measured: row 0 matched the laptop, rows 1-7 looked past their prefix and ended sentences early).
+        heads = self.layers[0].self_attn.h
+        causal = self.causal.expand(self.b, heads, self.l, self.l)
+        mem_bias = ((1.0 - valid) * -1e4).view(1, 1, 1, self.t).expand(self.b, heads, self.l, self.t)
         for layer in self.layers:
             h = layer.norm1(x)
-            x = x + _mha(layer.self_attn, h, h, self.causal)
+            x = x + _mha(layer.self_attn, h, h, causal)
             h = layer.norm2(x)
             x = x + _mha(layer.src_attn, h, mem, mem_bias)
             x = x + layer.feed_forward(layer.norm3(x))
@@ -620,7 +629,8 @@ def export_decoder(frames: int, model=None, out_dir: Path = OUT) -> Path:
     ys[:, 0] = sos
     sel = np.zeros((DEC_BATCH, DEC_LEN), np.float32)
     sel[np.arange(DEC_BATCH), np.arange(DEC_BATCH) + 3] = 1.0  # row b reads position b + 3
-    args = [torch.from_numpy(a) for a in (ys, mem, valid, sel)]
+    xe = d.embed_inputs(ys)
+    args = [torch.from_numpy(a) for a in (xe, mem, valid, sel)]
     with torch.no_grad():
         ref = d(*args).numpy()
         # against espnet's own incremental decoder on hypothesis 0, prefix of 4 (position 3)
@@ -629,10 +639,14 @@ def export_decoder(frames: int, model=None, out_dir: Path = OUT) -> Path:
 
         lp, _ = model.decoder.forward_one_step(y0, subsequent_mask(4).unsqueeze(0), torch.from_numpy(mem[:, :n]))
         print(f"static decoder vs espnet (prefix 4): {np.abs(ref[0] - lp.numpy()[0]).max():.2e}")
-        torch.onnx.export(d, tuple(args), path, input_names=["ys", "memory", "valid", "sel"], output_names=["logp"],
+        torch.onnx.export(d, tuple(args), path, input_names=["x", "memory", "valid", "sel"], output_names=["logp"],
                           opset_version=17, do_constant_folding=True)
     sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-    got = sess.run(None, {"ys": ys, "memory": mem, "valid": valid, "sel": sel})[0]
+    got = sess.run(None, {"x": xe, "memory": mem, "valid": valid, "sel": sel})[0]
+    # the lookup tables for the phone: token embeddings * sqrt(768) (5049 x 768) and positions (48 x 768), float32 LE
+    with torch.no_grad():
+        (d.emb.weight * d.scale).numpy().astype("<f4").tofile(out_dir / "dec_embed.bin")
+        d.pe[0].numpy().astype("<f4").tofile(out_dir / "dec_pos.bin")
     print(f"{path.name}: {path.stat().st_size / 1e6:.0f} MB, ONNX vs PyTorch {np.abs(got - ref).max():.2e}")
     return path
 
