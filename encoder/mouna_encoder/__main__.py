@@ -158,7 +158,9 @@ def main() -> None:
     e.add_argument("--out", type=Path, default=Path("data/embeddings.npz"))
     e.add_argument("--frames", type=int, help="stretch every clip to this many frames (static shape)")
     e.add_argument("--model", choices=["dynamic", *STATIC_MODELS], default="dynamic", help="static models use 48 frames")
-    sub.add_parser("avsr-export", help="free talk: Auto-AVSR ONNX per bucket + phone files (docs/open-vocab-plan.md)")
+    ex = sub.add_parser("avsr-export", help="free talk: Auto-AVSR ONNX per bucket + phone files (docs/open-vocab-plan.md)")
+    ex.add_argument("--lora", type=Path, help="fold a person's adapter (mouna_encoder.adapt) into the weights first")
+    ex.add_argument("--out", type=Path, help="output folder (default encoder/weights/avsr)")
     r = sub.add_parser("avsr-read", help="free talk: read a video (joint CTC/attention and CTC beam)")
     r.add_argument("video", type=Path, nargs="+")
     sub.add_parser("avsr-vectors", help="free talk: harness/vectors/freetalk.json for android/core")
@@ -167,10 +169,18 @@ def main() -> None:
         from . import avsr
 
         if a.cmd == "avsr-export":
-            m = avsr.load()
+            out = a.out or avsr.OUT
+            if a.lora:
+                from .adapt import merged
+
+                m = merged(a.lora)
+            else:
+                m = avsr.load()
             for t in avsr.BUCKETS:
-                avsr.export(t, m)
-            avsr.phone_files(m)
+                avsr.export(t, m, out)
+                avsr.export_decoder(t, m, out)
+                avsr.export_scorer(t, m, out)
+            avsr.phone_files(m, out)
         elif a.cmd == "avsr-read":
             avsr.read_cli(a.video)
         else:
