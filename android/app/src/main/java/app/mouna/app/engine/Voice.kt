@@ -32,9 +32,30 @@ enum class CallUsage(val usage: Int) {
 }
 
 /**
+ * Which language the phone's own TTS can speak for the caregiver's [Lang]. Hindi and Tamil voices are optional
+ * downloads; without one, asking for them leaves the engine silent or reading the wrong language.
+ */
+object TtsLanguage {
+    data class Pick(val locale: Locale, val fellBack: Boolean)
+
+    /** The caregiver's own language, then Indian English, then any English. */
+    fun candidates(lang: Lang): List<Locale> =
+        listOf(Locale.forLanguageTag(lang.code), Locale.forLanguageTag("en-IN"), Locale.ENGLISH).distinct()
+
+    /** [TextToSpeech.setLanguage] results below LANG_AVAILABLE (missing data, not supported) mean it can't speak it. */
+    fun usable(result: Int) = result >= TextToSpeech.LANG_AVAILABLE
+
+    /** The first candidate the engine accepts ([setLanguage] returns its result code), or null if it takes none. */
+    fun pick(lang: Lang, setLanguage: (Locale) -> Int): Pick? {
+        for ((i, l) in candidates(lang).withIndex()) if (usable(setLanguage(l))) return Pick(l, fellBack = i > 0)
+        return null
+    }
+}
+
+/**
  * Speaks a phrase in the caregiver's language. In order: the pre-rendered natural voice pack (assets/voices, from
- * voices/render.py: instant, offline); Sarvam Bulbul live, if there is a key and the network answers in time (text only
- * goes out, see [Sarvam]); the phone's own offline TTS voice. Any failure moves down the list at once.
+ * voices/render.py: instant, offline); Sarvam Bulbul live, if there is a key and it is cached or we are on a call
+ * (text only goes out, see [Sarvam.plan]); the phone's own offline TTS voice. Any failure moves down the list at once.
  */
 class Voice(private val context: Context, private val store: Store? = null) : AutoCloseable {
     private val clips = HashMap<String, Map<String, Map<String, String>>>() // voice -> lang -> phrase -> asset path
@@ -42,6 +63,10 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
     private var player: MediaPlayer? = null
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    // Said before the phone's voice engine finished starting: spoken as soon as it has (newest wins, as QUEUE_FLUSH would).
+    private class Pending(val text: String, val lang: Lang, val phraseId: String?, val voice: String, val generation: Int, val at: Long)
+    private var pending: Pending? = null
+    private val initHandler = Handler(Looper.getMainLooper()) // not [main]: stop() clears that queue, and must not eat the engine's "ready"
     private val main = Handler(Looper.getMainLooper())
     private val net = Executors.newCachedThreadPool() // a hung request must not hold up the next phrase
     private val linkJobs = java.util.concurrent.ConcurrentHashMap<String, File>() // TTS files being rendered for the call
@@ -79,7 +104,18 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         }
         list += VoiceInfo(DEVICE, "Phone voice")
         voices = list
-        tts = TextToSpeech(context) { ttsReady = it == TextToSpeech.SUCCESS }
+        val t0 = SystemClock.elapsedRealtime()
+        tts = TextToSpeech(context) { status ->
+            initHandler.post {
+                ttsReady = status == TextToSpeech.SUCCESS
+                Log.i("MounaPerf", "phone voice engine ${if (ttsReady) "ready" else "failed ($status)"} in ${SystemClock.elapsedRealtime() - t0} ms")
+                val p = pending
+                pending = null
+                if (p != null && p.generation == generation && SystemClock.elapsedRealtime() - p.at < PENDING_MS) {
+                    if (ttsReady) speakTts(p.text, p.lang, p.phraseId, p.voice) else Log.w(TAG, "phone voice engine never started: \"${p.text.take(30)}\" not spoken")
+                }
+            }
+        }
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) = Unit
             override fun onError(id: String?) { linkJobs.remove(id)?.delete() }
@@ -104,28 +140,29 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         link?.takeIf { it.takesAudio && it.state == CallState.ACTIVE }?.sendText(text)
         val gen = generation
         val path = phraseId?.let { clips[voice]?.get(lang.tag)?.get(it) }
-        if (path != null) {
-            val sent = toLink { context.assets.open("voices/$path").use { it.readBytes() } to "audio/mp4" }
-            if (sent || runCatching { play { context.assets.openFd("voices/$path").use { fd -> setDataSource(fd.fileDescriptor, fd.startOffset, fd.length) } } }.isSuccess) {
-                used(PACK)
-                return
-            }
-        }
+        if (path != null && playPack(path)) return
         // "Phone voice" is the person's own choice for ordinary speech; on a call the words matter more than the voice.
         val key = sarvamKey()
-        if (key.isBlank() || (voice == DEVICE && !callMode)) return speakTts(text, lang, phraseId)
         val req = Sarvam.Request(text, lang, Sarvam.speakerFor(voice))
         val cached = Sarvam.cacheFile(context.cacheDir, req)
-        if (cached.exists() && playSarvam(cached)) return
+        when (Sarvam.plan(key.isNotBlank(), voice == DEVICE, callMode, cached.exists())) {
+            Sarvam.Plan.PHONE_NOW -> return speakTts(text, lang, phraseId, voice)
+            Sarvam.Plan.CACHED -> {
+                if (playSarvam(cached)) return
+                cached.delete() // won't play: don't trip over it again
+                return speakTts(text, lang, phraseId, voice)
+            }
+            Sarvam.Plan.FETCH -> Unit
+        }
         val t0 = SystemClock.elapsedRealtime()
         val settled = AtomicBoolean(false) // the answer and the deadline race; the first one wins
         val deadline = Runnable {
             if (gen == generation && settled.compareAndSet(false, true)) {
-                Log.w(TAG, "sarvam: no answer in ${Sarvam.TIMEOUT_MS} ms, phone voice instead")
-                speakTts(text, lang, phraseId)
+                Log.w(TAG, "sarvam: no answer in ${Sarvam.CALL_WAIT_MS} ms, phone voice instead")
+                speakTts(text, lang, phraseId, voice)
             }
         }
-        main.postDelayed(deadline, Sarvam.TIMEOUT_MS.toLong())
+        main.postDelayed(deadline, Sarvam.CALL_WAIT_MS.toLong())
         net.execute {
             val file = runCatching { Sarvam.fetch(key, req, context.cacheDir) }
                 .onFailure { Log.w(TAG, "sarvam failed: ${it.javaClass.simpleName} ${it.message}") }
@@ -134,9 +171,19 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
                 if (gen != generation || !settled.compareAndSet(false, true)) return@post
                 main.removeCallbacks(deadline)
                 if (file != null && playSarvam(file)) Log.i(TAG, "sarvam: ${SystemClock.elapsedRealtime() - t0} ms to first sound")
-                else speakTts(text, lang, phraseId)
+                else speakTts(text, lang, phraseId, voice)
             }
         }
+    }
+
+    /** A clip from the voice pack, to the call or the speaker. False if it would not play. */
+    private fun playPack(path: String): Boolean {
+        val sent = toLink { context.assets.open("voices/$path").use { it.readBytes() } to "audio/mp4" }
+        if (sent || runCatching { play { context.assets.openFd("voices/$path").use { fd -> setDataSource(fd.fileDescriptor, fd.startOffset, fd.length) } } }.isSuccess) {
+            used(PACK)
+            return true
+        }
+        return false
     }
 
     /** Spoken sentences kept on the phone for instant replay: how many and how many bytes (see [Sarvam.CACHE_KEEP]). */
@@ -174,11 +221,30 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         return ok
     }
 
-    private fun speakTts(text: String, lang: Lang, phraseId: String?) {
-        val t = tts ?: return
-        if (!ttsReady) return
+    private fun speakTts(text: String, lang: Lang, phraseId: String?, voice: String) {
+        val t = tts
+        if (t == null) {
+            Log.w(TAG, "no phone voice engine: \"${text.take(30)}\" not spoken")
+            return
+        }
+        if (!ttsReady) { // still starting (the first seconds after launch): say it the moment it is up, don't drop it
+            pending = Pending(text, lang, phraseId, voice, generation, SystemClock.elapsedRealtime())
+            return
+        }
         t.setAudioAttributes(attributes())
-        t.language = Locale.forLanguageTag(lang.code)
+        val pick = TtsLanguage.pick(lang) { t.setLanguage(it) }
+        if (pick == null) {
+            Log.w(TAG, "phone voice has no ${lang.code} or English voice: \"${text.take(30)}\" not spoken")
+            return
+        }
+        if (pick.fellBack) {
+            Log.w(TAG, "phone voice has no ${lang.code} voice installed; using ${pick.locale.toLanguageTag()}")
+        }
+        if (pick.fellBack && lang != Lang.EN) {
+            // English reading Hindi or Tamil script is noise: a pre-rendered English clip of the same phrase says it properly.
+            val clip = phraseId?.let { id -> (listOfNotNull(clips[voice]) + clips.values).firstNotNullOfOrNull { it["en"]?.get(id) } }
+            if (clip != null && playPack(clip)) return
+        }
         val l = link
         if (l != null && l.takesAudio && l.state == CallState.ACTIVE) {
             // Render to a WAV and hand it to the call instead of the speaker.
@@ -215,6 +281,7 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
     /** Stops what is playing and drops any Sarvam answer still on its way. */
     fun stop() {
         generation++
+        pending = null
         main.removeCallbacksAndMessages(null)
         player?.runCatching { stop(); release() }
         player = null
@@ -233,5 +300,6 @@ class Voice(private val context: Context, private val store: Store? = null) : Au
         const val SARVAM = "Sarvam"
         const val PHONE = "phone voice"
         private const val TAG = "MounaVoice"
+        private const val PENDING_MS = 8000L // a phrase older than this when the engine finally starts is stale: not spoken
     }
 }

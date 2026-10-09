@@ -11,6 +11,8 @@ import app.mouna.core.EncoderInput
 import app.mouna.core.SelfTest
 import app.mouna.core.cosine
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.FloatBuffer
 
 /** Turns one utterance into a fixed-size embedding for the few-shot Learner. */
@@ -44,6 +46,11 @@ class OrtEncoder private constructor(
     override val onNpu: Boolean,
 ) : LipEncoder {
     private val inputName = session.inputNames.first()
+    private val shape = EncoderInput.SHAPE.map { it.toLong() }.toLongArray()
+    // One direct buffer for every utterance: a heap FloatBuffer makes ONNX Runtime allocate and copy a fresh 7.4 MB native
+    // buffer each time. Only the worker thread runs the encoder, so one is enough.
+    private val inputBuf: FloatBuffer = ByteBuffer.allocateDirect(EncoderInput.SHAPE.fold(1) { a, b -> a * b } * Float.SIZE_BYTES)
+        .order(ByteOrder.nativeOrder()).asFloatBuffer()
 
     override fun embed(clip: Clip): FloatArray {
         val (crops, t) = clip.crops()
@@ -51,8 +58,10 @@ class OrtEncoder private constructor(
     }
 
     fun run(input: FloatArray): FloatArray {
-        val shape = EncoderInput.SHAPE.map { it.toLong() }.toLongArray()
-        OnnxTensor.createTensor(env, FloatBuffer.wrap(input), shape).use { x ->
+        inputBuf.clear()
+        inputBuf.put(input)
+        inputBuf.rewind()
+        OnnxTensor.createTensor(env, inputBuf, shape).use { x ->
             session.run(mapOf(inputName to x)).use { out ->
                 val y = out.get(0) as OnnxTensor
                 val b = y.floatBuffer
@@ -78,6 +87,7 @@ class OrtEncoder private constructor(
          */
         fun open(context: Context, log: (String) -> Unit): Pair<OrtEncoder?, EncoderReport> {
             val dir = folder(context)
+            discardCutShortCompiles(context, dir)
             val files = dir.listFiles().orEmpty().filter { it.name.endsWith(".onnx") }
             if (files.isEmpty()) {
                 return null to EncoderReport("Landmarks", "No encoder in ${dir.absolutePath}. Using lip landmarks until it is pushed.")
@@ -89,7 +99,7 @@ class OrtEncoder private constructor(
             val cpu = files - npu.toSet()
             for (f in npu) {
                 val int8 = "int8" in f.name
-                val opened = guarded(f, "NPU") { attempt(env, f, qnn = true, test, int8, log) }
+                val opened = guarded(context, f, "NPU") { attempt(env, f, qnn = true, test, int8, log) }
                 if (opened.first != null) return opened.first to opened.second
                 notes += opened.second.detail
             }
@@ -98,13 +108,13 @@ class OrtEncoder private constructor(
             if (snapdragon()) for (f in cpu) {
                 val ctx = File(dir, "${f.nameWithoutExtension}.qnn_ctx_fp16.onnx")
                 if (ctx.exists()) continue
-                val opened = guarded(f, "NPU-compile") { attempt(env, f, qnn = true, test, int8 = false, log, compileTo = ctx) }
+                val opened = guarded(context, f, "NPU-compile") { attempt(env, f, qnn = true, test, int8 = false, log, compileTo = ctx) }
                 if (opened.first != null) return opened.first to opened.second.copy(detail = (notes + opened.second.detail).joinToString("\n"))
                 notes += opened.second.detail
                 ctx.delete()
             }
             for (f in cpu) {
-                val opened = guarded(f, "CPU") { attempt(env, f, qnn = false, test, int8 = false, log) }
+                val opened = guarded(context, f, "CPU") { attempt(env, f, qnn = false, test, int8 = false, log) }
                 if (opened.first != null) {
                     return opened.first to opened.second.copy(detail = (notes + opened.second.detail).joinToString("\n"))
                 }
@@ -115,13 +125,31 @@ class OrtEncoder private constructor(
 
         /**
          * A model that crashes natively takes the app down with it. Mark each attempt on disk first; if the app dies
-         * during it, the mark is still there next start and that model (or mode) is skipped instead of crash-looping.
+         * during it and Android says it was a real crash, the mark is still there next start and that model (or mode) is
+         * skipped instead of crash-looping (see [CrashMarks]).
          */
-        private fun guarded(f: File, mode: String, run: () -> Pair<OrtEncoder?, EncoderReport>): Pair<OrtEncoder?, EncoderReport> {
-            val mark = File(f.parentFile, ".${f.name}.$mode.crashed")
-            if (mark.exists()) return null to EncoderReport(mode, "${f.name} on $mode crashed last time: skipped (delete ${mark.name} to retry)")
-            mark.writeText("trying")
+        private fun guarded(context: Context, f: File, mode: String, run: () -> Pair<OrtEncoder?, EncoderReport>): Pair<OrtEncoder?, EncoderReport> {
+            val mark = markFile(f, mode)
+            if (CrashMarks.blocks(context, mark)) return null to EncoderReport(mode, "${f.name} on $mode crashed last time: skipped (delete ${mark.name} to retry)")
+            CrashMarks.begin(mark)
             return run().also { mark.delete() }
+        }
+
+        private fun markFile(f: File, mode: String) = File(f.parentFile, ".${f.name}.$mode.crashed")
+
+        /**
+         * The on-phone NPU compile writes its context binary at the path it was given. If the app was killed during the
+         * compile (it takes minutes the first time), that file is half-written but exists, and the "already compiled"
+         * check would keep the encoder on the CPU forever. A compile mark that no longer counts as a crash means the
+         * file is junk: delete both so the next start compiles again.
+         */
+        private fun discardCutShortCompiles(context: Context, dir: File) {
+            val suffix = ".NPU-compile.crashed"
+            for (mark in dir.listFiles { x -> x.name.startsWith(".") && x.name.endsWith(suffix) }.orEmpty()) {
+                if (CrashMarks.blocks(context, mark)) continue // a real crash: leave everything, the guard skips the compile
+                val onnx = mark.name.removePrefix(".").removeSuffix(suffix).removeSuffix(".onnx")
+                File(dir, "$onnx.qnn_ctx_fp16.onnx").delete()
+            }
         }
 
         private fun attempt(
@@ -135,23 +163,25 @@ class OrtEncoder private constructor(
         ): Pair<OrtEncoder?, EncoderReport> {
             val where = if (qnn) "NPU" else "CPU"
             val session = runCatching {
-                val opts = OrtSession.SessionOptions()
-                if (qnn) {
-                    val qnnOptions = mutableMapOf(
-                        "backend_path" to "libQnnHtp.so",
-                        "htp_performance_mode" to "burst",
-                        "htp_graph_finalization_optimization_mode" to "3",
-                    )
-                    if (compileTo != null) {
-                        qnnOptions["enable_htp_fp16_precision"] = "1" // fp32 graph run in fp16 on HTP V73+ (SM8650, SM8850)
-                        opts.addConfigEntry("ep.context_enable", "1")
-                        opts.addConfigEntry("ep.context_embed_mode", "1")
-                        opts.addConfigEntry("ep.context_file_path", compileTo.absolutePath)
+                // The options are only needed to create the session; closing them frees their native memory.
+                (if (qnn) OrtSession.SessionOptions() else cpuOptions(4)).use { opts ->
+                    if (qnn) {
+                        val qnnOptions = mutableMapOf(
+                            "backend_path" to "libQnnHtp.so",
+                            "htp_performance_mode" to "burst",
+                            "htp_graph_finalization_optimization_mode" to "3",
+                        )
+                        if (compileTo != null) {
+                            qnnOptions["enable_htp_fp16_precision"] = "1" // fp32 graph run in fp16 on HTP V73+ (SM8650, SM8850)
+                            opts.addConfigEntry("ep.context_enable", "1")
+                            opts.addConfigEntry("ep.context_embed_mode", "1")
+                            opts.addConfigEntry("ep.context_file_path", compileTo.absolutePath)
+                        }
+                        opts.addQnn(qnnOptions)
+                        opts.addConfigEntry("session.disable_cpu_ep_fallback", "1") // all on the NPU, or fail loudly
                     }
-                    opts.addQnn(qnnOptions)
-                    opts.addConfigEntry("session.disable_cpu_ep_fallback", "1") // all on the NPU, or fail loudly
+                    env.createSession(f.absolutePath, opts)
                 }
-                env.createSession(f.absolutePath, if (qnn) opts else cpuOptions(4))
             }.getOrElse {
                 log("encoder: ${f.name} on $where failed: ${it.message}")
                 return null to EncoderReport(where, "${f.name} on $where: ${it.message?.take(160)}")
