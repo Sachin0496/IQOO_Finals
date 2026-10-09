@@ -1,0 +1,541 @@
+{
+  "version": 1,
+  "review": "Drafted by the team from ICU communication studies; native-speaker review pending",
+  "sources": [
+    "Communicating with conscious and mechanically ventilated critically ill patients: a systematic review (PMC5070186)",
+    "Mechanically ventilated patients' experiences of communication using eye-tracking technology (PMC12828804)"
+  ],
+  "start": {
+    "en": "I want to say something else",
+    "ta": "நான் வேறு ஒன்று சொல்ல வேண்டும்",
+    "kn": "ನಾನು ಬೇರೆ ಏನೋ ಹೇಳಬೇಕು",
+    "hi": "मुझे कुछ और कहना है"
+  },
+  "none": {
+    "en": "I want to say something else. Please bring the letter board.",
+    "ta": "நான் வேறு ஒன்று சொல்ல வேண்டும். எழுத்துப் பலகையைக் கொண்டு வாருங்கள்.",
+    "kn": "ನಾನು ಬೇರೆ ಏನೋ ಹೇಳಬೇಕು. ದಯವಿಟ್ಟು ಅಕ್ಷರ ಫಲಕ ತನ್ನಿ.",
+    "hi": "मुझे कुछ और कहना है। कृपया अक्षर बोर्ड लाइए।"
+  },
+  "tree": [
+    {
+      "id": "pain",
+      "ask": {
+        "en": "Pain?",
+        "ta": "வலி?",
+        "kn": "ನೋವು?",
+        "hi": "दर्द?"
+      },
+      "urgent": true,
+      "children": [
+        {
+          "id": "pain_head",
+          "ask": {
+            "en": "Head?",
+            "ta": "தலை?",
+            "kn": "ತಲೆ?",
+            "hi": "सिर?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My head hurts",
+            "ta": "எனக்கு தலை வலிக்கிறது",
+            "kn": "ನನಗೆ ತಲೆ ನೋವಾಗುತ್ತಿದೆ",
+            "hi": "मेरे सिर में दर्द है"
+          }
+        },
+        {
+          "id": "pain_throat",
+          "ask": {
+            "en": "Throat or neck?",
+            "ta": "தொண்டை அல்லது கழுத்து?",
+            "kn": "ಗಂಟಲು ಅಥವಾ ಕುತ್ತಿಗೆ?",
+            "hi": "गला या गर्दन?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My throat or neck hurts",
+            "ta": "எனக்கு தொண்டை அல்லது கழுத்து வலிக்கிறது",
+            "kn": "ನನಗೆ ಗಂಟಲು ಅಥವಾ ಕುತ್ತಿಗೆ ನೋವಾಗುತ್ತಿದೆ",
+            "hi": "मेरे गले या गर्दन में दर्द है"
+          }
+        },
+        {
+          "id": "pain_chest",
+          "ask": {
+            "en": "Chest?",
+            "ta": "நெஞ்சு?",
+            "kn": "ಎದೆ?",
+            "hi": "सीना?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My chest hurts",
+            "ta": "எனக்கு நெஞ்சு வலிக்கிறது",
+            "kn": "ನನಗೆ ಎದೆ ನೋವಾಗುತ್ತಿದೆ",
+            "hi": "मेरे सीने में दर्द है"
+          }
+        },
+        {
+          "id": "pain_stomach",
+          "ask": {
+            "en": "Stomach?",
+            "ta": "வயிறு?",
+            "kn": "ಹೊಟ್ಟೆ?",
+            "hi": "पेट?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My stomach hurts",
+            "ta": "எனக்கு வயிறு வலிக்கிறது",
+            "kn": "ನನಗೆ ಹೊಟ್ಟೆ ನೋವಾಗುತ್ತಿದೆ",
+            "hi": "मेरे पेट में दर्द है"
+          }
+        },
+        {
+          "id": "pain_back",
+          "ask": {
+            "en": "Back?",
+            "ta": "முதுகு?",
+            "kn": "ಬೆನ್ನು?",
+            "hi": "पीठ?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My back hurts",
+            "ta": "எனக்கு முதுகு வலிக்கிறது",
+            "kn": "ನನಗೆ ಬೆನ್ನು ನೋವಾಗುತ್ತಿದೆ",
+            "hi": "मेरी पीठ में दर्द है"
+          }
+        },
+        {
+          "id": "pain_limb",
+          "ask": {
+            "en": "Arm or leg?",
+            "ta": "கை அல்லது கால்?",
+            "kn": "ಕೈ ಅಥವಾ ಕಾಲು?",
+            "hi": "हाथ या पैर?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My arm or leg hurts",
+            "ta": "எனக்கு கை அல்லது கால் வலிக்கிறது",
+            "kn": "ನನಗೆ ಕೈ ಅಥವಾ ಕಾಲು ನೋವಾಗುತ್ತಿದೆ",
+            "hi": "मेरे हाथ या पैर में दर्द है"
+          }
+        },
+        {
+          "id": "pain_other",
+          "ask": {
+            "en": "Somewhere else?",
+            "ta": "வேறு இடம்?",
+            "kn": "ಬೇರೆ ಕಡೆ?",
+            "hi": "कहीं और?"
+          },
+          "urgent": true,
+          "phrase": "pain"
+        }
+      ]
+    },
+    {
+      "id": "breathing",
+      "ask": {
+        "en": "Breathing?",
+        "ta": "மூச்சு?",
+        "kn": "ಉಸಿರಾಟ?",
+        "hi": "सांस?"
+      },
+      "urgent": true,
+      "children": [
+        {
+          "id": "breathe",
+          "ask": {
+            "en": "Hard to breathe?",
+            "ta": "மூச்சு விட சிரமமா?",
+            "kn": "ಉಸಿರಾಡಲು ಕಷ್ಟವೇ?",
+            "hi": "सांस लेने में तकलीफ़?"
+          },
+          "urgent": true,
+          "phrase": "breathe"
+        },
+        {
+          "id": "suction",
+          "ask": {
+            "en": "Phlegm? Suction?",
+            "ta": "சளி?",
+            "kn": "ಕಫ?",
+            "hi": "बलगम?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "Please clear my phlegm",
+            "ta": "தயவுசெய்து என் சளியை எடுங்கள்",
+            "kn": "ದಯವಿಟ್ಟು ನನ್ನ ಕಫ ತೆಗೆಯಿರಿ",
+            "hi": "कृपया मेरा बलगम साफ़ कीजिए"
+          }
+        },
+        {
+          "id": "tube",
+          "ask": {
+            "en": "Tube?",
+            "ta": "குழாய்?",
+            "kn": "ಟ್ಯೂಬ್?",
+            "hi": "नली?"
+          },
+          "urgent": true,
+          "say": {
+            "en": "My tube is bothering me",
+            "ta": "என் குழாய் தொந்தரவு செய்கிறது",
+            "kn": "ನನ್ನ ಟ್ಯೂಬ್ ತೊಂದರೆ ಕೊಡುತ್ತಿದೆ",
+            "hi": "मेरी नली से तकलीफ़ हो रही है"
+          }
+        }
+      ]
+    },
+    {
+      "id": "drink",
+      "ask": {
+        "en": "Drink or food?",
+        "ta": "குடிக்க அல்லது சாப்பிட?",
+        "kn": "ಕುಡಿಯಲು ಅಥವಾ ತಿನ್ನಲು?",
+        "hi": "पीना या खाना?"
+      },
+      "urgent": false,
+      "children": [
+        {
+          "id": "water",
+          "ask": {
+            "en": "Water?",
+            "ta": "தண்ணீர்?",
+            "kn": "ನೀರು?",
+            "hi": "पानी?"
+          },
+          "urgent": false,
+          "phrase": "water"
+        },
+        {
+          "id": "dry_mouth",
+          "ask": {
+            "en": "Dry mouth?",
+            "ta": "வாய் வறட்சி?",
+            "kn": "ಬಾಯಿ ಒಣಗಿದೆಯೇ?",
+            "hi": "मुँह सूखा?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "My mouth is dry",
+            "ta": "என் வாய் வறண்டு இருக்கிறது",
+            "kn": "ನನ್ನ ಬಾಯಿ ಒಣಗಿದೆ",
+            "hi": "मेरा मुँह सूख रहा है"
+          }
+        },
+        {
+          "id": "hungry",
+          "ask": {
+            "en": "Food?",
+            "ta": "சாப்பாடு?",
+            "kn": "ಊಟ?",
+            "hi": "खाना?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "I am hungry",
+            "ta": "எனக்கு பசிக்கிறது",
+            "kn": "ನನಗೆ ಹಸಿವಾಗುತ್ತಿದೆ",
+            "hi": "मुझे भूख लगी है"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comfort",
+      "ask": {
+        "en": "Comfort?",
+        "ta": "வசதி?",
+        "kn": "ಆರಾಮ?",
+        "hi": "आराम?"
+      },
+      "urgent": false,
+      "children": [
+        {
+          "id": "hot",
+          "ask": {
+            "en": "Too hot?",
+            "ta": "அதிக சூடு?",
+            "kn": "ತುಂಬಾ ಸೆಖೆ?",
+            "hi": "बहुत गर्मी?"
+          },
+          "urgent": false,
+          "phrase": "hot"
+        },
+        {
+          "id": "cold",
+          "ask": {
+            "en": "Too cold?",
+            "ta": "அதிக குளிர்?",
+            "kn": "ತುಂಬಾ ಚಳಿ?",
+            "hi": "बहुत ठंड?"
+          },
+          "urgent": false,
+          "phrase": "cold"
+        },
+        {
+          "id": "turn",
+          "ask": {
+            "en": "Turn me?",
+            "ta": "திருப்பி படுக்க வைக்கவா?",
+            "kn": "ಮಗ್ಗುಲು ಬದಲಿಸಬೇಕೆ?",
+            "hi": "करवट?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "Please change my position",
+            "ta": "தயவுசெய்து என்னைத் திருப்பி படுக்க வையுங்கள்",
+            "kn": "ದಯವಿಟ್ಟು ನನ್ನ ಮಗ್ಗುಲು ಬದಲಿಸಿ",
+            "hi": "कृपया मेरी करवट बदल दीजिए"
+          }
+        },
+        {
+          "id": "sit_up",
+          "ask": {
+            "en": "Sit up?",
+            "ta": "உட்கார?",
+            "kn": "ಕುಳಿತುಕೊಳ್ಳಲು?",
+            "hi": "बैठना?"
+          },
+          "urgent": false,
+          "phrase": "sit_up"
+        },
+        {
+          "id": "light",
+          "ask": {
+            "en": "Light?",
+            "ta": "விளக்கு?",
+            "kn": "ದೀಪ?",
+            "hi": "बत्ती?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "Please turn off the light",
+            "ta": "தயவுசெய்து விளக்கை அணையுங்கள்",
+            "kn": "ದಯವಿಟ್ಟು ದೀಪ ಆರಿಸಿ",
+            "hi": "कृपया बत्ती बंद कर दीजिए"
+          }
+        }
+      ]
+    },
+    {
+      "id": "toilet",
+      "ask": {
+        "en": "Toilet?",
+        "ta": "கழிவறை?",
+        "kn": "ಶೌಚಾಲಯ?",
+        "hi": "शौचालय?"
+      },
+      "urgent": false,
+      "phrase": "toilet"
+    },
+    {
+      "id": "someone",
+      "ask": {
+        "en": "Call someone?",
+        "ta": "யாரையாவது அழைக்கவா?",
+        "kn": "ಯಾರನ್ನಾದರೂ ಕರೆಯಬೇಕೆ?",
+        "hi": "किसी को बुलाना?"
+      },
+      "urgent": false,
+      "children": [
+        {
+          "id": "nurse",
+          "ask": {
+            "en": "Nurse?",
+            "ta": "செவிலியர்?",
+            "kn": "ನರ್ಸ್?",
+            "hi": "नर्स?"
+          },
+          "urgent": false,
+          "phrase": "nurse"
+        },
+        {
+          "id": "doctor",
+          "ask": {
+            "en": "Doctor?",
+            "ta": "டாக்டர்?",
+            "kn": "ಡಾಕ್ಟರ್?",
+            "hi": "डॉक्टर?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "Please call the doctor",
+            "ta": "தயவுசெய்து டாக்டரை அழையுங்கள்",
+            "kn": "ದಯವಿಟ್ಟು ಡಾಕ್ಟರನ್ನು ಕರೆಯಿರಿ",
+            "hi": "कृपया डॉक्टर को बुलाइए"
+          }
+        },
+        {
+          "id": "family",
+          "ask": {
+            "en": "Family?",
+            "ta": "குடும்பம்?",
+            "kn": "ಮನೆಯವರು?",
+            "hi": "परिवार?"
+          },
+          "urgent": false,
+          "phrase": "family"
+        }
+      ]
+    },
+    {
+      "id": "feel",
+      "ask": {
+        "en": "How you feel?",
+        "ta": "உங்கள் உணர்வு?",
+        "kn": "ನಿಮಗೆ ಹೇಗನಿಸುತ್ತಿದೆ?",
+        "hi": "कैसा लग रहा है?"
+      },
+      "urgent": false,
+      "children": [
+        {
+          "id": "scared",
+          "ask": {
+            "en": "Scared?",
+            "ta": "பயமா?",
+            "kn": "ಭಯವೇ?",
+            "hi": "डर?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "I am scared",
+            "ta": "எனக்கு பயமாக இருக்கிறது",
+            "kn": "ನನಗೆ ಭಯವಾಗುತ್ತಿದೆ",
+            "hi": "मुझे डर लग रहा है"
+          }
+        },
+        {
+          "id": "sick",
+          "ask": {
+            "en": "Feel sick?",
+            "ta": "குமட்டலா?",
+            "kn": "ವಾಕರಿಕೆಯೇ?",
+            "hi": "जी मिचलाना?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "I feel sick",
+            "ta": "எனக்கு குமட்டுகிறது",
+            "kn": "ನನಗೆ ವಾಕರಿಕೆ ಬರುತ್ತಿದೆ",
+            "hi": "मेरा जी मिचला रहा है"
+          }
+        },
+        {
+          "id": "sleep",
+          "ask": {
+            "en": "Cannot sleep?",
+            "ta": "தூக்கம் வரவில்லையா?",
+            "kn": "ನಿದ್ದೆ ಬರುತ್ತಿಲ್ಲವೇ?",
+            "hi": "नींद नहीं आ रही?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "I cannot sleep",
+            "ta": "எனக்கு தூக்கம் வரவில்லை",
+            "kn": "ನನಗೆ ನಿದ್ದೆ ಬರುತ್ತಿಲ್ಲ",
+            "hi": "मुझे नींद नहीं आ रही"
+          }
+        },
+        {
+          "id": "tired",
+          "ask": {
+            "en": "Tired?",
+            "ta": "களைப்பா?",
+            "kn": "ಸುಸ್ತೇ?",
+            "hi": "थकान?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "I am tired, please let me rest",
+            "ta": "எனக்கு களைப்பாக இருக்கிறது, ஓய்வெடுக்க விடுங்கள்",
+            "kn": "ನನಗೆ ಸುಸ್ತಾಗಿದೆ, ವಿಶ್ರಾಂತಿ ತೆಗೆದುಕೊಳ್ಳಲು ಬಿಡಿ",
+            "hi": "मुझे थकान है, आराम करने दीजिए"
+          }
+        }
+      ]
+    },
+    {
+      "id": "question",
+      "ask": {
+        "en": "A question?",
+        "ta": "ஒரு கேள்வி?",
+        "kn": "ಒಂದು ಪ್ರಶ್ನೆ?",
+        "hi": "कोई सवाल?"
+      },
+      "urgent": false,
+      "children": [
+        {
+          "id": "time",
+          "ask": {
+            "en": "Time?",
+            "ta": "நேரம்?",
+            "kn": "ಸಮಯ?",
+            "hi": "समय?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "What time is it?",
+            "ta": "இப்போது மணி என்ன?",
+            "kn": "ಈಗ ಸಮಯ ಎಷ್ಟು?",
+            "hi": "अभी क्या समय हुआ है?"
+          }
+        },
+        {
+          "id": "home",
+          "ask": {
+            "en": "Going home?",
+            "ta": "வீட்டுக்கு?",
+            "kn": "ಮನೆಗೆ?",
+            "hi": "घर?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "When can I go home?",
+            "ta": "நான் எப்போது வீட்டுக்குப் போகலாம்?",
+            "kn": "ನಾನು ಯಾವಾಗ ಮನೆಗೆ ಹೋಗಬಹುದು?",
+            "hi": "मेरी छुट्टी कब होगी?"
+          }
+        },
+        {
+          "id": "voice",
+          "ask": {
+            "en": "My voice?",
+            "ta": "என் குரல்?",
+            "kn": "ನನ್ನ ಧ್ವನಿ?",
+            "hi": "मेरी आवाज़?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "When will my voice come back?",
+            "ta": "என் குரல் எப்போது திரும்ப வரும்?",
+            "kn": "ನನ್ನ ಧ್ವನಿ ಯಾವಾಗ ಮರಳಿ ಬರುತ್ತದೆ?",
+            "hi": "मेरी आवाज़ कब वापस आएगी?"
+          }
+        },
+        {
+          "id": "what_happened",
+          "ask": {
+            "en": "What happened?",
+            "ta": "என்ன ஆனது?",
+            "kn": "ಏನಾಯಿತು?",
+            "hi": "क्या हुआ?"
+          },
+          "urgent": false,
+          "say": {
+            "en": "What happened to me?",
+            "ta": "எனக்கு என்ன ஆனது?",
+            "kn": "ನನಗೆ ಏನಾಯಿತು?",
+            "hi": "मुझे क्या हुआ है?"
+          }
+        }
+      ]
+    }
+  ]
+}

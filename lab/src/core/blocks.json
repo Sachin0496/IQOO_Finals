@@ -1,0 +1,429 @@
+{
+  "version": 1,
+  "review": "Drafted by the team; native-speaker review pending",
+  "note": "Refusal is 'no', not 'don't want': want / don't want look almost the same on the lips (Kannada beku/beda is the top confusion in our measurement), so the two blocks are chosen to look different.",
+  "blocks": [
+    {
+      "id": "water",
+      "word": {
+        "en": "water",
+        "ta": "தண்ணீர்",
+        "kn": "ನೀರು",
+        "hi": "पानी"
+      }
+    },
+    {
+      "id": "food",
+      "word": {
+        "en": "food",
+        "ta": "சாப்பாடு",
+        "kn": "ಊಟ",
+        "hi": "खाना"
+      }
+    },
+    {
+      "id": "tea",
+      "word": {
+        "en": "tea",
+        "ta": "டீ",
+        "kn": "ಚಹಾ",
+        "hi": "चाय"
+      }
+    },
+    {
+      "id": "medicine",
+      "word": {
+        "en": "medicine",
+        "ta": "மருந்து",
+        "kn": "ಔಷಧಿ",
+        "hi": "दवा"
+      }
+    },
+    {
+      "id": "blanket",
+      "word": {
+        "en": "blanket",
+        "ta": "போர்வை",
+        "kn": "ಹೊದಿಕೆ",
+        "hi": "कंबल"
+      }
+    },
+    {
+      "id": "fan",
+      "word": {
+        "en": "fan",
+        "ta": "ஃபேன்",
+        "kn": "ಫ್ಯಾನ್",
+        "hi": "पंखा"
+      }
+    },
+    {
+      "id": "light",
+      "word": {
+        "en": "light",
+        "ta": "விளக்கு",
+        "kn": "ದೀಪ",
+        "hi": "बत्ती"
+      }
+    },
+    {
+      "id": "mother",
+      "word": {
+        "en": "mother",
+        "ta": "அம்மா",
+        "kn": "ಅಮ್ಮ",
+        "hi": "माँ"
+      }
+    },
+    {
+      "id": "doctor",
+      "word": {
+        "en": "doctor",
+        "ta": "டாக்டர்",
+        "kn": "ಡಾಕ್ಟರ್",
+        "hi": "डॉक्टर"
+      }
+    },
+    {
+      "id": "want",
+      "word": {
+        "en": "want",
+        "ta": "வேண்டும்",
+        "kn": "ಬೇಕು",
+        "hi": "चाहिए"
+      }
+    },
+    {
+      "id": "no",
+      "word": {
+        "en": "no",
+        "ta": "இல்லை",
+        "kn": "ಇಲ್ಲ",
+        "hi": "नहीं"
+      }
+    },
+    {
+      "id": "more",
+      "word": {
+        "en": "more",
+        "ta": "இன்னும்",
+        "kn": "ಇನ್ನೂ",
+        "hi": "और"
+      }
+    },
+    {
+      "id": "enough",
+      "word": {
+        "en": "enough",
+        "ta": "போதும்",
+        "kn": "ಸಾಕು",
+        "hi": "बस"
+      }
+    },
+    {
+      "id": "on",
+      "word": {
+        "en": "on",
+        "ta": "போடு",
+        "kn": "ಹಾಕಿ",
+        "hi": "चालू"
+      }
+    },
+    {
+      "id": "off",
+      "word": {
+        "en": "off",
+        "ta": "அணை",
+        "kn": "ಆರಿಸಿ",
+        "hi": "बंद"
+      }
+    },
+    {
+      "id": "come",
+      "word": {
+        "en": "come",
+        "ta": "வரச் சொல்",
+        "kn": "ಬರಲಿ",
+        "hi": "बुलाइए"
+      }
+    }
+  ],
+  "sentences": [
+    {
+      "blocks": [
+        "water",
+        "want"
+      ],
+      "text": {
+        "en": "I want water",
+        "ta": "எனக்கு தண்ணீர் வேண்டும்",
+        "kn": "ನನಗೆ ನೀರು ಬೇಕು",
+        "hi": "मुझे पानी चाहिए"
+      }
+    },
+    {
+      "blocks": [
+        "food",
+        "want"
+      ],
+      "text": {
+        "en": "I want food",
+        "ta": "எனக்கு சாப்பாடு வேண்டும்",
+        "kn": "ನನಗೆ ಊಟ ಬೇಕು",
+        "hi": "मुझे खाना चाहिए"
+      }
+    },
+    {
+      "blocks": [
+        "tea",
+        "want"
+      ],
+      "text": {
+        "en": "I want tea",
+        "ta": "எனக்கு டீ வேண்டும்",
+        "kn": "ನನಗೆ ಚಹಾ ಬೇಕು",
+        "hi": "मुझे चाय चाहिए"
+      }
+    },
+    {
+      "blocks": [
+        "medicine",
+        "want"
+      ],
+      "text": {
+        "en": "I want my medicine",
+        "ta": "எனக்கு என் மருந்து வேண்டும்",
+        "kn": "ನನಗೆ ನನ್ನ ಔಷಧಿ ಬೇಕು",
+        "hi": "मुझे मेरी दवा चाहिए"
+      }
+    },
+    {
+      "blocks": [
+        "blanket",
+        "want"
+      ],
+      "text": {
+        "en": "I want a blanket",
+        "ta": "எனக்கு போர்வை வேண்டும்",
+        "kn": "ನನಗೆ ಹೊದಿಕೆ ಬೇಕು",
+        "hi": "मुझे कंबल चाहिए"
+      }
+    },
+    {
+      "blocks": [
+        "water",
+        "no"
+      ],
+      "text": {
+        "en": "No water for now, thank you",
+        "ta": "இப்போது தண்ணீர் வேண்டாம், நன்றி",
+        "kn": "ಈಗ ನೀರು ಬೇಡ, ಧನ್ಯವಾದ",
+        "hi": "अभी पानी नहीं चाहिए, धन्यवाद"
+      }
+    },
+    {
+      "blocks": [
+        "food",
+        "no"
+      ],
+      "text": {
+        "en": "No food for now, thank you",
+        "ta": "இப்போது சாப்பாடு வேண்டாம், நன்றி",
+        "kn": "ಈಗ ಊಟ ಬೇಡ, ಧನ್ಯವಾದ",
+        "hi": "अभी खाना नहीं चाहिए, धन्यवाद"
+      }
+    },
+    {
+      "blocks": [
+        "tea",
+        "no"
+      ],
+      "text": {
+        "en": "No tea for now, thank you",
+        "ta": "இப்போது டீ வேண்டாம், நன்றி",
+        "kn": "ಈಗ ಚಹಾ ಬೇಡ, ಧನ್ಯವಾದ",
+        "hi": "अभी चाय नहीं चाहिए, धन्यवाद"
+      }
+    },
+    {
+      "blocks": [
+        "medicine",
+        "no"
+      ],
+      "text": {
+        "en": "I do not want the medicine now",
+        "ta": "இப்போது மருந்து வேண்டாம்",
+        "kn": "ಈಗ ಔಷಧಿ ಬೇಡ",
+        "hi": "अभी दवा नहीं चाहिए"
+      }
+    },
+    {
+      "blocks": [
+        "blanket",
+        "no"
+      ],
+      "text": {
+        "en": "No blanket, thank you",
+        "ta": "போர்வை வேண்டாம், நன்றி",
+        "kn": "ಹೊದಿಕೆ ಬೇಡ, ಧನ್ಯವಾದ",
+        "hi": "कंबल नहीं चाहिए, धन्यवाद"
+      }
+    },
+    {
+      "blocks": [
+        "water",
+        "more"
+      ],
+      "text": {
+        "en": "More water, please",
+        "ta": "இன்னும் கொஞ்சம் தண்ணீர் தாருங்கள்",
+        "kn": "ಇನ್ನೂ ಸ್ವಲ್ಪ ನೀರು ಕೊಡಿ",
+        "hi": "थोड़ा और पानी दीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "food",
+        "more"
+      ],
+      "text": {
+        "en": "More food, please",
+        "ta": "இன்னும் கொஞ்சம் சாப்பாடு தாருங்கள்",
+        "kn": "ಇನ್ನೂ ಸ್ವಲ್ಪ ಊಟ ಕೊಡಿ",
+        "hi": "थोड़ा और खाना दीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "tea",
+        "more"
+      ],
+      "text": {
+        "en": "More tea, please",
+        "ta": "இன்னும் கொஞ்சம் டீ தாருங்கள்",
+        "kn": "ಇನ್ನೂ ಸ್ವಲ್ಪ ಚಹಾ ಕೊಡಿ",
+        "hi": "थोड़ी और चाय दीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "water",
+        "enough"
+      ],
+      "text": {
+        "en": "That is enough water",
+        "ta": "தண்ணீர் போதும்",
+        "kn": "ನೀರು ಸಾಕು",
+        "hi": "पानी बस, काफ़ी है"
+      }
+    },
+    {
+      "blocks": [
+        "food",
+        "enough"
+      ],
+      "text": {
+        "en": "That is enough food",
+        "ta": "சாப்பாடு போதும்",
+        "kn": "ಊಟ ಸಾಕು",
+        "hi": "खाना बस, काफ़ी है"
+      }
+    },
+    {
+      "blocks": [
+        "tea",
+        "enough"
+      ],
+      "text": {
+        "en": "That is enough tea",
+        "ta": "டீ போதும்",
+        "kn": "ಚಹಾ ಸಾಕು",
+        "hi": "चाय बस, काफ़ी है"
+      }
+    },
+    {
+      "blocks": [
+        "fan",
+        "on"
+      ],
+      "text": {
+        "en": "Please switch on the fan",
+        "ta": "தயவுசெய்து ஃபேனைப் போடுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ಫ್ಯಾನ್ ಹಾಕಿ",
+        "hi": "कृपया पंखा चालू कीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "fan",
+        "off"
+      ],
+      "text": {
+        "en": "Please switch off the fan",
+        "ta": "தயவுசெய்து ஃபேனை அணையுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ಫ್ಯಾನ್ ಆರಿಸಿ",
+        "hi": "कृपया पंखा बंद कीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "fan",
+        "more"
+      ],
+      "text": {
+        "en": "Please make the fan faster",
+        "ta": "தயவுசெய்து ஃபேனை வேகமாக வையுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ಫ್ಯಾನ್ ವೇಗ ಹೆಚ್ಚಿಸಿ",
+        "hi": "कृपया पंखा तेज़ कीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "light",
+        "on"
+      ],
+      "text": {
+        "en": "Please switch on the light",
+        "ta": "தயவுசெய்து விளக்கைப் போடுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ದೀಪ ಹಾಕಿ",
+        "hi": "कृपया बत्ती जलाइए"
+      }
+    },
+    {
+      "blocks": [
+        "light",
+        "off"
+      ],
+      "text": {
+        "en": "Please switch off the light",
+        "ta": "தயவுசெய்து விளக்கை அணையுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ದೀಪ ಆರಿಸಿ",
+        "hi": "कृपया बत्ती बंद कीजिए"
+      }
+    },
+    {
+      "blocks": [
+        "mother",
+        "come"
+      ],
+      "text": {
+        "en": "Please ask my mother to come",
+        "ta": "தயவுசெய்து என் அம்மாவை வரச் சொல்லுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ನನ್ನ ಅಮ್ಮನನ್ನು ಬರಲು ಹೇಳಿ",
+        "hi": "कृपया मेरी माँ को बुलाइए"
+      }
+    },
+    {
+      "blocks": [
+        "doctor",
+        "come"
+      ],
+      "text": {
+        "en": "Please ask the doctor to come",
+        "ta": "தயவுசெய்து டாக்டரை வரச் சொல்லுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ಡಾಕ್ಟರನ್ನು ಬರಲು ಹೇಳಿ",
+        "hi": "कृपया डॉक्टर को बुलाइए"
+      }
+    }
+  ]
+}

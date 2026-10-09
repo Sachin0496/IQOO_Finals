@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "review": "Drafted by the team; native-speaker review pending",
+  "demo": [
+    "water",
+    "pain",
+    "nurse",
+    "sit_up",
+    "thank_you"
+  ],
+  "protocol": [
+    "water",
+    "pain",
+    "nurse",
+    "breathe",
+    "toilet",
+    "medicine",
+    "sit_up",
+    "thank_you"
+  ],
+  "phrases": [
+    {
+      "id": "water",
+      "urgent": false,
+      "text": {
+        "en": "I need water",
+        "ta": "எனக்கு தண்ணீர் வேண்டும்",
+        "kn": "ನನಗೆ ನೀರು ಬೇಕು",
+        "hi": "मुझे पानी चाहिए"
+      }
+    },
+    {
+      "id": "pain",
+      "urgent": true,
+      "text": {
+        "en": "I am in pain",
+        "ta": "எனக்கு வலிக்கிறது",
+        "kn": "ನನಗೆ ನೋವಾಗುತ್ತಿದೆ",
+        "hi": "मुझे दर्द हो रहा है"
+      }
+    },
+    {
+      "id": "nurse",
+      "urgent": false,
+      "text": {
+        "en": "Please call the nurse",
+        "ta": "செவிலியரை அழையுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ನರ್ಸ್ ಅವರನ್ನು ಕರೆಯಿರಿ",
+        "hi": "कृपया नर्स को बुलाइए"
+      }
+    },
+    {
+      "id": "breathe",
+      "urgent": true,
+      "text": {
+        "en": "I cannot breathe well",
+        "ta": "எனக்கு மூச்சு விட சிரமமாக இருக்கிறது",
+        "kn": "ನನಗೆ ಉಸಿರಾಡಲು ಕಷ್ಟವಾಗುತ್ತಿದೆ",
+        "hi": "मुझे सांस लेने में तकलीफ़ है"
+      }
+    },
+    {
+      "id": "toilet",
+      "urgent": false,
+      "text": {
+        "en": "I need the toilet",
+        "ta": "எனக்கு கழிவறைக்குப் போக வேண்டும்",
+        "kn": "ನನಗೆ ಶೌಚಾಲಯಕ್ಕೆ ಹೋಗಬೇಕು",
+        "hi": "मुझे शौचालय जाना है"
+      }
+    },
+    {
+      "id": "medicine",
+      "urgent": false,
+      "text": {
+        "en": "I need my medicine",
+        "ta": "எனக்கு மருந்து வேண்டும்",
+        "kn": "ನನಗೆ ಔಷಧಿ ಬೇಕು",
+        "hi": "मुझे दवा चाहिए"
+      }
+    },
+    {
+      "id": "sit_up",
+      "urgent": false,
+      "text": {
+        "en": "Please help me sit up",
+        "ta": "என்னை உட்கார வையுங்கள்",
+        "kn": "ದಯವಿಟ್ಟು ನನ್ನನ್ನು ಕೂರಿಸಿ",
+        "hi": "मुझे बैठा दीजिए"
+      }
+    },
+    {
+      "id": "cold",
+      "urgent": false,
+      "text": {
+        "en": "I feel cold",
+        "ta": "எனக்கு குளிர்கிறது",
+        "kn": "ನನಗೆ ಚಳಿಯಾಗುತ್ತಿದೆ",
+        "hi": "मुझे ठंड लग रही है"
+      }
+    },
+    {
+      "id": "hot",
+      "urgent": false,
+      "text": {
+        "en": "I feel hot",
+        "ta": "எனக்கு புழுக்கமாக இருக்கிறது",
+        "kn": "ನನಗೆ ಸೆಕೆಯಾಗುತ್ತಿದೆ",
+        "hi": "मुझे गर्मी लग रही है"
+      }
+    },
+    {
+      "id": "family",
+      "urgent": false,
+      "text": {
+        "en": "Please call my family",
+        "ta": "என் குடும்பத்தினரை அழையுங்கள்",
+        "kn": "ನನ್ನ ಕುಟುಂಬದವರನ್ನು ಕರೆಯಿರಿ",
+        "hi": "मेरे परिवार को बुलाइए"
+      }
+    },
+    {
+      "id": "yes",
+      "urgent": false,
+      "text": {
+        "en": "Yes, please",
+        "ta": "ஆம், தயவு செய்து",
+        "kn": "ಹೌದು, ದಯವಿಟ್ಟು",
+        "hi": "हाँ, कृपया"
+      }
+    },
+    {
+      "id": "no",
+      "urgent": false,
+      "text": {
+        "en": "No, thank you",
+        "ta": "வேண்டாம், நன்றி",
+        "kn": "ಬೇಡ, ಧನ್ಯವಾದ",
+        "hi": "नहीं, धन्यवाद"
+      }
+    },
+    {
+      "id": "thank_you",
+      "urgent": false,
+      "text": {
+        "en": "Thank you very much",
+        "ta": "மிக்க நன்றி",
+        "kn": "ತುಂಬಾ ಧನ್ಯವಾದಗಳು",
+        "hi": "बहुत बहुत धन्यवाद"
+      }
+    }
+  ]
+}
