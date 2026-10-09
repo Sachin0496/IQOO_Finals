@@ -7,6 +7,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const { timingSafeEqual } = require('node:crypto');
 const { WebSocketServer } = require('ws');
 
 const PAGE = path.join(__dirname, 'public', 'call.html');
@@ -20,9 +21,12 @@ const PING_MS = 20_000;
 const MAX_PAYLOAD = 4 * 1024 * 1024; // a long Sarvam sentence is a few hundred KB
 const MAX_BUFFERED = 8 * 1024 * 1024; // a peer this far behind gets nothing more until it catches up
 const MAX_ROOMS = 2000;
+const MAX_ROOMS_PER_IP = 20; // live rooms one address may have open, so one client can't use up MAX_ROOMS
+// A client's secret for the call (`k`), made once per call: 16-64 URL-safe characters.
+const TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 // Close codes the clients can act on (4000-4999 is the application range).
-const CLOSE = { BAD_ROOM: 4400, FULL: 4409, BUSY: 4429 };
+const CLOSE = { BAD_ROOM: 4400, NOT_YOURS: 4403, FULL: 4409, BUSY: 4429 };
 
 function newRoomId(len = 6, rand = require('node:crypto').randomInt) {
   let s = '';
@@ -30,8 +34,27 @@ function newRoomId(len = 6, rand = require('node:crypto').randomInt) {
   return s;
 }
 
-function createServer({ port = 0, host = '0.0.0.0', log = console.log } = {}) {
-  const rooms = new Map(); // id -> { mouna?: ws, guest?: ws }
+function sameToken(a, b) {
+  const x = Buffer.from(String(a)), y = Buffer.from(String(b));
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** The request target as a URL, or null if it isn't one (`//[` throws, and a throw here would end the process). */
+function parseTarget(req) {
+  try { return new URL(req.url, 'http://x'); } catch { return null; }
+}
+
+/** Who is asking: the proxy's header when there is one (Cloudflare, Render), else the socket's address. */
+function clientIp(req) {
+  const h = req.headers;
+  const fwd = String(h['x-forwarded-for'] || '').split(',')[0].trim();
+  return String(h['cf-connecting-ip'] || '').trim() || fwd || req.socket.remoteAddress || '';
+}
+
+function createServer({ port = 0, host = '0.0.0.0', log = console.log, maxRoomsPerIp = MAX_ROOMS_PER_IP } = {}) {
+  // id -> { mouna?: ws, guest?: ws, owner?: token of the first mouna, ip: who opened it }
+  const rooms = new Map();
+  const perIp = new Map(); // ip -> live rooms opened from it
   let clients = 0;
   const count = (what) => log(`${what} rooms=${rooms.size} clients=${clients}`);
 
@@ -52,8 +75,17 @@ function createServer({ port = 0, host = '0.0.0.0', log = console.log } = {}) {
     });
   };
 
+  const dropRoom = (id) => {
+    const room = rooms.get(id);
+    if (!room) return;
+    rooms.delete(id);
+    const n = (perIp.get(room.ip) || 1) - 1;
+    if (n > 0) perIp.set(room.ip, n); else perIp.delete(room.ip);
+  };
+
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://x');
+    const url = parseTarget(req);
+    if (!url) { res.writeHead(400, { 'content-type': 'text/plain', connection: 'close' }).end('bad request'); return; }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405).end(); return; }
     if (url.pathname === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -71,32 +103,39 @@ function createServer({ port = 0, host = '0.0.0.0', log = console.log } = {}) {
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD });
   server.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url, 'http://x');
-    if (url.pathname !== '/ws') { socket.destroy(); return; }
-    wss.handleUpgrade(req, socket, head, (ws) => join(ws, url));
+    const url = parseTarget(req);
+    if (!url || url.pathname !== '/ws') { socket.destroy(); return; }
+    wss.handleUpgrade(req, socket, head, (ws) => join(ws, url, clientIp(req)));
   });
 
-  function join(ws, url) {
+  function join(ws, url, ip) {
     const id = (url.searchParams.get('room') || '').toUpperCase();
     const role = url.searchParams.get('role') || '';
     // Rejected after the upgrade rather than with an HTTP error, so a browser can read the reason.
     const reject = (code, reason) => ws.close(code, reason);
-    if (!ROOM_RE.test(id) || !ROLES.has(role)) return reject(CLOSE.BAD_ROOM, 'bad room or role');
+    const token = url.searchParams.get('k') || '';
+    if (!ROOM_RE.test(id) || !ROLES.has(role) || !TOKEN_RE.test(token)) return reject(CLOSE.BAD_ROOM, 'bad room, role or key');
 
     let room = rooms.get(id);
     if (!room) {
-      if (rooms.size >= MAX_ROOMS) return reject(CLOSE.BUSY, 'server busy');
-      room = {};
+      if (rooms.size >= MAX_ROOMS || (perIp.get(ip) || 0) >= maxRoomsPerIp) return reject(CLOSE.BUSY, 'server busy');
+      room = { ip };
       rooms.set(id, room);
+      perIp.set(ip, (perIp.get(ip) || 0) + 1);
     }
+    // The first Mouna in a room owns it for as long as the room exists; the app keeps the same key for a favourite's
+    // fixed room, so only it can come back. Anyone else claiming `mouna` is refused, whether or not the seat is free.
+    if (role === 'mouna' && room.owner && !sameToken(room.owner, token)) return reject(CLOSE.NOT_YOURS, 'not your room');
     const old = room[role];
-    // The same role again is a reconnect only if the old socket has stopped answering pings (a dropped phone
-    // looks open for up to 40 s). Otherwise the room is taken.
+    // A seat that is taken stays taken, even if its holder looks dead: the ping loop clears dead sockets. Only the same
+    // client (same key) coming back replaces its own old socket at once, which is a reconnect after a half-open drop.
     if (old) {
-      if (old.isAlive) { if (!room.mouna && !room.guest) rooms.delete(id); return reject(CLOSE.FULL, 'room full'); }
-      old.terminate();
+      if (!sameToken(old.token, token)) return reject(CLOSE.FULL, 'room full');
+      old.terminate(); // its close handler sees it was replaced and leaves the room alone
       clients--;
     }
+    if (role === 'mouna') room.owner = token;
+    ws.token = token;
     room[role] = ws;
     clients++;
     ws.isAlive = true;
@@ -120,7 +159,7 @@ function createServer({ port = 0, host = '0.0.0.0', log = console.log } = {}) {
       delete room[role];
       clients--;
       send(peerOf(), JSON.stringify({ t: 'peer', joined: false }));
-      if (!room.mouna && !room.guest) rooms.delete(id);
+      if (!room.mouna && !room.guest) dropRoom(id);
       count(`leave ${role}`);
     });
   }
@@ -148,7 +187,7 @@ function createServer({ port = 0, host = '0.0.0.0', log = console.log } = {}) {
   });
 }
 
-module.exports = { createServer, newRoomId, ALPHABET, ROOM_RE, CLOSE, PING_MS };
+module.exports = { createServer, newRoomId, ALPHABET, ROOM_RE, TOKEN_RE, CLOSE, PING_MS, MAX_ROOMS_PER_IP };
 
 if (require.main === module) {
   const port = Number(process.env.PORT) || 8787;

@@ -97,7 +97,19 @@ const room = (location.pathname.match(/\/c\/([A-Za-z0-9]+)/) || [])[1] || '';
 const KIND = { WAV: 1, MP4: 2, PCM: 16 };
 const FRAME = 640; // samples per frame at 16 kHz = 40 ms
 
-const S = { ws:null, mouna:false, name:'', answered:false, ended:false, tries:0, retry:null, since:0, tick:null,
+// A secret for this call, made once and kept for the tab's life (a reload keeps it). The relay lets the same key take
+// its seat back at once after a dropped connection; anyone else gets "in use".
+const KEY = (() => {
+  const mk = () => Array.from(crypto.getRandomValues(new Uint8Array(18)), (b) => b.toString(36).padStart(2, '0')).join('');
+  try {
+    const name = 'mouna-k-' + room;
+    let k = sessionStorage.getItem(name);
+    if (!k) sessionStorage.setItem(name, k = mk());
+    return k;
+  } catch (e) { return mk(); }
+})();
+
+const S = { ws:null, mouna:false, name:'', answered:false, ended:false, tries:0, retry:null, since:0, tick:null, joined:false,
             ctx:null, stream:null, node:null, muted:false, nextAt:0, chain:Promise.resolve(), wake:null };
 
 function show(view, title, text) {
@@ -136,7 +148,7 @@ function refresh() {
 // ---------- socket ----------
 function connect() {
   clearTimeout(S.retry);
-  const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=guest&room=' + encodeURIComponent(room);
+  const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?role=guest&room=' + encodeURIComponent(room) + '&k=' + KEY;
   const ws = new WebSocket(url);
   ws.binaryType = 'arraybuffer';
   S.ws = ws;
@@ -146,7 +158,8 @@ function connect() {
     if (S.ws !== ws) return;
     S.mouna = false;
     if (S.ended) return;
-    if (e.code === 4409) return end('This link is already in use', 'Someone else has this call open. Ask for a new link if that is not you.');
+    // "In use" is final only on the first try; after a drop it can be our own old socket, still being cleared.
+    if (e.code === 4409 && !S.joined) return end('This link is already in use', 'Someone else has this call open. Ask for a new link if that is not you.');
     if (e.code === 4400) return end('This link does not work', 'The link looks wrong or has expired. Ask for a new one.');
     S.tries++;
     refresh();
@@ -158,6 +171,7 @@ function send(obj) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify
 
 function onText(m) {
   if (m.t === 'peer') {
+    S.joined = true; // the relay gave us the seat (a refusal is a close right after the socket opens)
     S.mouna = !!m.joined;
     if (!m.joined && S.answered) { status('Mouna is reconnecting', 'bad'); S.nextAt = 0; }
     else refresh();
@@ -280,6 +294,9 @@ async function answer() {
   $('answer').disabled = true;
   const AC = window.AudioContext || window.webkitAudioContext;
   S.ctx = new AC({ latencyHint: 'interactive' });
+  // iOS Safari: play and record together, and don't leave the context "interrupted" when the mic opens.
+  try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch (e) {}
+  S.ctx.onstatechange = () => { if (S.ctx && S.ctx.state !== 'running' && !S.ended) S.ctx.resume().catch(() => {}); };
   try { await S.ctx.resume(); } catch (e) {}
   // A silent tick unlocks playback on iOS inside this tap.
   try { const b = S.ctx.createBuffer(1, 1, 22050), s = S.ctx.createBufferSource(); s.buffer = b; s.connect(S.ctx.destination); s.start(0); } catch (e) {}
@@ -299,6 +316,8 @@ async function answer() {
     n.textContent = 'The microphone is off, so they cannot hear you. Allow the microphone for this page, then reload.';
     n.classList.remove('hidden');
   }
+  // Opening the mic can leave the context interrupted on iOS Safari; start it again.
+  try { if (S.ctx && S.ctx.state !== 'running') await S.ctx.resume(); } catch (e) {}
 }
 
 function stopAudio() {
