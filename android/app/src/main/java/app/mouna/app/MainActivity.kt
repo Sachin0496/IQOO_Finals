@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -72,7 +73,11 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        // The UI is always dark: fix the bar icons to match, since a uiMode change no longer recreates the activity.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         engine = Engine(applicationContext, PhrasePack.bundled(), Store(applicationContext))
         voice = Voice(applicationContext, engine.store)
@@ -115,51 +120,41 @@ class MainActivity : ComponentActivity() {
 
         // QA (debug builds): adb shell am broadcast -a app.mouna.HEAR --es wav /sdcard/Android/data/app.mouna/files/x.wav
         if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
-            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) {
-                    val path = i.getStringExtra("wav") ?: return
-                    runCatching { app.hearRecording(readWav(File(path))) }.onFailure { Log.e("Mouna", "hear", it) }
-                }
-            }, IntentFilter("app.mouna.HEAR"), ContextCompat.RECEIVER_EXPORTED)
+            debugReceiver("app.mouna.HEAR") { i ->
+                val path = i.getStringExtra("wav") ?: return@debugReceiver
+                runCatching { app.hearRecording(readWav(File(path))) }.onFailure { Log.e("Mouna", "hear", it) }
+            }
             // adb shell am broadcast -a app.mouna.SAY --es text "hello" [--es lang hi|ta] [--es voice anand] [--ez call true]
             // Speaks through Voice (pack, Sarvam, phone voice); --ez call true plays as call audio, as on a call.
-            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) {
-                    val text = i.getStringExtra("text") ?: return
-                    val lang = Lang.entries.firstOrNull { it.tag == i.getStringExtra("lang") } ?: Lang.EN
-                    voice.callMode = app.onCall || i.getBooleanExtra("call", false)
-                    Log.i("MounaCall", "SAY \"$text\" ${lang.tag} callMode=${voice.callMode} usage=${voice.callUsage}")
-                    app.debugSay(text, lang, i.getStringExtra("voice") ?: app.voiceId)
-                }
-            }, IntentFilter("app.mouna.SAY"), ContextCompat.RECEIVER_EXPORTED)
+            debugReceiver("app.mouna.SAY") { i ->
+                val text = i.getStringExtra("text") ?: return@debugReceiver
+                val lang = Lang.entries.firstOrNull { it.tag == i.getStringExtra("lang") } ?: Lang.EN
+                voice.callMode = app.onCall || i.getBooleanExtra("call", false)
+                Log.i("MounaCall", "SAY \"$text\" ${lang.tag} callMode=${voice.callMode} usage=${voice.callUsage}")
+                app.debugSay(text, lang, i.getStringExtra("voice") ?: app.voiceId)
+            }
             // adb shell am broadcast -a app.mouna.CALLSERVER --es url https://....trycloudflare.com   (blank url: back to the build's)
-            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) {
-                    app.chooseCallServer(i.getStringExtra("url").orEmpty())
-                    Log.i("MounaCall", "call server = ${app.callServer().ifEmpty { "(none)" }}")
-                }
-            }, IntentFilter("app.mouna.CALLSERVER"), ContextCompat.RECEIVER_EXPORTED)
+            debugReceiver("app.mouna.CALLSERVER") { i ->
+                app.chooseCallServer(i.getStringExtra("url").orEmpty())?.let { Log.w("MounaCall", "call server refused: $it") }
+                Log.i("MounaCall", "call server = ${app.callServer().ifEmpty { "(none)" }}")
+            }
             // adb shell am broadcast -a app.mouna.WEBCALL [--es room K7M2QX] [--es name Amma]: starts a web call; the join link goes to logcat
-            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) {
-                    app.debugWebCall(i.getStringExtra("room"), i.getStringExtra("name").orEmpty())
-                }
-            }, IntentFilter("app.mouna.WEBCALL"), ContextCompat.RECEIVER_EXPORTED)
+            debugReceiver("app.mouna.WEBCALL") { i ->
+                app.debugWebCall(i.getStringExtra("room"), i.getStringExtra("name").orEmpty())
+            }
             // adb shell am broadcast -a app.mouna.CALLAUDIO --es usage media|voice
-            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) {
-                    voice.callUsage = if (i.getStringExtra("usage") == "media") CallUsage.MEDIA else CallUsage.VOICE
-                    Log.i("MounaCall", "call audio usage = ${voice.callUsage}")
-                }
-            }, IntentFilter("app.mouna.CALLAUDIO"), ContextCompat.RECEIVER_EXPORTED)
+            debugReceiver("app.mouna.CALLAUDIO") { i ->
+                voice.callUsage = if (i.getStringExtra("usage") == "media") CallUsage.MEDIA else CallUsage.VOICE
+                Log.i("MounaCall", "call audio usage = ${voice.callUsage}")
+            }
             // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>
-            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
-                override fun onReceive(c: Context, i: Intent) {
-                    val path = i.getStringExtra("json") ?: return
+            debugReceiver("app.mouna.SIGN") { i ->
+                val path = i.getStringExtra("json") ?: return@debugReceiver
+                runCatching {
                     val a = org.json.JSONArray(File(path).readText())
                     engine.classifySign(List(a.length()) { t -> a.getJSONArray(t).let { r -> FloatArray(r.length()) { r.getDouble(it).toFloat() } } })
-                }
-            }, IntentFilter("app.mouna.SIGN"), ContextCompat.RECEIVER_EXPORTED)
+                }.onFailure { Log.e("Mouna", "sign", it) }
+            }
         }
 
         setContent {
@@ -174,6 +169,16 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * A QA broadcast, for debug builds. The receiver is exported so `adb shell am broadcast` reaches it, but it asks the
+     * sender for DUMP, which the shell holds and an ordinary app can't get: no other app can drive the call or the voice.
+     */
+    private fun debugReceiver(action: String, handle: (Intent) -> Unit) {
+        ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) = handle(i)
+        }, IntentFilter(action), Manifest.permission.DUMP, null, ContextCompat.RECEIVER_EXPORTED)
     }
 
     private val preview = Preview.Builder().build()
