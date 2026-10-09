@@ -177,7 +177,7 @@ private fun TelemetryGrid(t: Telemetry, permissions: List<String>) {
         Triple("EYE SPAN", if (t.face) "${t.iod.toInt()} px" else "—", if (!t.face || t.iod >= 55f) Bone else Kumkum),
         Triple("YAW", if (t.face) "${t.yaw.toInt()}°" else "—", Bone),
         Triple("GATE", if (t.gateOpen) "open" else "shut", if (t.gateOpen) Turmeric else Bone),
-        Triple("INTERNET", if (noInternet) "absent" else "PRESENT", if (noInternet) Leaf else Kumkum),
+        Triple("INTERNET", if (noInternet) "absent" else "TTS text only", if (noInternet) Leaf else Turmeric), // Sarvam live voice on calls
     )
     Column(Modifier.border(1.dp, Rule)) {
         cells.chunked(4).forEach { row ->

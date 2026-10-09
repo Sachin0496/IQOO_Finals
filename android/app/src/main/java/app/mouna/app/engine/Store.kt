@@ -104,6 +104,30 @@ class Store(context: Context) {
         get() = prefs.getString("listenWith", "lips")!!
         set(v) = prefs.edit().putString("listenWith", v).apply()
 
+    // ---------------- calls ----------------
+
+    /** Spoken in the intro on a call ("this is Ravi speaking through the Mouna app"). */
+    var callerName: String
+        get() = prefs.getString("callerName", "")!!
+        set(v) = prefs.edit().putString("callerName", v.trim()).apply()
+
+    /** A Sarvam key typed in Settings; overrides the one built in from local.properties. Never logged. */
+    var sarvamKey: String
+        get() = prefs.getString("sarvamKey", "")!!
+        set(v) = prefs.edit().putString("sarvamKey", v.trim()).apply()
+
+    /** Which AudioAttributes usage carries Mouna's voice into a call: "voice" or "media" (see [CallUsage]). */
+    var callUsage: String
+        get() = prefs.getString("callUsage", "voice")!!
+        set(v) = prefs.edit().putString("callUsage", v).apply()
+
+    /** People the person calls most: name to number. */
+    var favourites: List<Pair<String, String>>
+        get() = prefs.getString("favourites", null)?.let { s ->
+            runCatching { JSONArray(s).let { a -> List(a.length()) { a.getJSONObject(it).let { o -> o.getString("name") to o.getString("number") } } } }.getOrNull()
+        } ?: emptyList()
+        set(v) = prefs.edit().putString("favourites", JSONArray(v.map { (n, num) -> JSONObject().put("name", n).put("number", num) }).toString()).apply()
+
     private fun json(xs: List<FloatArray>) = JSONArray(xs.map { x -> JSONArray(x.map { it.toDouble() }) })
     private fun vectors(a: JSONArray): MutableList<FloatArray> = MutableList(a.length()) { i ->
         val v = a.getJSONArray(i)

@@ -7,9 +7,16 @@
     <!-- Voice mode only (weak or unclear speech): asked for when the person switches to Voice. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Spike test S6: the app must not be able to reach the network, whatever a library merges in. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- The only network use is Sarvam text-to-speech on phone calls: the words to speak go out, a WAV comes back.
+         No audio or video leaves the phone. Network state stays removed (spike test S6), whatever a library merges in. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
+    <!-- Phone calls: dial (CALL_PHONE), hang up (ANSWER_PHONE_CALLS), bring Mouna back to the front after dialing. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Lets the app ask the system TTS engine which voices exist (fallback voice). -->
     <queries>

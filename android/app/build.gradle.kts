@@ -1,8 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// The Sarvam key for live voice on calls: `sarvam.key=...` in android/local.properties (gitignored). Empty if absent;
+// Settings can override it. A debug APK built with a key carries it: don't share such an APK.
+val sarvamKey = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
+    .getProperty("sarvam.key", "").trim()
 
 android {
     namespace = "app.mouna"
@@ -14,6 +21,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2-finale"
+        buildConfigField("String", "SARVAM_KEY", "\"${sarvamKey.replace("\\", "\\\\").replace("\"", "\\\"")}\"")
         ndk { abiFilters += "arm64-v8a" } // the OnePlus 13R and iQOO 15; QNN ships arm64 only
     }
 
@@ -28,7 +36,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     androidResources { noCompress += listOf("task", "onnx", "bin") }
     packaging { jniLibs { useLegacyPackaging = true } } // QNN loads its HTP skel libs from the native lib dir
 }
@@ -47,7 +55,7 @@ val copyVoices by tasks.registering(Copy::class) {
     into(layout.projectDirectory.dir("src/main/assets/voices"))
 }
 // sherpa-onnx (Apache-2.0) for on-device Whisper: the AAR with ONNX Runtime statically linked, so it cannot clash
-// with the app's own ONNX Runtime (QNN). Fetched once at build time; the app itself has no internet.
+// with the app's own ONNX Runtime (QNN). Fetched once at build time.
 val sherpaVersion = "1.13.8"
 val sherpaAar = layout.projectDirectory.file("libs/sherpa-onnx-static-link-onnxruntime-$sherpaVersion.aar")
 val fetchSherpa by tasks.registering {
