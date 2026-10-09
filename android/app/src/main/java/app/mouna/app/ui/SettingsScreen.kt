@@ -132,6 +132,18 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
 
         Spacer(Modifier.height(14.dp))
         Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Learn from clear matches", style = Type.phrase)
+                    Text("Keeps very clear matches you don't correct as extra examples, up to 5 per phrase.", style = Type.body.copy(fontSize = 13.sp))
+                }
+                Spacer(Modifier.width(12.dp))
+                MounaSwitch(app.selfTrain) { app.chooseSelfTrain(it) }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Card {
             Column {
                 SectionLabel("Beyond the lips")
                 SetupRow("Your movement", if (k.switchReady) "Taught · it means yes" else "A raised eyebrow, a half smile… as your yes", k.switchReady,
