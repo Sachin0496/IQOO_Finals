@@ -13,10 +13,27 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
+
+/**
+ * Whisper waits for the lip encoder (which gates "ready" and can be minutes on its first NPU compile) so the two don't
+ * fight over the CPU at start-up. It does not wait longer than [MAX_WAIT_MS], and not at all once the microphone is wanted.
+ */
+object WhisperGate {
+    const val MAX_WAIT_MS = 45_000L
+    private val latch = CountDownLatch(1)
+    fun open() = latch.countDown()
+    fun await(): Long {
+        val t0 = SystemClock.elapsedRealtime()
+        latch.await(MAX_WAIT_MS, TimeUnit.MILLISECONDS)
+        return SystemClock.elapsedRealtime() - t0
+    }
+}
 
 /**
  * Speech for people whose voice is weak or unclear (Parkinson's, mild dysarthria after a stroke, CP).
@@ -34,6 +51,8 @@ class Hearing(private val context: Context) : AutoCloseable {
     fun folder(): File = File(context.getExternalFilesDir(null), "asr").apply { mkdirs() }
 
     fun load() {
+        val waited = WhisperGate.await()
+        val t0 = SystemClock.elapsedRealtime()
         val dir = folder()
         fun pick(suffix: String) = dir.listFiles().orEmpty().filter { it.name.endsWith(suffix) }
             .sortedBy { if ("int8" in it.name) 0 else 1 }.firstOrNull()
@@ -42,6 +61,7 @@ class Hearing(private val context: Context) : AutoCloseable {
         val tokens = pick("tokens.txt")
         if (enc == null || dec == null || tokens == null) {
             status = "No voice model in ${dir.absolutePath}"
+            Log.i("MounaPerf", "whisper skipped: no model (waited ${waited} ms for the lip encoder)")
             return
         }
         runCatching {
@@ -58,6 +78,7 @@ class Hearing(private val context: Context) : AutoCloseable {
             recognizer = OfflineRecognizer(config = cfg)
             ready = true
             status = "Whisper tiny.en · on this phone"
+            Log.i("MounaPerf", "whisper ready in ${SystemClock.elapsedRealtime() - t0} ms (after waiting ${waited} ms for the lip encoder)")
         }.onFailure {
             status = "Voice model failed: ${it.message?.take(120)}"
             Log.e("Mouna", "whisper", it)
@@ -89,23 +110,62 @@ class Hearing(private val context: Context) : AutoCloseable {
  * The threshold adapts to the room, so a quiet (hypophonic) voice still counts if it is clearly above the noise.
  */
 class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (FloatArray) -> Unit) {
-    @Volatile private var running = false
-    private var worker: Thread? = null
+    /** One capture thread's life: [stop] asks it to end; a new start never reuses it. */
+    private class Capture { @Volatile var stop = false }
+
+    private var current: Capture? = null
+    private var thread: Thread? = null
+
+    /** Why the microphone is not running although it was asked to (busy, unavailable), or null. */
+    @Volatile var error: String? = null
+        private set
+
+    val running: Boolean @Synchronized get() = current != null
+
+    /** Starts listening; does nothing if it already is. Never blocks. */
+    @Synchronized
+    fun start() {
+        WhisperGate.open() // the microphone is wanted: Whisper must load now
+        if (current != null) return
+        error = null
+        val mine = Capture()
+        val previous = thread
+        current = mine
+        // One microphone thread at a time: a restart right after a stop waits (off the caller's thread) for the old one to leave.
+        thread = thread(name = "mouna-mic") {
+            previous?.join(1000)
+            capture(mine)
+        }
+    }
+
+    /** Asks the capture thread to end and returns at once; the thread releases the microphone on its own. */
+    @Synchronized
+    fun stop() {
+        current?.stop = true
+        current = null
+    }
+
+    @Synchronized
+    private fun ended(mine: Capture, why: String?) {
+        if (current === mine) current = null
+        if (why != null) {
+            error = why
+            Log.w("Mouna", "microphone: $why")
+        }
+    }
 
     @SuppressLint("MissingPermission") // checked by the caller before start()
-    fun start() {
-        if (running) return
-        running = true
-        worker = thread(name = "mouna-mic") {
+    private fun capture(mine: Capture) {
+        var rec: AudioRecord? = null
+        try {
             val minBuf = AudioRecord.getMinBufferSize(Hearing.RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT)
-            val rec = runCatching {
+            rec = runCatching {
                 AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, Hearing.RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT, max(minBuf, FRAME * 8))
             }.getOrNull()
-            if (rec == null || rec.state != AudioRecord.STATE_INITIALIZED) {
-                running = false
-                return@thread
-            }
-            rec.startRecording()
+            if (rec == null || rec.state != AudioRecord.STATE_INITIALIZED) return ended(mine, "The microphone could not be opened.")
+            // Busy (another app, a call) or no permission: startRecording throws or leaves the state not recording.
+            val started = runCatching { rec.startRecording() }.isSuccess && rec.recordingState == AudioRecord.RECORDSTATE_RECORDING
+            if (!started) return ended(mine, "The microphone is busy or unavailable.")
             val frame = FloatArray(FRAME)
             var noise = 0.003f
             val pre = ArrayDeque<FloatArray>()
@@ -113,9 +173,16 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
             var voiced = 0
             var quiet = 0
             var startedAt = 0L
-            while (running) {
+            var bad = 0
+            while (!mine.stop) {
                 val n = rec.read(frame, 0, FRAME, AudioRecord.READ_BLOCKING)
-                if (n <= 0) continue
+                if (n < 0) { // the microphone was taken away (a call, another app) or died: don't spin on it
+                    if (++bad > 20) return ended(mine, "The microphone stopped answering.")
+                    Thread.sleep(20)
+                    continue
+                }
+                if (n == 0) continue
+                bad = 0
                 val chunk = frame.copyOf(n)
                 var e = 0f
                 for (x in chunk) e += x * x
@@ -148,15 +215,14 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
                     }
                 }
             }
-            rec.stop()
-            rec.release()
+            ended(mine, null)
+        } catch (e: Exception) {
+            Log.e("Mouna", "mic", e)
+            ended(mine, "The microphone failed.")
+        } finally {
+            rec?.runCatching { stop() }
+            rec?.runCatching { release() }
         }
-    }
-
-    fun stop() {
-        running = false
-        worker?.join(500)
-        worker = null
     }
 
     companion object {
