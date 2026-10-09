@@ -90,6 +90,8 @@ sealed interface Event {
     data class Signed(val guesses: List<Isl.Guess>, val ms: Double) : Event
     /** Free talk read a sentence: candidates best first (empty: nothing readable). [ms]: end of mouthing to sentences. */
     data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double, val options: List<app.mouna.core.Personal.Option> = emptyList()) : Event
+    /** Recording for training (issue #5 B): the clip for [text] was saved; [read] is what free talk made of it. */
+    data class Recorded(val text: String, val frames: Int, val read: String?) : Event
     /** Nod or double blink = yes, shake = no. Only while Mouna is asking (see [Engine.gesturesOn]). */
     data class Answer(val yes: Boolean, val via: String) : Event
     data class Looked(val zone: Zone) : Event
@@ -575,11 +577,36 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     /** QA (debug builds, adb broadcast): keep each free-talk clip's mouth crops in avsr/clips/ to replay on the laptop. */
     @Volatile var saveClips = false
 
+    /** The prompted sentences for recording (res/raw/freetalk_prompts.txt). */
+    fun recordPrompts(): List<String> =
+        context.resources.openRawResource(app.mouna.R.raw.freetalk_prompts).bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** Where recordings go: avsr/train/<session>/NNN.{bin,t.txt,txt} (adb pull for the laptop fine-tune). */
+    fun trainFolder(): java.io.File = java.io.File(OpenVsr.folder(context), "train")
+
+    /** Recording for training (issue #5 B): the next free-talk clip is saved as [file] (.bin crops, .t.txt ms, .txt text). */
+    @Volatile private var recordTo: Pair<java.io.File, String>? = null
+
+    fun recordNext(file: java.io.File?, text: String?) {
+        recordTo = if (file != null && text != null) file to text else null
+    }
+
     private fun readClip(c: Clip) {
         val r = openVsr ?: return
         val endMs = c.frames.last().tMs
         runCatching {
             val (crops, t) = c.avsrCrops()
+            recordTo?.let { (f, text) ->
+                recordTo = null
+                f.parentFile?.mkdirs()
+                java.io.File(f.path + ".bin").outputStream().use { o -> crops.forEach { o.write(it) } }
+                java.io.File(f.path + ".t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
+                java.io.File(f.path + ".txt").writeText(text)
+                val read = runCatching { r.read(crops, t).sentences.firstOrNull() }.getOrNull()
+                ftLog("free talk: recorded ${f.name} (${crops.size} frames) \"$text\" -> ${read ?: "-"}")
+                _events.tryEmit(Event.Recorded(text, crops.size, read))
+                return@runCatching
+            }
             if (saveClips) runCatching {
                 val dir = java.io.File(OpenVsr.folder(context), "clips").apply { mkdirs() }
                 val name = java.text.SimpleDateFormat("HHmmss", java.util.Locale.US).format(java.util.Date())

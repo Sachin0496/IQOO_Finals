@@ -69,7 +69,7 @@ fun MounaRoot(
         when {
             welcome -> activity?.moveTaskToBack(true)
             app.prompt != null -> app.close()
-            app.screen == Screen.EYES || app.screen == Screen.SWITCH -> app.go(Screen.SETTINGS)
+            app.screen == Screen.EYES || app.screen == Screen.SWITCH || app.screen == Screen.RECORD -> app.go(Screen.SETTINGS)
             app.screen != Screen.SPEAK -> app.go(Screen.SPEAK)
             else -> activity?.moveTaskToBack(true)
         }
@@ -99,6 +99,7 @@ fun MounaRoot(
                             Screen.SETTINGS -> SettingsScreen(app, k, openProbe)
                             Screen.EYES -> EyesSetup(app, bindCamera)
                             Screen.SWITCH -> SwitchSetup(app, bindCamera)
+                            Screen.RECORD -> RecordScreen(app, k, bindCamera)
                         }
                     }
                 }

@@ -31,7 +31,7 @@ import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, TEACH, ASK, CALL, SETTINGS, EYES, SWITCH }
+enum class Screen { SPEAK, TEACH, ASK, CALL, SETTINGS, EYES, SWITCH, RECORD }
 
 /** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
 enum class CallTab { PHRASES, MOUTH }
@@ -271,6 +271,7 @@ class MounaApp(
         screen = s
         prompt = null
         voiceTeaching = null
+        if (s != Screen.RECORD && recording) { recording = false; engine.recordNext(null, null) } // leaving stops recording
         engine.gazeOn(false)
         applyChannel()
     }
@@ -281,7 +282,7 @@ class MounaApp(
         engine.listen(if (speak && channel == Channel.LIPS) Listen.SPEAK else Listen.PAUSED)
         armGestures(prompt != null || screen == Screen.ASK)
         engine.signing(onSpeakSurface() && channel == Channel.SIGN)
-        engine.freeTalk(speak && channel == Channel.FREE)
+        engine.freeTalk((speak && channel == Channel.FREE) || (screen == Screen.RECORD && recording))
         val mic = ((speak && channel == Channel.VOICE) || voiceTeaching != null) && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
@@ -448,10 +449,64 @@ class MounaApp(
             is Event.Answer -> if (e.yes) switched(e.via) else shook()
             is Event.Looked -> looked(e.zone)
             is Event.Read -> read(e)
+            is Event.Recorded -> recorded(e)
         }
     }
 
     // ---------------- free talk ----------------
+
+    // Recording for training (issue #5 B): prompted sentences, mouthed silently, saved as mouth crops + text for the
+    // laptop fine-tune (python -m mouna_encoder avsr-adapt). No video is kept: only the 96 px grey mouth crops.
+    val recordPrompts: List<String> by lazy { engine.recordPrompts() }
+    var recordIndex by mutableStateOf(0)
+        private set
+    var recording by mutableStateOf(false)
+        private set
+    var recordCount by mutableStateOf(0)
+        private set
+    var lastRecorded by mutableStateOf<Event.Recorded?>(null)
+        private set
+    private var recordSession: java.io.File? = null
+
+    fun startRecording() {
+        recordSession = java.io.File(engine.trainFolder(),
+            java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date()))
+        recordIndex = 0
+        recordCount = 0
+        lastRecorded = null
+        recording = true
+        armRecording()
+        applyChannel()
+    }
+
+    fun stopRecording() {
+        recording = false
+        engine.recordNext(null, null)
+        applyChannel()
+    }
+
+    /** Skip this sentence (or go back one with [step] = -1 to redo it; its file is overwritten). */
+    fun recordStep(step: Int) {
+        recordIndex = (recordIndex + step).coerceIn(0, recordPrompts.size - 1)
+        armRecording()
+    }
+
+    private fun armRecording() {
+        val dir = recordSession ?: return
+        if (!recording || recordIndex >= recordPrompts.size) return engine.recordNext(null, null)
+        engine.recordNext(java.io.File(dir, "%03d".format(recordIndex)), recordPrompts[recordIndex])
+    }
+
+    private fun recorded(e: Event.Recorded) {
+        lastRecorded = e
+        recordCount++
+        if (recordIndex + 1 >= recordPrompts.size) {
+            stopRecording()
+            return
+        }
+        recordIndex++
+        armRecording()
+    }
 
     private fun read(e: Event.Read) {
         if (!onSpeakSurface() || prompt != null || channel != Channel.FREE) return

@@ -166,6 +166,7 @@ class MainActivity : ComponentActivity() {
                 if (i.getBooleanExtra("test", false)) engine.freeTalkSelfTest()
                 if (i.hasExtra("save")) engine.saveClips = i.getBooleanExtra("save", false) // --ez save true: keep clips
                 i.getStringExtra("remember")?.let { engine.rememberSentence(it) } // --es remember "text": a personal sentence
+                if (i.getBooleanExtra("record", false)) app.go(Screen.RECORD) // --ez record true: the recording screen
                 i.getStringExtra("crops")?.let { engine.freeTalkRead(File(it), i.getFloatExtra("fps", 25f).toDouble()) }
             }
             // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>
