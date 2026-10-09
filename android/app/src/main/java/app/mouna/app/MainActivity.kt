@@ -23,7 +23,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import android.provider.ContactsContract
+import app.mouna.app.engine.CallUsage
+import app.mouna.app.engine.CarrierLink
 import app.mouna.app.engine.Engine
+import app.mouna.app.engine.Lang
 import app.mouna.app.engine.Hearing
 import app.mouna.app.engine.PhrasePack
 import app.mouna.app.engine.Store
@@ -44,6 +48,19 @@ class MainActivity : ComponentActivity() {
         micAnswer?.invoke(granted)
         micAnswer = null
     }
+    private var callAnswer: ((Boolean) -> Unit)? = null
+    private val askCallPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        // Calling is what matters; hanging up from Mouna (ANSWER_PHONE_CALLS) falls back to the phone's own call screen.
+        callAnswer?.invoke(granted[Manifest.permission.CALL_PHONE] == true)
+        callAnswer = null
+    }
+    private var contactAnswer: ((Pair<String, String>?) -> Unit)? = null
+    // The picker grants read access to the one row picked: no READ_CONTACTS needed.
+    private val pickContactResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        contactAnswer?.invoke(r.data?.data?.let { readContact(it) })
+        contactAnswer = null
+    }
+    private lateinit var carrier: CarrierLink
     private val cameraDenied = mutableStateOf(false)
     private val cameraReady = mutableStateOf(false)
 
@@ -56,16 +73,33 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         engine = Engine(applicationContext, PhrasePack.bundled(), Store(applicationContext))
-        voice = Voice(applicationContext)
+        voice = Voice(applicationContext, engine.store)
+        carrier = CarrierLink(applicationContext)
         hearing = Hearing(applicationContext)
-        app = MounaApp(engine, voice, hearing) { answer ->
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                answer(true)
-            } else {
-                micAnswer = answer
-                askMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-            }
-        }
+        app = MounaApp(
+            engine, voice, hearing,
+            askMic = { answer ->
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                    answer(true)
+                } else {
+                    micAnswer = answer
+                    askMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                }
+            },
+            link = carrier,
+            askCall = { answer ->
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+                    answer(true)
+                } else {
+                    callAnswer = answer
+                    askCallPermissions.launch(arrayOf(Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS))
+                }
+            },
+            pickContact = { answer ->
+                contactAnswer = answer
+                pickContactResult.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+            },
+        )
         engine.start()
         lifecycleScope.launch { engine.events.collect { app.onEvent(it) } }
 
@@ -83,6 +117,24 @@ class MainActivity : ComponentActivity() {
                     runCatching { app.hearRecording(readWav(File(path))) }.onFailure { Log.e("Mouna", "hear", it) }
                 }
             }, IntentFilter("app.mouna.HEAR"), ContextCompat.RECEIVER_EXPORTED)
+            // adb shell am broadcast -a app.mouna.SAY --es text "hello" [--es lang hi|ta] [--es voice anand] [--ez call true]
+            // Speaks through Voice (pack, Sarvam, phone voice); --ez call true plays as call audio, as on a call.
+            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    val text = i.getStringExtra("text") ?: return
+                    val lang = Lang.entries.firstOrNull { it.tag == i.getStringExtra("lang") } ?: Lang.EN
+                    voice.callMode = i.getBooleanExtra("call", false)
+                    Log.i("MounaCall", "SAY \"$text\" ${lang.tag} callMode=${voice.callMode} usage=${voice.callUsage}")
+                    app.debugSay(text, lang, i.getStringExtra("voice") ?: app.voiceId)
+                }
+            }, IntentFilter("app.mouna.SAY"), ContextCompat.RECEIVER_EXPORTED)
+            // adb shell am broadcast -a app.mouna.CALLAUDIO --es usage media|voice
+            ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    voice.callUsage = if (i.getStringExtra("usage") == "media") CallUsage.MEDIA else CallUsage.VOICE
+                    Log.i("MounaCall", "call audio usage = ${voice.callUsage}")
+                }
+            }, IntentFilter("app.mouna.CALLAUDIO"), ContextCompat.RECEIVER_EXPORTED)
             // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>
             ContextCompat.registerReceiver(this, object : BroadcastReceiver() {
                 override fun onReceive(c: Context, i: Intent) {
@@ -143,6 +195,24 @@ class MainActivity : ComponentActivity() {
             }, ContextCompat.getMainExecutor(this@MainActivity))
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        carrier.foreground = true
+        carrier.taskId = taskId
+    }
+
+    override fun onPause() {
+        carrier.foreground = false
+        super.onPause()
+    }
+
+    /** Name and number of the contact row the picker returned. */
+    private fun readContact(uri: android.net.Uri): Pair<String, String>? = runCatching {
+        contentResolver.query(uri, arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER), null, null, null)?.use { c ->
+            if (c.moveToFirst()) c.getString(0) to c.getString(1) else null
+        }
+    }.getOrNull()
 
     override fun onDestroy() {
         app.shutdown()

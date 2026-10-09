@@ -3,7 +3,12 @@ package app.mouna.app
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.mouna.app.engine.CallLink
+import app.mouna.app.engine.CallPhrases
+import app.mouna.app.engine.CallState
 import app.mouna.app.engine.Engine
+import app.mouna.app.engine.Phones
+import android.os.SystemClock
 import app.mouna.app.engine.Event
 import app.mouna.app.engine.Lang
 import app.mouna.app.engine.Listen
@@ -21,7 +26,10 @@ import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, TEACH, ASK, SETTINGS, EYES, SWITCH }
+enum class Screen { SPEAK, TEACH, ASK, CALL, SETTINGS, EYES, SWITCH }
+
+/** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
+enum class CallTab { PHRASES, MOUTH }
 
 /** What Mouna shows when it is not sure enough to speak (core.md: "What the app shows for each decision"). */
 sealed interface Prompt {
@@ -49,6 +57,12 @@ class MounaApp(
     val hearing: Hearing,
     /** Asks for the microphone if needed; calls back with the answer. */
     private val askMic: ((Boolean) -> Unit) -> Unit,
+    /** The phone call transport (the carrier today); Voice hands it audio if it asks for it. */
+    private val link: CallLink,
+    /** Asks for the permission to call; calls back with whether calling is allowed. */
+    private val askCall: ((Boolean) -> Unit) -> Unit,
+    /** Opens the contact picker; calls back with the name and number picked, or null. */
+    private val pickContact: ((Pair<String, String>?) -> Unit) -> Unit,
 ) {
     val store = engine.store
     var phrases by mutableStateOf(engine.phrases)
@@ -87,7 +101,39 @@ class MounaApp(
         },
     )
 
+    // ---------------- calls ----------------
+
+    var callState by mutableStateOf(CallState.IDLE)
+        private set
+    /** The number being typed on the dial pad, and the name it was picked with (if any). */
+    var dialNumber by mutableStateOf("")
+        private set
+    var dialName by mutableStateOf<String?>(null)
+        private set
+    /** Who the current call is with, and when it connected (elapsedRealtime), for the clock. */
+    var callWith by mutableStateOf("")
+        private set
+    var callSince by mutableStateOf(0L)
+        private set
+    var callNote by mutableStateOf<String?>(null)
+        private set
+    var callTab by mutableStateOf(CallTab.PHRASES)
+        private set
+    var favourites by mutableStateOf(store.favourites)
+        private set
+    var callerName by mutableStateOf(store.callerName)
+        private set
+    val onCall get() = callState != CallState.IDLE
+
     init {
+        voice.link = link
+        link.onState = { st ->
+            callState = st
+            voice.callMode = st != CallState.IDLE
+            if (st == CallState.ACTIVE) callSince = SystemClock.elapsedRealtime()
+            if (st == CallState.IDLE) callSince = 0L
+            applyChannel() // the microphone stays off on a call: it would hear the other person
+        }
         asr.execute {
             hearing.load()
             main.post { voiceStatus = hearing.status }
@@ -120,6 +166,9 @@ class MounaApp(
     var teachSeq by mutableStateOf(0)
         private set
 
+    /** Where lips, voice and sign listen: Speak, or the Mouth/Sign half of the Call screen. */
+    private fun onSpeakSurface() = screen == Screen.SPEAK || (screen == Screen.CALL && callTab == CallTab.MOUTH)
+
     fun go(s: Screen) {
         screen = s
         prompt = null
@@ -130,11 +179,11 @@ class MounaApp(
 
     /** Lips listen through the camera; Voice through the microphone. Only on Speak (Teach arms them itself). */
     private fun applyChannel() {
-        val speak = screen == Screen.SPEAK && prompt == null
+        val speak = onSpeakSurface() && prompt == null
         engine.listen(if (speak && channel == Channel.LIPS) Listen.SPEAK else Listen.PAUSED)
         engine.gesturesOn(prompt != null || screen == Screen.ASK)
-        engine.signing(screen == Screen.SPEAK && channel == Channel.SIGN)
-        val mic = (speak && channel == Channel.VOICE) || voiceTeaching != null
+        engine.signing(onSpeakSurface() && channel == Channel.SIGN)
+        val mic = ((speak && channel == Channel.VOICE) || voiceTeaching != null) && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
     }
@@ -165,7 +214,7 @@ class MounaApp(
             applyChannel()
             return
         }
-        if (screen != Screen.SPEAK || prompt != null || text.isBlank()) return
+        if (!onSpeakSurface() || prompt != null || text.isBlank()) return
         val ranked = VoiceMatcher.rank(text, voiceCandidates())
         android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
         val best = ranked.firstOrNull()
@@ -225,7 +274,7 @@ class MounaApp(
 
     /** A sign: speak a clear winner, otherwise offer the likeliest words. Words are spoken by the phone's voice. */
     private fun signed(g: List<Isl.Guess>) {
-        if (screen != Screen.SPEAK || prompt != null || channel != Channel.SIGN || g.isEmpty()) return
+        if (!onSpeakSurface() || prompt != null || channel != Channel.SIGN || g.isEmpty()) return
         android.util.Log.i("Mouna", "signed -> " + g.take(3).joinToString { "${it.word} %.2f".format(it.p) })
         val best = g[0]
         val second = g.getOrNull(1)?.p ?: 0f
@@ -269,7 +318,7 @@ class MounaApp(
 
     fun onEvent(e: Event) {
         when (e) {
-            is Event.Decided -> if (screen == Screen.SPEAK && prompt == null) decided(e.decision)
+            is Event.Decided -> if (onSpeakSurface() && prompt == null) decided(e.decision)
             is Event.Taught -> {
                 lastTeach = e
                 teachSeq++
@@ -347,7 +396,7 @@ class MounaApp(
         switchPresses++
         lastAnswerVia = via
         val pr = prompt
-        if (screen != Screen.SPEAK) return
+        if (!onSpeakSurface()) return
         when {
             // Idle: the person's own movement means "I need something" -> the yes/no questions.
             pr == null -> if (via == "switch") go(Screen.ASK)
@@ -413,6 +462,90 @@ class MounaApp(
         }
         go(Screen.SPEAK)
         decided(Decision(kind, pack.take(n), if (kind == DecisionKind.CONFIRM) "fairly sure: confirm first" else "preview", maybeNone = kind == DecisionKind.NOT_TAUGHT))
+    }
+
+    // ---------------- calls ----------------
+
+    fun pressDigit(c: Char) {
+        if (dialNumber.length < 20) dialNumber += c
+        dialName = null // typing changes whose number this is
+    }
+
+    fun backspace() {
+        dialNumber = dialNumber.dropLast(1)
+        if (dialNumber.isEmpty()) dialName = null
+    }
+
+    fun setDial(number: String, name: String?) {
+        dialNumber = number
+        dialName = name
+    }
+
+    fun chooseContact() = pickContact { c -> if (c != null) setDial(Phones.normalise(c.second) ?: c.second, c.first) }
+
+    fun saveFavourite() {
+        val name = dialName ?: return
+        val number = Phones.normalise(dialNumber) ?: return
+        favourites = favourites.filter { it.second != number } + (name to number)
+        store.favourites = favourites
+    }
+
+    fun removeFavourite(number: String) {
+        favourites = favourites.filter { it.second != number }
+        store.favourites = favourites
+    }
+
+    fun dial() {
+        val number = Phones.normalise(dialNumber) ?: return
+        callNote = null
+        askCall { allowed ->
+            if (!allowed) {
+                callNote = "Allow Mouna to make phone calls to call from here."
+                return@askCall
+            }
+            callWith = dialName ?: Phones.pretty(number)
+            if (!link.dial(number)) {
+                callNote = "The call could not be started."
+                return@askCall
+            }
+            callTab = CallTab.PHRASES
+            applyChannel()
+            // Words worth having ready, so the first tap is as fast as the tenth.
+            voice.prefetch(CallPhrases.warm(lang, callerName), lang, voiceId)
+        }
+    }
+
+    fun hangUp() {
+        if (!link.hangUp()) callNote = "Mouna can't end the call itself on this phone. End it on the phone's call screen."
+    }
+
+    fun chooseCallTab(t: CallTab) {
+        callTab = t
+        prompt = null
+        applyChannel()
+    }
+
+    fun chooseCallerName(name: String) {
+        callerName = name
+        store.callerName = name
+    }
+
+    fun intro() = sayCall(null, CallPhrases.intro(callerName, lang), lang, "intro")
+
+    fun quick(q: app.mouna.app.engine.QuickPhrase) = sayCall(q.packId, q.say(lang), lang, "call")
+
+    /** Anything typed on the call screen, in whichever script it is written. */
+    fun sayTyped(text: String) {
+        val t = text.trim()
+        if (t.isNotEmpty()) sayCall(null, t, CallPhrases.langOf(t, lang), "typed")
+    }
+
+    /** QA: speak [text] as if on a call or not, through the same Voice path (adb: app.mouna.SAY). */
+    fun debugSay(text: String, l: Lang, voiceId: String) = sayCall(null, text, l, "debug", voiceId)
+
+    private fun sayCall(packId: String?, text: String, l: Lang, via: String, voiceId: String = this.voiceId) {
+        voice.say(packId, text, l, voiceId)
+        said = Said(null, text, via)
     }
 
     fun clearSaid() {

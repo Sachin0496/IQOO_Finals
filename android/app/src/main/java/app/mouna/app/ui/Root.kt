@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.QuestionAnswer
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.School
@@ -68,6 +69,7 @@ fun MounaRoot(
     Box(Modifier.fillMaxSize().background(Ink.bg)) {
         Column(Modifier.fillMaxSize().systemBarsPadding()) {
             TopBar(app)
+            if (app.onCall && app.screen != Screen.CALL) CallBar(app)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (!cameraReady) {
                     NoCamera(cameraDenied)
@@ -81,6 +83,7 @@ fun MounaRoot(
                             Screen.SPEAK -> SpeakScreen(app, k, bindCamera)
                             Screen.TEACH -> TeachScreen(app, k, bindCamera)
                             Screen.ASK -> AskScreen(app)
+                            Screen.CALL -> CallScreen(app, k, bindCamera)
                             Screen.SETTINGS -> SettingsScreen(app, k, openProbe)
                             Screen.EYES -> EyesSetup(app, bindCamera)
                             Screen.SWITCH -> SwitchSetup(app, bindCamera)
@@ -96,7 +99,7 @@ fun MounaRoot(
     }
 }
 
-private val MAIN = listOf(Screen.SPEAK, Screen.TEACH, Screen.ASK)
+private val MAIN = listOf(Screen.SPEAK, Screen.TEACH, Screen.ASK, Screen.CALL)
 
 @Composable
 private fun TopBar(app: MounaApp) {
@@ -154,6 +157,7 @@ private fun NavBar(app: MounaApp) {
         NavItem(Icons.Rounded.RecordVoiceOver, "Speak", app.screen == Screen.SPEAK, Modifier.weight(1f)) { app.go(Screen.SPEAK) }
         NavItem(Icons.Rounded.School, "Teach", app.screen == Screen.TEACH, Modifier.weight(1f)) { app.go(Screen.TEACH) }
         NavItem(Icons.Rounded.QuestionAnswer, "Ask", app.screen == Screen.ASK, Modifier.weight(1f)) { app.go(Screen.ASK) }
+        NavItem(Icons.Rounded.Call, "Call", app.screen == Screen.CALL, Modifier.weight(1f)) { app.go(Screen.CALL) }
     }
 }
 
@@ -168,9 +172,9 @@ private fun NavItem(icon: ImageVector, label: String, on: Boolean, modifier: Mod
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = if (on) Ink.bg else Ink.bone2, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = Type.button.copy(color = if (on) Ink.bg else Ink.bone2, fontSize = 15.sp))
+        Icon(icon, null, tint = if (on) Ink.bg else Ink.bone2, modifier = Modifier.size(19.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = Type.button.copy(color = if (on) Ink.bg else Ink.bone2, fontSize = 14.sp))
     }
 }
 
@@ -184,9 +188,30 @@ private fun NoCamera(denied: Boolean) {
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "Nothing leaves this phone: the app has no internet permission, and no video is stored.",
+            "No video or audio leaves this phone and none is stored. The internet is used only to fetch a clearer voice for the words you speak on a call.",
             style = Type.body,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/** On a call, on every other screen: who, how long; tap to go back to the Call screen. */
+@Composable
+private fun CallBar(app: MounaApp) {
+    Row(
+        Modifier
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(Ink.leaf.copy(alpha = 0.16f))
+            .border(1.dp, Ink.leaf.copy(alpha = 0.5f), CircleShape)
+            .clickable { app.go(Screen.CALL) }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(8.dp).clip(CircleShape).background(Ink.leaf))
+        Spacer(Modifier.width(10.dp))
+        Text(callStatus(app), style = Type.mono.copy(color = Ink.bone, fontSize = 13.sp), modifier = Modifier.weight(1f))
+        Text("OPEN", style = Type.label.copy(color = Ink.leaf))
     }
 }

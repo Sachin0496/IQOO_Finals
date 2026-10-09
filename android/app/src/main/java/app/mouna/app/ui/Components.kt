@@ -25,7 +25,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -163,7 +169,7 @@ fun PhraseTile(
     }
 }
 
-enum class Tone { PRIMARY, YES, NO, QUIET }
+enum class Tone { PRIMARY, YES, NO, QUIET, DANGER }
 
 /** A large, calm button: the person may be tired, the caregiver may be in a hurry. */
 @Composable
@@ -173,6 +179,7 @@ fun BigButton(text: String, tone: Tone = Tone.PRIMARY, modifier: Modifier = Modi
         Tone.YES -> Ink.leaf to Ink.bg
         Tone.NO -> Ink.card to Ink.bone
         Tone.QUIET -> Color.Transparent to Ink.bone2
+        Tone.DANGER -> Ink.kumkum to Ink.bone
     }
     Box(
         modifier
@@ -186,6 +193,35 @@ fun BigButton(text: String, tone: Tone = Tone.PRIMARY, modifier: Modifier = Modi
     ) {
         Text(text, style = Type.button.copy(color = if (enabled) fg else Ink.mute, fontSize = 17.sp))
     }
+}
+
+/** A text box in the app's look: for names, keys and words to speak. */
+@Composable
+fun TextBox(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    secret: Boolean = false,
+    keyboard: KeyboardType = KeyboardType.Text,
+    singleLine: Boolean = true,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        placeholder = { Text(placeholder, style = Type.phrase.copy(color = Ink.mute, fontSize = 17.sp)) },
+        textStyle = Type.phrase.copy(fontSize = 17.sp),
+        singleLine = singleLine,
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else keyboard),
+        shape = RoundedCornerShape(18.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Ink.turmeric,
+            unfocusedBorderColor = Ink.rule2,
+            cursorColor = Ink.turmeric,
+        ),
+        modifier = modifier,
+    )
 }
 
 /** ●●●○○ examples taught, out of the most Mouna will ask for. */
