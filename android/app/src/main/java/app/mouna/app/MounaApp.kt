@@ -249,6 +249,9 @@ class MounaApp(
         private set
     var careful by mutableStateOf(store.careful)
         private set
+    /** Keep very clear, uncorrected matches as extra examples (off by default; see SelfTrain). */
+    var selfTrain by mutableStateOf(store.selfTrain)
+        private set
     /** Bumped on each "yes" from the body (switch, nod, double blink), for screens that react to it (Ask, scanning). */
     var switchPresses by mutableStateOf(0)
         private set
@@ -689,7 +692,8 @@ class MounaApp(
         lang = store.lang
         voiceId = store.voice
         careful = store.careful
-        channel = runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
+        selfTrain = store.selfTrain
+        channel =runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
         callMode = storedCallMode()
         callServerNow = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
         lastTeach = null
@@ -716,6 +720,11 @@ class MounaApp(
     fun chooseCareful(on: Boolean) {
         careful = on
         store.careful = on
+    }
+
+    fun chooseSelfTrain(on: Boolean) {
+        selfTrain = on
+        store.selfTrain = on
     }
 
     /** QA and rehearsal: show what the person would see for a decision of [kind], with phrases from their pack. */

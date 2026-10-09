@@ -54,6 +54,11 @@ class Store(context: Context) {
     var careful: Boolean
         get() = prefs.getBoolean("careful", false)
         set(v) = prefs.edit().putBoolean("careful", v).apply()
+
+    /** Keep very clear matches the person doesn't correct as extra examples (see [SelfTrain]). Off until the person turns it on. */
+    var selfTrain: Boolean
+        get() = prefs.getBoolean("self_train", false)
+        set(v) = prefs.edit().putBoolean("self_train", v).apply()
     /** The Welcome screen has been read (Continue): only then is the camera permission asked for. */
     var welcomed: Boolean
         get() = prefs.getBoolean("welcomed", false)
