@@ -1,0 +1,13 @@
+# Render blueprint for the call relay alone (the repo's root render.yaml is the Lab). Create a Blueprint from this
+# file, or a Web Service by hand with the same settings. Render gives HTTPS and WSS, which phone browsers need
+# for the microphone. The free plan sleeps when idle: the first call after a pause waits ~30 s, so ping /healthz
+# before a demo (or use the laptop + cloudflared route in the README).
+services:
+  - type: web
+    name: mouna-call
+    runtime: node
+    rootDir: call-server
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    plan: free

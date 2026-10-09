@@ -7,9 +7,18 @@
     <!-- Voice mode only (weak or unclear speech): asked for when the person switches to Voice. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Spike test S6: the app must not be able to reach the network, whatever a library merges in. -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- Network use: Sarvam text-to-speech on calls (the words go out, a WAV comes back), and web calls, where Mouna's
+         spoken voice goes to the other person and theirs comes back, through the call relay (call-server/).
+         Nothing from the camera or the microphone leaves the phone. Network state stays removed (spike test S6),
+         whatever a library merges in. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+
+    <!-- Phone calls: dial (CALL_PHONE), hang up (ANSWER_PHONE_CALLS), bring Mouna back to the front after dialing. -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
+    <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Lets the app ask the system TTS engine which voices exist (fallback voice). -->
     <queries>
@@ -32,7 +41,10 @@
             android:name="app.mouna.app.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
+            android:configChanges="uiMode|fontScale|density|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation"
             android:keepScreenOn="true">
+            <!-- The activity is not recreated by these changes (dark mode, font size, display size, a keyboard): a recreate
+                 mid-call would drop the call. Compose and CameraX follow the new configuration on their own. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

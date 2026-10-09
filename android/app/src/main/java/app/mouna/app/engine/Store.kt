@@ -104,6 +104,57 @@ class Store(context: Context) {
         get() = prefs.getString("listenWith", "lips")!!
         set(v) = prefs.edit().putString("listenWith", v).apply()
 
+    // ---------------- calls ----------------
+
+    /** Spoken in the intro on a call ("this is Ravi speaking through the Mouna app"). */
+    var callerName: String
+        get() = prefs.getString("callerName", "")!!
+        set(v) = prefs.edit().putString("callerName", v.trim()).apply()
+
+    /** A Sarvam key typed in Settings; overrides the one built in from local.properties. Never logged. */
+    var sarvamKey: String
+        get() = prefs.getString("sarvamKey", "")!!
+        set(v) = prefs.edit().putString("sarvamKey", v.trim()).apply()
+
+    /** Which AudioAttributes usage carries Mouna's voice into a call: "voice" or "media" (see [CallUsage]). */
+    var callUsage: String
+        get() = prefs.getString("callUsage", "voice")!!
+        set(v) = prefs.edit().putString("callUsage", v).apply()
+
+    /** People the person calls most: name to number. */
+    var favourites: List<Pair<String, String>>
+        get() = prefs.getString("favourites", null)?.let { s ->
+            runCatching { JSONArray(s).let { a -> List(a.length()) { a.getJSONObject(it).let { o -> o.getString("name") to o.getString("number") } } } }.getOrNull()
+        } ?: emptyList()
+        set(v) = prefs.edit().putString("favourites", JSONArray(v.map { (n, num) -> JSONObject().put("name", n).put("number", num) }).toString()).apply()
+
+    /** The call relay typed in Settings; overrides the one built in from local.properties (blank means use that one). */
+    var callServer: String
+        get() = prefs.getString("callServer", "")!!
+        set(v) = prefs.edit().putString("callServer", v.trim()).apply()
+
+    /** "phone" or "web" once the person has chosen; blank means pick by whether the phone has a SIM. */
+    var callMode: String
+        get() = prefs.getString("callMode", "")!!
+        set(v) = prefs.edit().putString("callMode", v).apply()
+
+    /** People who keep a fixed web-call link ("Amma's link"): name to room id. */
+    var webFavourites: List<Pair<String, String>>
+        get() = prefs.getString("webFavourites", null)?.let { s ->
+            runCatching { JSONArray(s).let { a -> List(a.length()) { a.getJSONObject(it).let { o -> o.getString("name") to o.getString("room") } } } }.getOrNull()
+        } ?: emptyList()
+        set(v) = prefs.edit().putString("webFavourites", JSONArray(v.map { (n, r) -> JSONObject().put("name", n).put("room", r) }).toString()).apply()
+
+    /**
+     * The key for each favourite web room (room id to key). The relay names the first key that opens a room its owner,
+     * so a favourite's fixed room is only ever reclaimed by this phone. Kept in app-private storage, never logged.
+     */
+    var webTokens: Map<String, String>
+        get() = prefs.getString("webTokens", null)?.let { s ->
+            runCatching { JSONObject(s).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }.getOrNull()
+        } ?: emptyMap()
+        set(v) = prefs.edit().putString("webTokens", JSONObject(v).toString()).apply()
+
     private fun json(xs: List<FloatArray>) = JSONArray(xs.map { x -> JSONArray(x.map { it.toDouble() }) })
     private fun vectors(a: JSONArray): MutableList<FloatArray> = MutableList(a.length()) { i ->
         val v = a.getJSONArray(i)

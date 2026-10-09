@@ -177,7 +177,7 @@ private fun TelemetryGrid(t: Telemetry, permissions: List<String>) {
         Triple("EYE SPAN", if (t.face) "${t.iod.toInt()} px" else "—", if (!t.face || t.iod >= 55f) Bone else Kumkum),
         Triple("YAW", if (t.face) "${t.yaw.toInt()}°" else "—", Bone),
         Triple("GATE", if (t.gateOpen) "open" else "shut", if (t.gateOpen) Turmeric else Bone),
-        Triple("INTERNET", if (noInternet) "absent" else "PRESENT", if (noInternet) Leaf else Kumkum),
+        Triple("INTERNET", if (noInternet) "absent" else "TTS + web calls", if (noInternet) Leaf else Turmeric),
     )
     Column(Modifier.border(1.dp, Rule)) {
         cells.chunked(4).forEach { row ->
@@ -198,6 +198,14 @@ private fun TelemetryGrid(t: Telemetry, permissions: List<String>) {
         }
     }
     Text("Permissions in this APK: " + permissions.joinToString { it.substringAfterLast('.') }.ifEmpty { "none" }, style = Body)
+    if (!noInternet) {
+        Text(
+            "Internet is used for Sarvam text-to-speech (only the words to speak go out) and for web calls: Mouna's spoken " +
+                "voice and a caption of it go to the call relay, and the other person's voice comes back through it. " +
+                "No camera or microphone data leaves the phone.",
+            style = Body,
+        )
+    }
 }
 
 @Composable

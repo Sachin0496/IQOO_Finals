@@ -3,7 +3,15 @@ package app.mouna.app
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.mouna.app.engine.CallLink
+import app.mouna.app.engine.CallPhrases
+import app.mouna.app.engine.CallState
 import app.mouna.app.engine.Engine
+import app.mouna.app.engine.Phones
+import app.mouna.app.engine.Rooms
+import app.mouna.app.engine.WebLink
+import app.mouna.BuildConfig
+import android.os.SystemClock
 import app.mouna.app.engine.Event
 import app.mouna.app.engine.Lang
 import app.mouna.app.engine.Listen
@@ -21,7 +29,13 @@ import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, TEACH, ASK, SETTINGS, EYES, SWITCH }
+enum class Screen { SPEAK, TEACH, ASK, CALL, SETTINGS, EYES, SWITCH }
+
+/** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
+enum class CallTab { PHRASES, MOUTH }
+
+/** How a call is placed: a carrier call to a number, or a web link the other person opens in a browser. */
+enum class CallMode { PHONE, WEB }
 
 /** What Mouna shows when it is not sure enough to speak (core.md: "What the app shows for each decision"). */
 sealed interface Prompt {
@@ -49,6 +63,16 @@ class MounaApp(
     val hearing: Hearing,
     /** Asks for the microphone if needed; calls back with the answer. */
     private val askMic: ((Boolean) -> Unit) -> Unit,
+    /** The carrier transport (a phone number); Voice plays on the speaker for it. */
+    private val carrier: CallLink,
+    /** The internet transport (a link the other person opens); Voice hands it audio. */
+    private val web: WebLink,
+    /** Whether this phone has a working SIM; without one, carrier calls are off and web calls are the default. */
+    private val hasSim: () -> Boolean,
+    /** Asks for the permission to call; calls back with whether calling is allowed. */
+    private val askCall: ((Boolean) -> Unit) -> Unit,
+    /** Opens the contact picker; calls back with the name and number picked, or null. */
+    private val pickContact: ((Pair<String, String>?) -> Unit) -> Unit,
 ) {
     val store = engine.store
     var phrases by mutableStateOf(engine.phrases)
@@ -87,11 +111,78 @@ class MounaApp(
         },
     )
 
+    // ---------------- calls ----------------
+
+    var callState by mutableStateOf(CallState.IDLE)
+        private set
+    /** The number being typed on the dial pad, and the name it was picked with (if any). */
+    var dialNumber by mutableStateOf("")
+        private set
+    var dialName by mutableStateOf<String?>(null)
+        private set
+    /** Who the current call is with, and when it connected (elapsedRealtime), for the clock. */
+    var callWith by mutableStateOf("")
+        private set
+    var callSince by mutableStateOf(0L)
+        private set
+    var callNote by mutableStateOf<String?>(null)
+        private set
+    var callTab by mutableStateOf(CallTab.PHRASES)
+        private set
+    var favourites by mutableStateOf(store.favourites)
+        private set
+    var callerName by mutableStateOf(store.callerName)
+        private set
+    val onCall get() = callState != CallState.IDLE
+
+    /** The transport of the current call (or the last one); both report here but only this one counts. */
+    private var link: CallLink = carrier
+    /** Phone or web: the person's choice, else web when there is no SIM to call from. */
+    var callMode by mutableStateOf(
+        when (store.callMode) {
+            "phone" -> CallMode.PHONE
+            "web" -> CallMode.WEB
+            else -> if (hasSim()) CallMode.PHONE else CallMode.WEB
+        },
+    )
+        private set
+    val simReady = hasSim()
+    /** The name typed for the person a web link is for ("Amma"); empty is fine. */
+    var webName by mutableStateOf("")
+        private set
+    var webFavourites by mutableStateOf(store.webFavourites)
+        private set
+    val usingWeb get() = link === web
+    val webPhase get() = web.phase
+    val webRoom get() = web.room
+    /** How loud the guest is on a web call, 0..1. */
+    val guestLevel get() = web.guestLevel
+    val webJoinUrl get() = web.joinUrl
+    val webShortUrl get() = web.shortUrl
+
     init {
+        web.server = ::callServer
+        web.callerName = { callerName }
+        web.tokenFor = { room -> store.webTokens[room] ?: Rooms.newToken() }
+        voice.link = link
+        for (l in listOf(carrier, web)) {
+            l.onState = { st -> if (l === link) onLinkState(st) }
+        }
         asr.execute {
             hearing.load()
             main.post { voiceStatus = hearing.status }
         }
+    }
+
+    private fun onLinkState(st: CallState) {
+        callState = st
+        voice.callMode = st != CallState.IDLE
+        if (st == CallState.ACTIVE) callSince = SystemClock.elapsedRealtime()
+        if (st == CallState.IDLE) {
+            callSince = 0L
+            if (link === web) web.note.value?.let { callNote = it }
+        }
+        applyChannel() // the microphone stays off on a call: it would hear the other person
     }
 
     var screen by mutableStateOf(Screen.SPEAK)
@@ -120,6 +211,9 @@ class MounaApp(
     var teachSeq by mutableStateOf(0)
         private set
 
+    /** Where lips, voice and sign listen: Speak, or the Mouth/Sign half of the Call screen. */
+    private fun onSpeakSurface() = screen == Screen.SPEAK || (screen == Screen.CALL && callTab == CallTab.MOUTH)
+
     fun go(s: Screen) {
         screen = s
         prompt = null
@@ -130,11 +224,11 @@ class MounaApp(
 
     /** Lips listen through the camera; Voice through the microphone. Only on Speak (Teach arms them itself). */
     private fun applyChannel() {
-        val speak = screen == Screen.SPEAK && prompt == null
+        val speak = onSpeakSurface() && prompt == null
         engine.listen(if (speak && channel == Channel.LIPS) Listen.SPEAK else Listen.PAUSED)
         engine.gesturesOn(prompt != null || screen == Screen.ASK)
-        engine.signing(screen == Screen.SPEAK && channel == Channel.SIGN)
-        val mic = (speak && channel == Channel.VOICE) || voiceTeaching != null
+        engine.signing(onSpeakSurface() && channel == Channel.SIGN)
+        val mic = ((speak && channel == Channel.VOICE) || voiceTeaching != null) && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
     }
@@ -165,7 +259,7 @@ class MounaApp(
             applyChannel()
             return
         }
-        if (screen != Screen.SPEAK || prompt != null || text.isBlank()) return
+        if (!onSpeakSurface() || prompt != null || text.isBlank()) return
         val ranked = VoiceMatcher.rank(text, voiceCandidates())
         android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
         val best = ranked.firstOrNull()
@@ -225,7 +319,7 @@ class MounaApp(
 
     /** A sign: speak a clear winner, otherwise offer the likeliest words. Words are spoken by the phone's voice. */
     private fun signed(g: List<Isl.Guess>) {
-        if (screen != Screen.SPEAK || prompt != null || channel != Channel.SIGN || g.isEmpty()) return
+        if (!onSpeakSurface() || prompt != null || channel != Channel.SIGN || g.isEmpty()) return
         android.util.Log.i("Mouna", "signed -> " + g.take(3).joinToString { "${it.word} %.2f".format(it.p) })
         val best = g[0]
         val second = g.getOrNull(1)?.p ?: 0f
@@ -269,7 +363,7 @@ class MounaApp(
 
     fun onEvent(e: Event) {
         when (e) {
-            is Event.Decided -> if (screen == Screen.SPEAK && prompt == null) decided(e.decision)
+            is Event.Decided -> if (onSpeakSurface() && prompt == null) decided(e.decision)
             is Event.Taught -> {
                 lastTeach = e
                 teachSeq++
@@ -347,7 +441,7 @@ class MounaApp(
         switchPresses++
         lastAnswerVia = via
         val pr = prompt
-        if (screen != Screen.SPEAK) return
+        if (!onSpeakSurface()) return
         when {
             // Idle: the person's own movement means "I need something" -> the yes/no questions.
             pr == null -> if (via == "switch") go(Screen.ASK)
@@ -415,11 +509,171 @@ class MounaApp(
         decided(Decision(kind, pack.take(n), if (kind == DecisionKind.CONFIRM) "fairly sure: confirm first" else "preview", maybeNone = kind == DecisionKind.NOT_TAUGHT))
     }
 
+    // ---------------- calls ----------------
+
+    fun pressDigit(c: Char) {
+        if (dialNumber.length < 20) dialNumber += c
+        dialName = null // typing changes whose number this is
+    }
+
+    fun backspace() {
+        dialNumber = dialNumber.dropLast(1)
+        if (dialNumber.isEmpty()) dialName = null
+    }
+
+    fun setDial(number: String, name: String?) {
+        dialNumber = number
+        dialName = name
+    }
+
+    fun chooseContact() = pickContact { c -> if (c != null) setDial(Phones.normalise(c.second) ?: c.second, c.first) }
+
+    fun saveFavourite() {
+        val name = dialName ?: return
+        val number = Phones.normalise(dialNumber) ?: return
+        favourites = favourites.filter { it.second != number } + (name to number)
+        store.favourites = favourites
+    }
+
+    fun removeFavourite(number: String) {
+        favourites = favourites.filter { it.second != number }
+        store.favourites = favourites
+    }
+
+    fun dial() {
+        if (onCall) return // a second tap while the first call is dialing
+        val number = Phones.normalise(dialNumber) ?: return
+        callNote = null
+        askCall { allowed ->
+            if (!allowed) {
+                callNote = "Allow Mouna to make phone calls to call from here."
+                return@askCall
+            }
+            link = carrier
+            voice.link = carrier
+            callWith = dialName ?: Phones.pretty(number)
+            if (!carrier.dial(number)) {
+                callNote = "The call could not be started."
+                return@askCall
+            }
+            callTab = CallTab.PHRASES
+            applyChannel()
+            // Words worth having ready, so the first tap is as fast as the tenth.
+            voice.prefetch(CallPhrases.warm(lang, callerName), lang, voiceId)
+        }
+    }
+
+    fun hangUp() {
+        if (!link.hangUp()) callNote = "Mouna can't end the call itself on this phone. End it on the phone's call screen."
+    }
+
+    // ---------------- web calls ----------------
+
+    /** The call relay: Settings wins over the one built in from local.properties; blank means web calls are off. */
+    fun callServer(): String = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
+
+    /** Saves the relay's address; returns why not (an http:// address cannot be used) or null when it is saved. */
+    fun chooseCallServer(url: String): String? {
+        if (Rooms.isCleartext(url)) return Rooms.HTTPS_ONLY
+        store.callServer = url
+        return null
+    }
+
+    /** Settings: forgets the spoken sentences kept for instant replay. Returns how many. */
+    fun clearVoiceCache(): Int = voice.clearCache()
+
+    fun chooseCallMode(m: CallMode) {
+        callMode = m
+        store.callMode = m.name.lowercase()
+        callNote = null
+    }
+
+    fun chooseWebName(name: String) {
+        webName = name.take(40)
+    }
+
+    /** Opens a room on the relay and waits for the guest. [room] is a favourite's fixed one, else a new random id. */
+    fun startWebCall(room: String? = null, who: String = webName.trim()) {
+        if (onCall) return
+        callNote = null
+        link = web
+        voice.link = web
+        callWith = who.ifEmpty { "guest" }
+        if (!web.dial(room ?: Rooms.newId())) {
+            callNote = web.note.value ?: "The call could not be started."
+            return
+        }
+        callTab = CallTab.PHRASES
+        applyChannel()
+        voice.prefetch(CallPhrases.warm(lang, callerName), lang, voiceId)
+    }
+
+    /** Keeps this call's room as a fixed link under the name typed, so the family can bookmark it. */
+    fun saveWebFavourite() {
+        val room = web.room.value ?: return
+        val name = webName.trim().ifEmpty { return }
+        webFavourites = webFavourites.filter { it.second != room && it.first != name } + (name to room)
+        store.webFavourites = webFavourites
+        // The relay made this call's key the room's owner: keep it, so this phone can always get the room back.
+        if (web.token.isNotEmpty()) store.webTokens = store.webTokens + (room to web.token)
+        forgetStrayTokens()
+    }
+
+    fun removeWebFavourite(room: String) {
+        webFavourites = webFavourites.filter { it.second != room }
+        store.webFavourites = webFavourites
+        forgetStrayTokens()
+    }
+
+    private fun forgetStrayTokens() {
+        store.webTokens = store.webTokens.filterKeys { r -> webFavourites.any { it.second == r } }
+    }
+
+    /** QA: start a web call in [room] (adb: app.mouna.WEBCALL). */
+    fun debugWebCall(room: String?, who: String) {
+        if (onCall) return
+        if (screen != Screen.CALL) go(Screen.CALL)
+        chooseCallMode(CallMode.WEB)
+        startWebCall(room, who)
+    }
+
+    fun chooseCallTab(t: CallTab) {
+        callTab = t
+        prompt = null
+        applyChannel()
+    }
+
+    fun chooseCallerName(name: String) {
+        callerName = name
+        store.callerName = name
+    }
+
+    fun intro() = sayCall(null, CallPhrases.intro(callerName, lang), lang, "intro")
+
+    fun quick(q: app.mouna.app.engine.QuickPhrase) = sayCall(q.packId, q.say(lang), lang, "call")
+
+    /** Anything typed on the call screen, in whichever script it is written. */
+    fun sayTyped(text: String) {
+        val t = text.trim()
+        if (t.isNotEmpty()) sayCall(null, t, CallPhrases.langOf(t, lang), "typed")
+    }
+
+    /** QA: speak [text] as if on a call or not, through the same Voice path (adb: app.mouna.SAY). */
+    fun debugSay(text: String, l: Lang, voiceId: String) = sayCall(null, text, l, "debug", voiceId)
+
+    private fun sayCall(packId: String?, text: String, l: Lang, via: String, voiceId: String = this.voiceId) {
+        voice.say(packId, text, l, voiceId)
+        said = Said(null, text, via)
+    }
+
     fun clearSaid() {
         said = null
     }
 
+    /** The screen is going away (the activity is destroyed): end the call so the room, the speaker and the volume are given back. */
     fun shutdown() {
+        carrier.shutdown()
+        web.shutdown()
         listener.stop()
         asr.execute { hearing.close() }
         asr.shutdown()

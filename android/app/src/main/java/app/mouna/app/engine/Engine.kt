@@ -66,6 +66,8 @@ data class Knowledge(
     val gazeReady: Boolean = false,
     val lastMs: Double? = null,
     val islReady: Boolean = false,
+    /** The ISL model has been looked for (found or not): until then the screen says "Loading…", not "No ISL model". */
+    val islKnown: Boolean = false,
 )
 
 sealed interface Event {
@@ -117,6 +119,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     private var lastEmbedding: FloatArray? = null
     private var lastMs: Double? = null
     private var isl: Isl? = null
+    @Volatile private var islKnown = false
     @Volatile private var signMode = false
     // analysis thread: the sign being recorded
     private var signFrames: MutableList<FloatArray>? = null
@@ -157,6 +160,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         analysis.execute { sensor = runCatching { Sensor(context, ::onFrame) }.onFailure { Log.e(TAG, "sensor", it) }.getOrNull() }
         worker.execute {
             isl = runCatching { Isl.open(context) }.getOrNull()
+            publish() // ISL is known now; the encoder can take minutes on its first NPU compile
+            islKnown = true
+            publish()
             val (ort, report) = OrtEncoder.open(context) { Log.w(TAG, it) }
             encoder = ort ?: ShapeEncoder()
             examples = store.load(encoder.id)
@@ -315,6 +321,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             gazeReady = gazeModel != null,
             lastMs = lastMs,
             islReady = isl != null,
+            islKnown = islKnown,
         )
     }
 

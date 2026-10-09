@@ -78,17 +78,20 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                     else -> Pill("Watching your lips", Ink.leaf)
                 }
                 if (sign) {
-                    Pill(if (k.islReady) "ISL · 263 signs" else if (isEmulator) "ISL runs on the phone" else "No ISL model", if (k.islReady) Ink.leaf else Ink.mute)
+                    if (!k.islKnown) Pill("ISL · Loading…", Ink.mute, pulse = true)
+                    else Pill(if (k.islReady) "ISL · 263 signs" else if (isEmulator) "ISL runs on the phone" else "No ISL model", if (k.islReady) Ink.leaf else Ink.mute)
                 } else if (voice) {
                     Pill(if (app.hearing.ready) "Whisper" else "No voice model", if (app.hearing.ready) Ink.leaf else Ink.mute)
                 } else {
                     Pill(
-                        k.encoder.label,
+                        if (k.ready) k.encoder.label else "Encoder · Loading…",
                         when {
+                            !k.ready -> Ink.mute
                             k.encoder.label.startsWith("NPU") -> Ink.leaf
                             k.encoder.label.startsWith("CPU") -> Ink.turmeric
                             else -> Ink.mute
                         },
+                        pulse = !k.ready,
                     )
                 }
             }
