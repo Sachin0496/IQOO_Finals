@@ -109,8 +109,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     @Volatile var freeTalkStatus = "Free talk · Loading…"
         private set
     @Volatile private var freeOn = false
-    /** Sentences, not phrases: up to 10 s, and pauses between words (under 0.8 s) don't end the utterance. */
-    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 12, maxFrames = 300, tail = 24)
+    /**
+     * Sentences, not phrases: up to 10 s; pauses between words (under ~0.7 s at the ~20 fps the front camera gives)
+     * don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
+     */
+    private val freeSegmenter = Segmenter(preRoll = 6, minFrames = 22, maxFrames = 300, tail = 14, keepTail = 6)
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
@@ -490,7 +493,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             }
             val res = r.read(crops, t)
             val ms = (SystemClock.uptimeMillis() - endMs).toDouble()
-            ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, beam ${"%.0f".format(res.decodeMs)} ms, " +
+            ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, decode ${"%.0f".format(res.decodeMs)} ms (${res.steps} steps), " +
                 "total ${"%.0f".format(ms)} ms -> " + res.sentences.take(3).joinToString(" | "))
             if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs))
         }.onFailure { ftLog("free talk", it) }
@@ -542,7 +545,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             val t = LongArray(n) { (it * 1000.0 / fps).toLong() }
             val res = r.read(crops, t)
             ftLog("free talk read ${file.name}: ${res.frames} frames (bucket ${res.bucket}), NPU ${"%.1f".format(res.npuMs)} ms, " +
-                "beam ${"%.1f".format(res.decodeMs)} ms")
+                "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps)")
             res.sentences.take(5).forEachIndexed { i, s -> ftLog("  ${i + 1}. $s  (${"%.2f".format(res.scores[i])})") }
         }.onFailure { ftLog("free talk read", it) }
     }

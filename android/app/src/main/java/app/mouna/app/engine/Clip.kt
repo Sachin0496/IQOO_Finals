@@ -35,6 +35,8 @@ class Segmenter(
     private val maxFrames: Int = 96, // ~3.2 s: the encoder window is 1.92 s, phrases are short
     /** Frames the gate may stay shut before the utterance ends: 0 for phrases; free talk bridges pauses between words. */
     private val tail: Int = 0,
+    /** Still frames kept at the end of a clip (the rest of the [tail] is cut: long stillness invites repeated words). */
+    private val keepTail: Int = Int.MAX_VALUE,
 ) {
     private val ring = ArrayDeque<Frame>()
     private var current: MutableList<Frame>? = null
@@ -66,8 +68,10 @@ class Segmenter(
     }
 
     private fun finish(): Clip? {
-        val c = current ?: return null
+        val c0 = current ?: return null
+        val c = if (quiet > keepTail) c0.subList(0, c0.size - (quiet - keepTail)) else c0
         current = null
+        quiet = 0
         ring.clear()
         return if (c.size >= minFrames) Clip(c) else null
     }

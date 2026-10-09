@@ -68,3 +68,28 @@ class FreeTalkParityTest {
         assertEquals(d.getString("text"), Ctc.detokenize(ints(d.getJSONArray("ids")), toks))
     }
 }
+
+class JointBeamParityTest {
+    private val v = JSONObject(File(System.getProperty("mouna.freetalk")).readText()).getJSONObject("joint")
+
+    @Test
+    fun jointSearchMatchesPython() {
+        val frames = v.getInt("frames")
+        val units = v.getInt("units")
+        val maxLen = v.getInt("max_len")
+        val ctc = v.getJSONArray("ctc").let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
+        val tab = v.getJSONArray("table").let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
+        val decode = { ps: List<IntArray> ->
+            ps.map { p -> val o = (p.last() * (maxLen + 1) + p.size - 1) * units; tab.copyOfRange(o, o + units) }
+        }
+        val got = JointBeam.search(ctc, frames, units, sos = units - 1, decode = decode, beam = 3, preBeam = 4, maxLen = maxLen)
+        val want = v.getJSONArray("hyps")
+        assertEquals(want.length(), got.size)
+        for (k in 0 until want.length()) {
+            val w = want.getJSONObject(k)
+            val ids = w.getJSONArray("ids").let { a -> IntArray(a.length()) { a.getInt(it) } }
+            assertArrayEquals("hyp $k ids", ids, got[k].ids)
+            assertEquals("hyp $k score", w.getDouble("score"), got[k].score, 1e-6)
+        }
+    }
+}

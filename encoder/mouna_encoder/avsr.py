@@ -494,7 +494,25 @@ def vectors(out: Path) -> Path:
                 "beam": [{"ids": h, "logp": s} for h, s in hyps],
             }
         )
+    # joint search: a toy attention model, a table of next-token log-probs by (last token, prefix length)
+    jt, jv, jl = 12, 7, 5
+    jl_ctc = rng.normal(0, 2.0, (jt, jv))
+    jl_ctc[:, 0] += 1.0
+    jctc = (jl_ctc - np.log(np.exp(jl_ctc).sum(-1, keepdims=True))).astype(np.float32)
+    jtab = rng.normal(0, 1.5, (jv, jl + 1, jv))
+    jtab[:, :, 0] -= 4.0  # the attention decoder rarely wants the blank id
+    jtab[:, 2:, jv - 1] += 2.5  # and ends sentences after a few tokens (covers the eos path)
+    jtab = (jtab - np.log(np.exp(jtab).sum(-1, keepdims=True))).astype(np.float32)
+
+    def jdecode(prefixes):
+        return np.stack([jtab[p[-1], len(p) - 1] for p in prefixes])
+
+    jhyps = joint_search(jctc.astype(np.float64), jdecode, sos=jv - 1, beam=3, pre_beam=4, max_len=jl)
     v = {
+        "joint": {
+            "frames": jt, "units": jv, "max_len": jl, "ctc": jctc.ravel().tolist(), "table": jtab.ravel().tolist(),
+            "hyps": [{"ids": h, "score": sc} for h, sc in jhyps],
+        },
         "crop": crops_cases,
         "input": {
             "t_ms": t_ms.tolist(),
@@ -558,7 +576,8 @@ class StaticDecoder(nn.Module):
         causal = torch.triu(torch.full((length, length), -1e4), diagonal=1)
         self.register_buffer("causal", causal.view(1, 1, length, length))
 
-    def forward(self, ys: torch.Tensor, memory: torch.Tensor, valid: torch.Tensor):
+    def forward(self, ys: torch.Tensor, memory: torch.Tensor, valid: torch.Tensor, sel: torch.Tensor):
+        """sel (B, L) one-hot: the position whose next-token distribution each row wants -> logp (B, 5049)."""
         x = self.emb(ys.long()) * self.scale + self.pe
         mem = memory.expand(self.b, self.t, D_MODEL)
         mem_bias = ((1.0 - valid) * -1e4).view(1, 1, 1, self.t)
@@ -568,7 +587,8 @@ class StaticDecoder(nn.Module):
             h = layer.norm2(x)
             x = x + _mha(layer.src_attn, h, mem, mem_bias)
             x = x + layer.feed_forward(layer.norm3(x))
-        return F.log_softmax(self.out(self.after_norm(x)), dim=-1)
+        h = torch.matmul(sel.unsqueeze(1), self.after_norm(x)).squeeze(1)  # (B, 768): one row per hypothesis
+        return F.log_softmax(self.out(h), dim=-1)
 
 
 def _mha(att, q_in, kv_in, bias):
@@ -598,25 +618,21 @@ def export_decoder(frames: int, model=None, out_dir: Path = OUT) -> Path:
     sos = len(tokens()) - 1
     ys = rng.integers(1, sos, (DEC_BATCH, DEC_LEN)).astype(np.int32)
     ys[:, 0] = sos
+    sel = np.zeros((DEC_BATCH, DEC_LEN), np.float32)
+    sel[np.arange(DEC_BATCH), np.arange(DEC_BATCH) + 3] = 1.0  # row b reads position b + 3
+    args = [torch.from_numpy(a) for a in (ys, mem, valid, sel)]
     with torch.no_grad():
-        ref = d(torch.from_numpy(ys), torch.from_numpy(mem), torch.from_numpy(valid)).numpy()
-        # against espnet's own incremental decoder on hypothesis 0, prefix of 10
-        y0 = torch.from_numpy(ys[:1, :10]).long()
+        ref = d(*args).numpy()
+        # against espnet's own incremental decoder on hypothesis 0, prefix of 4 (position 3)
+        y0 = torch.from_numpy(ys[:1, :4]).long()
         from espnet.nets.pytorch_backend.transformer.mask import subsequent_mask
 
-        lp, _ = model.decoder.forward_one_step(y0, subsequent_mask(10).unsqueeze(0), torch.from_numpy(mem[:, :n]))
-        print(f"static decoder vs espnet (prefix 10): {np.abs(ref[0, 9] - lp.numpy()[0]).max():.2e}")
-        torch.onnx.export(
-            d,
-            (torch.from_numpy(ys), torch.from_numpy(mem), torch.from_numpy(valid)),
-            path,
-            input_names=["ys", "memory", "valid"],
-            output_names=["logp"],
-            opset_version=17,
-            do_constant_folding=True,
-        )
+        lp, _ = model.decoder.forward_one_step(y0, subsequent_mask(4).unsqueeze(0), torch.from_numpy(mem[:, :n]))
+        print(f"static decoder vs espnet (prefix 4): {np.abs(ref[0] - lp.numpy()[0]).max():.2e}")
+        torch.onnx.export(d, tuple(args), path, input_names=["ys", "memory", "valid", "sel"], output_names=["logp"],
+                          opset_version=17, do_constant_folding=True)
     sess = ort.InferenceSession(str(path), providers=["CPUExecutionProvider"])
-    got = sess.run(None, {"ys": ys, "memory": mem, "valid": valid})[0]
+    got = sess.run(None, {"ys": ys, "memory": mem, "valid": valid, "sel": sel})[0]
     print(f"{path.name}: {path.stat().st_size / 1e6:.0f} MB, ONNX vs PyTorch {np.abs(got - ref).max():.2e}")
     return path
 
@@ -679,3 +695,79 @@ GRID_WORDS = (
 def grid_from_name(stem: str) -> str:
     """GRID clip names spell their sentence: 'lbbk6p' -> 'LAY BLUE BY K SIX PLEASE'."""
     return " ".join(c.upper() if m is None else m[c] for c, m in zip(stem, GRID_WORDS))
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Joint CTC / attention beam search, portable (reference for android/core JointBeam)
+
+CTC_WEIGHT = 0.1  # Auto-AVSR's own decoding weight
+NEG_INF = -1e30
+
+
+def ctc_prefix_init(ctc: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """State of the empty prefix over T frames: (r_nonblank, r_blank) log-probs, (T,) each."""
+    rb = np.cumsum(ctc[:, BLANK].astype(np.float64))
+    return np.full(len(ctc), NEG_INF), rb
+
+
+def ctc_prefix_extend(ctc: np.ndarray, state, last: int, c: int, empty: bool):
+    """CTC prefix score of prefix + c (Watanabe et al. 2017, Algorithm 2) and the new state."""
+    rn_g, rb_g = state
+    t_len = len(ctc)
+    rn = np.full(t_len, NEG_INF)
+    rb = np.full(t_len, NEG_INF)
+    if empty:
+        rn[0] = ctc[0, c]
+    psi = rn[0]
+    for t in range(1, t_len):
+        phi = rb_g[t - 1] if c == last and not empty else np.logaddexp(rn_g[t - 1], rb_g[t - 1])
+        rn[t] = np.logaddexp(rn[t - 1], phi) + ctc[t, c]
+        rb[t] = np.logaddexp(rn[t - 1], rb[t - 1]) + ctc[t, BLANK]
+        psi = np.logaddexp(psi, phi + ctc[t, c])
+    return float(psi), (rn, rb)
+
+
+def joint_search(ctc: np.ndarray, decode, sos: int, beam: int = DEC_BATCH, pre_beam: int = 12,
+                 max_len: int = DEC_LEN - 1, ctc_weight: float = CTC_WEIGHT) -> list[tuple[list[int], float]]:
+    """Joint CTC / attention beam search over the real frames' CTC log-probs ctc (T, V).
+
+    decode(prefixes) -> (len(prefixes), V) attention log-probs of the next token, each prefix starting with sos.
+    Score = sum over tokens of (1 - w) * attention + w * (CTC prefix score gain); eos (= sos id) closes a hypothesis
+    with the full-sequence CTC score. Per hypothesis only its [pre_beam] best attention tokens are scored (ties: lower
+    id). Stops when no running hypothesis can beat the best ended one (every step only lowers a score), or at max_len.
+    Returns ended hypotheses (token ids without sos/eos, score), best first."""
+    eos = sos
+    running = [([sos], 0.0, 0.0, ctc_prefix_init(ctc))]  # (tokens, score, ctc psi, ctc state)
+    ended: list[tuple[list[int], float]] = []
+    for _ in range(max_len):
+        att = decode([h[0] for h in running])
+        cands = []
+        for hi, (toks, score, psi, st) in enumerate(running):
+            empty = len(toks) == 1
+            row = att[hi]
+            order = sorted(range(len(row)), key=lambda k: (-row[k], k))[:pre_beam]
+            for c in order:
+                if c == BLANK:
+                    continue
+                if c == eos:
+                    new_psi, new_st = float(np.logaddexp(st[0][-1], st[1][-1])), None
+                else:
+                    new_psi, new_st = ctc_prefix_extend(ctc, st, toks[-1], c, empty)
+                s_new = score + (1 - ctc_weight) * float(row[c]) + ctc_weight * (new_psi - psi)
+                cands.append((s_new, hi, c, new_psi, new_st))
+        cands.sort(key=lambda x: (-x[0], x[1], x[2]))
+        nxt = []
+        for s_new, hi, c, new_psi, new_st in cands[:beam]:
+            toks = running[hi][0]
+            if c == eos:
+                ended.append((toks[1:], s_new))
+            else:
+                nxt.append((toks + [c], s_new, new_psi, new_st))
+        running = nxt
+        best_end = max((e[1] for e in ended), default=-math.inf)
+        if not running or max(h[1] for h in running) < best_end:
+            break
+    if not ended:  # ran out of length: close what is left
+        ended = [(h[0][1:], h[1]) for h in running]
+    ended.sort(key=lambda e: -e[1])
+    return ended
