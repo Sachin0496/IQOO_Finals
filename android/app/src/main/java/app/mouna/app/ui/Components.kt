@@ -216,8 +216,11 @@ private fun baseSp(lang: Lang, big: Boolean): Float = when {
     else -> 14f
 }
 
-/** Row height that holds three lines of [lang]'s script plus the English line, so every tile in a row is equal. */
-fun tileHeight(lang: Lang): Dp = if (lang == Lang.EN) 148.dp else 176.dp
+/** Speak's compact row: height that holds three lines of [lang]'s script plus the English line, so every tile is equal. */
+fun tileHeight(lang: Lang): Dp = if (lang == Lang.EN) 120.dp else 148.dp
+
+/** Width of a tile in Speak's compact row. */
+val TileWidth = 112.dp
 
 /** Height of the two-column prompt tiles: equal for every tile, enough for three lines of the script plus English. */
 fun gridTileHeight(lang: Lang): Dp = if (lang == Lang.EN) 160.dp else 204.dp
@@ -231,6 +234,8 @@ fun PhraseTile(
     big: Boolean = false,
     /** For the two-column prompt grids: a larger icon and text than the Speak row. */
     roomy: Boolean = false,
+    /** Speak's row under the camera: a small icon and tight padding, so the camera keeps the room. */
+    compact: Boolean = false,
     selected: Boolean = false,
     accent: Color = Ink.turmeric,
     onClick: (() -> Unit)? = null,
@@ -239,17 +244,17 @@ fun PhraseTile(
     val shape = if (big) BigTileShape else TileShape
     val measurer = rememberTextMeasurer()
     val text = phrase.say(lang)
-    val circle: Dp = if (big) 92.dp else if (roomy) 60.dp else 46.dp
+    val circle: Dp = if (big) 92.dp else if (roomy) 60.dp else if (compact) 36.dp else 46.dp
     BoxWithConstraints(
         modifier
             .clip(shape)
             .background(if (selected) accent.copy(alpha = 0.12f) else Ink.card)
             .border(if (selected) 2.dp else 1.dp, border, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(if (big) 20.dp else if (roomy) 16.dp else 12.dp),
+            .padding(if (big) 20.dp else if (roomy) 16.dp else if (compact) 10.dp else 12.dp),
     ) {
         val availPx = if (constraints.hasBoundedWidth) constraints.maxWidth else 0
-        val base = baseSp(lang, big) + if (roomy) 4f else 0f
+        val base = baseSp(lang, big) + if (roomy) 4f else if (compact) -1f else 0f
         // The phrase is never cut with an ellipsis: take the largest size at which it fits in three lines and no word breaks.
         val sp = remember(text, availPx, base, big) {
             val min = if (big) 16f else 11f
@@ -276,7 +281,7 @@ fun PhraseTile(
             ) {
                 Icon(iconFor(phrase.id), null, tint = if (phrase.urgent) Ink.kumkumInk else Ink.bone, modifier = Modifier.size(circle * 0.5f))
             }
-            Spacer(Modifier.height(if (big) 16.dp else if (roomy) 12.dp else 8.dp))
+            Spacer(Modifier.height(if (big) 16.dp else if (roomy) 12.dp else if (compact) 6.dp else 8.dp))
             Text(
                 text,
                 style = phraseStyle.copy(fontSize = sp.sp, lineHeight = (sp * 1.3f).sp),

@@ -188,7 +188,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall
             ) {
                 items(k.pack, key = { it }) { id ->
                     app.phrases[id]?.let { p ->
-                        PhraseTile(p, app.lang, Modifier.width(128.dp).height(tileH)) { app.speak(id, "touch") }
+                        PhraseTile(p, app.lang, Modifier.width(TileWidth).height(tileH), compact = true) { app.speak(id, "touch") }
                     }
                 }
             }
