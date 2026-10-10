@@ -169,7 +169,10 @@ class PersonalParityTest {
         val cases = p.getJSONArray("merge")
         for (i in 0 until cases.length()) {
             val c = cases.getJSONObject(i)
-            val got = Personal.merge(opts(c.getJSONArray("open"), false), opts(c.getJSONArray("listed"), true))
+            val got = Personal.merge(
+                opts(c.getJSONArray("open"), false), opts(c.getJSONArray("listed"), true),
+                firstWithin = c.optDouble("first_within", Personal.FIRST_WITHIN),
+            )
             val want = c.getJSONArray("out")
             assertEquals("merge $i size", want.length(), got.size)
             for (k in 0 until want.length()) {

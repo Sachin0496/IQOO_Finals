@@ -530,9 +530,11 @@ def vectors(out: Path) -> Path:
         ([], [("X", -40.0, -2.0), ("Y", -20.0, -6.0)]),
         ([("A", -8.0), ("B", -9.0), ("C", -9.5)], []),
         ([("A", -8.0)], [("Thank you", -15.0, -14.0), ("Z", -24.0, -2.0)]),
+        ([("A", -8.0), ("B", -9.0)], [("X", -15.0, -3.0), ("Y", -16.0, -4.0)]),  # 7 behind: leads at -8, not at -6
     ):
-        merge_cases.append({"open": [list(o) for o in openl], "listed": [list(o) for o in mine],
-                            "out": [[t, sc, p] for t, sc, p in merge_options(openl, mine)]})
+        for fw in (FIRST_WITHIN, FIRST_WITHIN_TUNED):
+            merge_cases.append({"open": [list(o) for o in openl], "listed": [list(o) for o in mine], "first_within": fw,
+                                "out": [[t, sc, p] for t, sc, p in merge_options(openl, mine, first_within=fw)]})
     rank_cases = [{"score": sc, "prior": pr, "rank": personal_rank(sc, pr)} for sc, pr in ((-20.0, -9.0), (-15.5, -3.25))]
     # trimming: a still face, then a moving mouth, then stillness again (crops from a formula the test rebuilds)
     span_cases = []
@@ -971,7 +973,11 @@ def export_scorer(frames: int, model=None, out_dir: Path = OUT) -> Path:
     return path
 
 
-FIRST_WITHIN, OFFER_WITHIN = -20.0, -35.0  # deck/data/freetalk-personal-grid.json
+# A listed sentence leads when its score is within FIRST_WITHIN of the open best. Was -20 (GRID,
+# freetalk-personal-grid.json). Laptop replay of Nakul's 21 held-out silent clips (adapt.py seed 0, 10 Oct; not yet saved
+# in deck/data): -20 put a wrong listed sentence first 19/21 when the truth was not listed; -6 (tuned model) / -8
+# (original) put it first 0/21 and kept listed truths first or second 21/21.
+FIRST_WITHIN, FIRST_WITHIN_TUNED, OFFER_WITHIN = -8.0, -6.0, -35.0
 PRIOR_WEIGHT = 0.8  # listed sentences rank by score - PRIOR_WEIGHT * (1 - CTC_WEIGHT) * prior (no-video attention score)
 
 
@@ -982,15 +988,17 @@ def personal_rank(score: float, prior: float) -> float:
     return score - PRIOR_WEIGHT * (1 - CTC_WEIGHT) * prior
 
 
-def merge_options(open_: list[tuple[str, float]], listed: list[tuple[str, float, float]], max_n: int = 4) -> list[tuple[str, float, bool]]:
+def merge_options(open_: list[tuple[str, float]], listed: list[tuple[str, float, float]], max_n: int = 4,
+                  first_within: float = FIRST_WITHIN) -> list[tuple[str, float, bool]]:
     """What "Did you mean…?" shows (reference for Personal.merge). listed: (text, score, rank). Listed sentences go in
-    rank order; the best leads when its score is within FIRST_WITHIN of the open best, else the open reading leads;
+    rank order; the best leads when its score is within first_within of the open best (FIRST_WITHIN_TUNED for a model
+    tuned to the person), else the open reading leads;
     then they alternate; listed sentences scoring further than OFFER_WITHIN behind are dropped; the same text (any
     case) keeps its first place."""
     open_best = open_[0][1] if open_ else -math.inf
     mine = [(t, sc) for t, sc, _ in sorted(listed, key=lambda o: -o[2])]
     mine = [o for o in mine if not open_ or o[1] - open_best > OFFER_WITHIN]
-    mine_first = bool(mine) and (not open_ or mine[0][1] - open_best > FIRST_WITHIN)
+    mine_first = bool(mine) and (not open_ or mine[0][1] - open_best > first_within)
     a, b = ((mine, True), (open_, False)) if mine_first else ((open_, False), (mine, True))
     out: dict[str, tuple[str, float, bool]] = {}
     for i in range(max(len(a[0]), len(b[0]))):
