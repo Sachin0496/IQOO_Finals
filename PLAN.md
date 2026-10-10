@@ -224,7 +224,7 @@ and gaze trials. Recorded with the in-app recorder if ready, else the Lab.
 2. Judge mouths a clear phrase → **singleton** → spoken in the caregiver's language; caregiver phone lights up.
 3. Ambiguous mouthing → set {water, toilet} → Mouna refuses to guess → **two pictures**; the person **looks left**
    and confirms with **their own switch** (a raised eyebrow).
-4. Judge mouths an untaught phrase → **"not taught"** (negatives), offers Ask mode.
+4. Judge mouths an untaught phrase → **"not taught"** (negatives): "Did you mean…" or "Something else", never a guess.
 5. "Fan off" → **Tier C confirm** → the **IR blaster** switches the fan off (P1; else the caregiver phone and ward log).
 6. Close on the numbers from E4, E15, E17 and the line: *"We did not make lip reading perfect. We made a
    communication system that knows where lip reading fails, and recovers."*

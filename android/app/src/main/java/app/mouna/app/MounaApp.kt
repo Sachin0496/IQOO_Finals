@@ -29,12 +29,11 @@ import app.mouna.app.ui.Stage
 import android.os.Handler
 import android.os.Looper
 import java.util.concurrent.Executors
-import app.mouna.core.AskNode
 import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, ASK, CALL, SETTINGS, EYES, SWITCH, RECORD, WORDS }
+enum class Screen { SPEAK, CALL, SETTINGS, EYES, SWITCH, RECORD, WORDS }
 
 /** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
 enum class CallTab { PHRASES, MOUTH }
@@ -67,12 +66,11 @@ data class Said(val phrase: Phrase?, val text: String, val via: String)
 
 /**
  * How long Mouna's last words stay on screen. Long enough to read (at least 4 s), short enough that a stale line never
- * greets the next person or the next call. Ask keeps its answer until "Ask again" (it is the whole screen there).
+ * greets the next person or the next call.
  */
 object SaidRules {
     const val SHOW_MS = 8_000L
-    fun fades(screen: Screen) = screen != Screen.ASK
-    fun expired(shownAt: Long, now: Long, screen: Screen) = fades(screen) && now - shownAt >= SHOW_MS
+    fun expired(shownAt: Long, now: Long) = now - shownAt >= SHOW_MS
 }
 
 /** Nod and double blink answer a prompt only after it has been on screen this long, so a movement right after mouthing can't. */
@@ -125,8 +123,6 @@ class MounaApp(
     private val main = Handler(Looper.getMainLooper())
     private val asr = Executors.newSingleThreadExecutor()
     private lateinit var listener: Listener
-    /** One-shot mic capture for a caregiver's own Ask question; null when nobody is listening for one. */
-    private var askListen: ((String) -> Unit)? = null
 
     // ---------------- calls ----------------
 
@@ -187,16 +183,7 @@ class MounaApp(
                     val text = runCatching { hearing.transcribe(samples) }.getOrDefault("")
                     main.post {
                         hearingBusy = false
-                        // A one-shot caregiver question (Ask screen) takes its words directly; anything else is this
-                        // person's voice to match against their phrases. Never both: a transcript must not speak.
-                        val once = askListen
-                        if (once != null) {
-                            askListen = null
-                            listener.stop()
-                            once(text)
-                        } else {
-                            onHeard(text)
-                        }
+                        onHeard(text)
                     }
                 }
             },
@@ -250,7 +237,7 @@ class MounaApp(
     var said by mutableStateOf<Said?>(null)
         private set
     private var saidAt = 0L
-    private val expireSaid = Runnable { if (said != null && SaidRules.expired(saidAt, SystemClock.elapsedRealtime(), screen)) said = null }
+    private val expireSaid = Runnable { if (said != null && SaidRules.expired(saidAt, SystemClock.elapsedRealtime())) said = null }
 
     /** The one place [said] changes: a new line restarts the clock, and every line leaves the screen by itself. */
     private fun showSaid(s: Said?) {
@@ -273,11 +260,8 @@ class MounaApp(
     /** Keep very clear, uncorrected matches as extra examples (off by default; see SelfTrain). */
     var selfTrain by mutableStateOf(store.selfTrain)
         private set
-    /** Bumped on each "yes" from the body (switch, nod, double blink), for screens that react to it (Ask, scanning). */
+    /** Bumped on each "yes" from the body (switch, nod, double blink), for screens that react to it (scanning, switch setup). */
     var switchPresses by mutableStateOf(0)
-        private set
-    /** Bumped on each "no" (head shake), for Ask. */
-    var noSignals by mutableStateOf(0)
         private set
     var lastAnswerVia by mutableStateOf<String?>(null)
         private set
@@ -299,7 +283,7 @@ class MounaApp(
     private fun applyChannel() {
         val speak = onSpeakSurface() && prompt == null
         engine.listen(Listen.PAUSED) // phrase-pack lips is off (see Channel)
-        armGestures(prompt != null || screen == Screen.ASK)
+        armGestures(prompt != null)
         engine.signing(onSpeakSurface() && channel == Channel.SIGN)
         engine.freeTalk((speak && channel == Channel.LIPS) || (screen == Screen.RECORD && recording) || (screen == Screen.WORDS && wordTeaching != null))
         val mic = speak && channel == Channel.VOICE && !onCall
@@ -629,10 +613,8 @@ class MounaApp(
             speak(d.options[0], "lips")
             return
         }
-        if (d.kind == DecisionKind.ASK && d.options.isEmpty()) {
-            if (!onCall) go(Screen.ASK) // never walk away from a call
-            return
-        }
+        // Nothing to offer: stay put.
+        if (d.kind == DecisionKind.ASK && d.options.isEmpty()) return
         lastHeard = null
         prompt = Prompt.FromCore(d)
         applyChannel() // lips (and voice) wait while the person answers with eyes, switch or touch
@@ -675,54 +657,6 @@ class MounaApp(
         showSaid(Said(p, text, via))
     }
 
-    fun speakAsk(node: AskNode) {
-        val p = node.phrase?.let { phrases[it] }
-        val text = p?.say(lang) ?: node.say?.get(lang.tag) ?: node.say?.get("en") ?: node.ask[lang.tag] ?: node.id
-        voice.say(node.phrase, text, lang, voiceId)
-        showSaid(Said(p, text, "ask"))
-    }
-
-    /**
-     * The caregiver's own Ask question, answered yes or no. The answer is said aloud (in the caregiver's language,
-     * from the person's own yes/no words) so the ward hears it; the question is kept on screen with it.
-     */
-    fun answerCustom(question: String, yes: Boolean) {
-        val p = phrases[if (yes) "yes" else "no"]
-        val text = p?.say(lang) ?: when (lang) {
-            Lang.HI -> if (yes) "हाँ" else "नहीं"
-            Lang.TA -> if (yes) "ஆம்" else "இல்லை"
-            else -> if (yes) "Yes" else "No"
-        }
-        voice.say(null, text, lang, voiceId)
-        showSaid(Said(null, "$question — $text", "ask"))
-    }
-
-    /**
-     * Ask screen: capture one question from the caregiver's voice. Calls back with its words (blank if nothing was
-     * caught or the mic was refused). The mic is idle on Ask (it only listens on Speak), so this never fights the
-     * Voice channel; [stopQuestion] gives the mic back when leaving early.
-     */
-    fun listenQuestion(onText: (String) -> Unit) {
-        askMic { granted ->
-            if (!granted) {
-                onText("")
-                return@askMic
-            }
-            ensureHearing()
-            askListen = onText
-            listener.start()
-        }
-    }
-
-    /** Leaving Ask mid-listen: forget the question and give the mic back. */
-    fun stopQuestion() {
-        askListen = null
-        if (screen != Screen.SPEAK || channel != Channel.VOICE) listener.stop()
-    }
-
-    /** Ask screen entering its Voice source: start loading the voice model so Listen is ready when tapped. */
-    fun preloadVoice() = ensureHearing()
-
     /** A "yes" from the body: the personal switch, a nod or a double blink ([via]). */
     private fun switched(via: String) {
         switchPresses++
@@ -730,9 +664,8 @@ class MounaApp(
         val pr = prompt
         if (!onSpeakSurface()) return
         when {
-            // Idle: the person's own movement means "I need something" -> the yes/no questions.
-            // Only from Speak, and never on a call: the call screen must stay where it is.
-            pr == null -> if (via == "switch" && screen == Screen.SPEAK && !onCall) go(Screen.ASK)
+            // Idle: nothing to answer.
+            pr == null -> Unit
             pr is Prompt.Heard -> sayHeard(pr.text)
             pr is Prompt.Read -> sayRead(pr.options[pr.index])
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.CONFIRM -> choose(pr.d.options[0], via)
@@ -747,9 +680,8 @@ class MounaApp(
         }
     }
 
-    /** A head shake: "no" to a confirm or a "Did you say", "no" in Ask. */
+    /** A head shake: "no" to a confirm or a "Did you say". */
     private fun shook() {
-        noSignals++
         lastAnswerVia = "shake"
         when (val pr = prompt) {
             is Prompt.Heard -> close()

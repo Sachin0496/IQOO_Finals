@@ -17,14 +17,8 @@ class UiCallTest {
     @Test
     fun saidStaysLongEnoughToReadThenLeaves() {
         assertTrue(SaidRules.SHOW_MS >= 4_000)
-        assertFalse(SaidRules.expired(1_000, 1_000 + SaidRules.SHOW_MS - 1, Screen.SPEAK))
-        assertTrue(SaidRules.expired(1_000, 1_000 + SaidRules.SHOW_MS, Screen.SPEAK))
-        assertTrue(SaidRules.expired(0, SaidRules.SHOW_MS, Screen.CALL))
-    }
-
-    @Test
-    fun askKeepsItsAnswerUntilAskAgain() {
-        assertFalse(SaidRules.expired(0, 10 * SaidRules.SHOW_MS, Screen.ASK))
+        assertFalse(SaidRules.expired(1_000, 1_000 + SaidRules.SHOW_MS - 1))
+        assertTrue(SaidRules.expired(1_000, 1_000 + SaidRules.SHOW_MS))
     }
 
     @Test
