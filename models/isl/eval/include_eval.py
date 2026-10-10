@@ -1,4 +1,4 @@
-# Sign mode on real signers: INCLUDE held-out test videos (never seen in training) through the app's pipeline.
+# Sign mode on INCLUDE's test-split videos (clips never seen in training; the signers were) through the app's pipeline.
 #   python include_eval.py extract   # fetch the test videos of CATEGORIES from Zenodo (range reads), keypoints -> cache/
 #   python include_eval.py score     # whole clips, then continuous signing with the old and new segmenter -> results.json
 #   python include_eval.py vectors   # real keypoint streams + expected signs for the Kotlin test (SignSegmenterTest)
@@ -91,7 +91,7 @@ def continuous(clips, cut, speak, reps=20, per=6, seed=0):
 
 
 def score():
-    res = {"source": "INCLUDE test split (held out from training), categories " + ", ".join(sorted({z.split('_')[0] for z in ZIPS})),
+    res = {"source": "INCLUDE test split (clips held out from training, signers not), categories " + ", ".join(sorted({z.split('_')[0] for z in ZIPS})),
            "model": "AI4Bharat OpenHands SL-GCN, INCLUDE checkpoint (models/isl)", "pipeline": "the app's: Signer, Isl, MounaApp.signed (models/isl/eval/signs.py)"}
     for f in FRAMINGS:
         clips = load(f)

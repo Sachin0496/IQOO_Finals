@@ -1,5 +1,5 @@
 {
- "source": "INCLUDE test split (held out from training), categories Greetings, Pronouns",
+ "source": "INCLUDE test split (clips held out from training, signers not), categories Greetings, Pronouns",
  "model": "AI4Bharat OpenHands SL-GCN, INCLUDE checkpoint (models/isl)",
  "pipeline": "the app's: Signer, Isl, MounaApp.signed (models/isl/eval/signs.py)",
  "landscape": {

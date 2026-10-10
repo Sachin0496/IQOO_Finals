@@ -1,0 +1,382 @@
+{
+ "model": "AI4Bharat OpenHands SL-GCN, INCLUDE checkpoint (the app's)",
+ "islrtc": [
+  {
+   "video": "yBQA3coUjH0",
+   "word": "hello",
+   "top3": [
+    [
+     "religion",
+     0.4689956307411194
+    ],
+    [
+     "temple",
+     0.25842785835266113
+    ],
+    [
+     "photograph",
+     0.25830936431884766
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "video": "L37McuHckSI",
+   "word": "goodmorning",
+   "top3": [
+    [
+     "dog",
+     0.5967221856117249
+    ],
+    [
+     "truck",
+     0.24732975661754608
+    ],
+    [
+     "kitchen",
+     0.13140670955181122
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "video": "8hPNnF65IMg",
+   "word": "goodafternoon",
+   "top3": [
+    [
+     "religion",
+     0.8608165383338928
+    ],
+    [
+     "kitchen",
+     0.06424802541732788
+    ],
+    [
+     "dog",
+     0.054014772176742554
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "video": "vB72KncjZis",
+   "word": "evening",
+   "top3": [
+    [
+     "school",
+     0.999609649181366
+    ],
+    [
+     "page",
+     0.0001280107389902696
+    ],
+    [
+     "dream",
+     7.995327905518934e-05
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "video": "zxwuZPkYjrQ",
+   "word": "goodnight",
+   "top3": [
+    [
+     "dog",
+     0.7266267538070679
+    ],
+    [
+     "kitchen",
+     0.24740120768547058
+    ],
+    [
+     "plane",
+     0.013952801935374737
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "video": "wK8amEJAK1Y",
+   "word": "thankyou",
+   "top3": [
+    [
+     "pleased",
+     0.9967923760414124
+    ],
+    [
+     "train",
+     0.002411504974588752
+    ],
+    [
+     "trainticket",
+     0.000371414003893733
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "video": "Yz4vZ5ALDfw",
+   "word": "thankyou",
+   "top3": [
+    [
+     "pleased",
+     0.874574601650238
+    ],
+    [
+     "train",
+     0.09510775655508041
+    ],
+    [
+     "trainticket",
+     0.023655233904719353
+    ]
+   ],
+   "rank": null
+  }
+ ],
+ "youtube_cut_at_captions": [
+  {
+   "word": "namaste",
+   "in_vocabulary": false
+  },
+  {
+   "word": "hi",
+   "in_vocabulary": false
+  },
+  {
+   "word": "hello",
+   "in_vocabulary": true,
+   "top3": [
+    [
+     "monday",
+     0.9441445469856262
+    ],
+    [
+     "school",
+     0.03372384235262871
+    ],
+    [
+     "orange",
+     0.02076786197721958
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "word": "goodmorning",
+   "in_vocabulary": true,
+   "top3": [
+    [
+     "reporter",
+     0.7508049011230469
+    ],
+    [
+     "deep",
+     0.11938472092151642
+    ],
+    [
+     "author",
+     0.06661120057106018
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "word": "goodafternoon",
+   "in_vocabulary": true,
+   "top3": [
+    [
+     "reporter",
+     0.8886659145355225
+    ],
+    [
+     "deep",
+     0.08910352736711502
+    ],
+    [
+     "boat",
+     0.009617216885089874
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "word": "goodevening",
+   "in_vocabulary": true,
+   "top3": [
+    [
+     "school",
+     0.983320951461792
+    ],
+    [
+     "bedroom",
+     0.004357949364930391
+    ],
+    [
+     "clock",
+     0.0036751588340848684
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "word": "goodnight",
+   "in_vocabulary": true,
+   "top3": [
+    [
+     "deep",
+     0.7263075113296509
+    ],
+    [
+     "temple",
+     0.09223167598247528
+    ],
+    [
+     "bedroom",
+     0.045682355761528015
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "word": "sorry",
+   "in_vocabulary": false
+  },
+  {
+   "word": "please",
+   "in_vocabulary": false
+  },
+  {
+   "word": "thankyou",
+   "in_vocabulary": true,
+   "top3": [
+    [
+     "school",
+     0.9623647332191467
+    ],
+    [
+     "wednesday",
+     0.03458506613969803
+    ],
+    [
+     "bedroom",
+     0.001124318689107895
+    ]
+   ],
+   "rank": null
+  },
+  {
+   "word": "welcome",
+   "in_vocabulary": false
+  }
+ ],
+ "youtube_app": [
+  {
+   "frames": [
+    0,
+    149
+   ],
+   "top3": [
+    [
+     "school",
+     0.9158830642700195
+    ],
+    [
+     "bedroom",
+     0.03132025524973869
+    ],
+    [
+     "monday",
+     0.025411708280444145
+    ]
+   ],
+   "spoken": true
+  },
+  {
+   "frames": [
+    150,
+    215
+   ],
+   "top3": [
+    [
+     "bedroom",
+     0.7177402377128601
+    ],
+    [
+     "boat",
+     0.2628229260444641
+    ],
+    [
+     "deep",
+     0.0138808973133564
+    ]
+   ],
+   "spoken": false
+  },
+  {
+   "frames": [
+    219,
+    368
+   ],
+   "top3": [
+    [
+     "boat",
+     0.5319376587867737
+    ],
+    [
+     "bedroom",
+     0.4026777446269989
+    ],
+    [
+     "deep",
+     0.015191156417131424
+    ]
+   ],
+   "spoken": false
+  },
+  {
+   "frames": [
+    369,
+    518
+   ],
+   "top3": [
+    [
+     "boat",
+     0.6233451962471008
+    ],
+    [
+     "deep",
+     0.37366947531700134
+    ],
+    [
+     "reporter",
+     0.0014642669120803475
+    ]
+   ],
+   "spoken": false
+  },
+  {
+   "frames": [
+    519,
+    668
+   ],
+   "top3": [
+    [
+     "bedroom",
+     0.9810912609100342
+    ],
+    [
+     "book",
+     0.01649908535182476
+    ],
+    [
+     "school",
+     0.0021137797739356756
+    ]
+   ],
+   "spoken": true
+  }
+ ],
+ "youtube_raised_frames": 0.971
+}

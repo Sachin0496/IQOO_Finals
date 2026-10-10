@@ -11,7 +11,7 @@
 | Voice (Parkinson's, mild dysarthria) | ✅ Whisper tiny.en via sherpa-onnx, runs in the app on the emulator. 5 of 5 test recordings handled right (table below). ⏳ Not yet with a live microphone or a real dysarthric speaker. |
 | Own words + warm phrases | ✅ Built ("I love you", "I'm okay", "Hold my hand", "I'm scared", "Stay with me" + family-typed words). |
 | Personal movement, eyes, Ask, pictures | ✅ Built (from `android/core`). Not tested on real faces. |
-| ISL (AI4Bharat OpenHands) | ✅ Built and measured on INCLUDE's held-out signers through the app's pipeline (`models/isl/eval`): six signs in a row, 79 / 120 spoken right, 16 wrong, 0 missed (landscape); 53 / 20 / 0 in the phone's portrait crop. Same results on the iQOO 15 as in Python. ⏳ Not tested with a live signer. |
+| ISL (AI4Bharat OpenHands) | ⚠️ Pipeline and segmenter fixed and checked on INCLUDE's test clips (six signs in a row: 79 / 120 right, 0 missed) and on the iQOO 15 (same as Python). **But the model does not recognise signers INCLUDE never had: ISLRTC dictionary 0 / 7, a YouTube teacher 0 / 6, not even top 5** (`models/isl/eval/new_signers.json`). Continuous signing (hands never come down) is not handled. |
 | Nod / shake / double blink | ✅ Ported from the Lab (same constants); armed only while Mouna asks (prompts, Ask) so mouthing can't trigger it. 4 unit tests. ⏳ Not tried on a real face. |
 | App icon + dark splash | ✅ |
 | Git push | ✅ GitHub recovered ~21:10; branch is pushed. |
@@ -41,9 +41,10 @@ Fixed on the way: filler words ("you", "can"…) had pulled the last one onto "I
 ## Log
 
 **10 Oct, morning (branch `nakul/sign-mode-fix`)**
-- Sign mode checked on real signers (nobody on the team signs): 73 INCLUDE held-out test videos through the app's own pipeline (`models/isl/eval`). The model is fine (whole clip top-1 81% landscape, 58% in the phone's portrait crop), but the app almost never closed a sign: the hand model sees resting hands in 94–97% of frames, so "hands down" never came (4 / 73 clips). Six signs in a row: 12 of 120 spoken right, 25 wrong, 77 missed.
+- Sign mode checked on real signers (nobody on the team signs): 73 INCLUDE test-split videos (clips unseen, signers seen in training) through the app's own pipeline (`models/isl/eval`). The model is fine (whole clip top-1 81% landscape, 58% in the phone's portrait crop), but the app almost never closed a sign: the hand model sees resting hands in 94–97% of frames, so "hands down" never came (4 / 73 clips). Six signs in a row: 12 of 120 spoken right, 25 wrong, 77 missed.
 - Fixed: a sign now starts when a wrist rises above chest level and ends when both come down (`SignSegmenter`, needs 6 raised frames). Speak only at p ≥ 0.9, else offer 3. Readable words ("Thankyou" → "thank you", "you(plural)" → "you all"). Six in a row now: 79 right, 16 wrong, 0 missed (landscape); 53 / 20 / 0 (portrait).
 - iQOO 15: the 00:19 reinstall had left `files/isl/` empty, so Sign showed "isn't available"; model pushed back, "isl ready in 216 ms". 25 real signs through the phone (`app.mouna.SIGN --es stream`): identical to the Python reference. `files/encoder/` and `files/asr/` are still empty on that phone.
+- New signers: ISLRTC's dictionary clips 0 / 7 and a YouTube teacher's 11 greetings 0 / 6, right word not in the top 5; AI4Bharat's ST-GCN and SL-DPC INCLUDE checkpoints fail the same way. INCLUDE splits by video, so its test signers are in training: the 81% is signer-dependent. Fluent signing also keeps the hands up (97% of frames), so no segmenter based on hands coming down can cut it.
 
 **10 Oct, night (branch `app/polish`)**
 - Calls (merged 9 Oct, PR #1): web-link call through `call-server/` (guest joins from a browser, no SIM needed); phone-number call for phones with a SIM; Intro, quick phrases, type-to-speak, lips/sign during a call; Sarvam live voice with offline fallback. Audited; 13 findings fixed.

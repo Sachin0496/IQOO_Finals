@@ -21,5 +21,5 @@ and scaled by the mean shoulder distance over the clip. Output `probs` (1, 263),
 
 Licences: OpenHands code Apache-2.0; INCLUDE dataset CC BY 4.0 (Zenodo 4010759).
 
-Accuracy through the app's pipeline on INCLUDE's held-out signers, and on the iQOO 15: `eval/README.md`. Accuracy on
-our own signers: not measured.
+Accuracy through the app's pipeline on INCLUDE's test clips, and on the iQOO 15: `eval/README.md`. **On signers INCLUDE
+never had (ISLRTC dictionary, a YouTube teacher) it is 0 / 13, not even top 5**: the model learned INCLUDE's signers.

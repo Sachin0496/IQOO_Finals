@@ -1,7 +1,13 @@
 # Sign mode on real signers
 
-Nobody on the team signs, so Sign mode is measured here on **INCLUDE's held-out test videos**: real deaf signers,
-clips the model never saw in training. Each one goes through the app's own steps in Python (`signs.py`), with the
+> **Read this first.** On signers INCLUDE never had, the model fails: the government's ISL dictionary clips (ISLRTC)
+> 0 / 7 and a YouTube teacher's greetings 0 / 6, the right word not even in the top 5 (`new_signers.py`,
+> `new_signers.json`). The same holds for AI4Bharat's other INCLUDE checkpoints (ST-GCN, SL-DPC). The INCLUDE
+> numbers below are on **held-out clips, not held-out signers**: INCLUDE's split is by video, so its test signers also
+> appear in training. They measure the app's pipeline and segmenter, not how Sign mode does for a new person.
+
+Nobody on the team signs, so Sign mode is measured here on **INCLUDE's test-split videos**: real deaf signers,
+clips the model never saw in training (but signers it did). Each one goes through the app's own steps in Python (`signs.py`), with the
 app's own MediaPipe `.task` files and the same model: `Signer.keypoints` → `SignSegmenter` → `Isl` → `MounaApp.signed`.
 
 ```bash
@@ -45,9 +51,20 @@ the top 3 instead.
 **On the iQOO 15** (5 streams, 25 signs, `include_eval.py device`): same cut points, same words and same
 probabilities as the Python reference for all 25; about 0.1 s per sign.
 
+## New signers (`new_signers.py`, 10 Oct 2026)
+
+| Signer | Words in the model's vocabulary | Top-1 | In top 5 |
+|---|---|---|---|
+| ISLRTC dictionary clips (official, studio) | hello, good morning / afternoon / night, evening, thank you ×2 | 0 / 7 | 0 / 7 |
+| YouTube teacher, 11 greetings in a row, cut exactly at her captions | hello, good morning / afternoon / evening / night, thank you | 0 / 6 | 0 / 6 |
+
+Through the app as it is (segmenter + model) the YouTube video gives "school, bedroom, boat, boat, bedroom": her hands
+stay up 97% of the time, so continuous signing never comes down between signs.
+
 ## What this does not show
 
-- These are INCLUDE's signers, standing, filmed in a studio. Nobody has signed live in front of the phone yet.
+- These are INCLUDE's signers, standing, filmed in a studio, and they also appear in INCLUDE's training split.
+  Nobody has signed live in front of the phone yet.
 - Only 17 of the 263 words (Greetings, Pronouns). The other categories are on Zenodo (`ZIPS` in `include_eval.py`).
 - Portrait is a crop of landscape video, not a phone held by a seated person.
 

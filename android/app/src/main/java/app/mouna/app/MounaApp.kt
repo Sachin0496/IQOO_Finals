@@ -904,7 +904,7 @@ class MounaApp(
         const val LOADING_VOICE = "Getting ready…"
 
         /**
-         * ISL: speak only a clear winner (model probability), otherwise offer the top 3. On INCLUDE's held-out signers,
+         * ISL: speak only a clear winner (model probability), otherwise offer the top 3. On INCLUDE's test clips,
          * six signs in a row: 0.6 spoke 31 wrong words in 120, 0.9 spoke 16 and kept 79 of 82 right ones (models/isl/eval).
          */
         const val SIGN_SPEAK = 0.9f
