@@ -397,9 +397,9 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     }
 }
 
-/** The ways to talk on a call: tap a phrase, mouth, sign or type. */
+/** The ways to talk on a call, in switch order: mouth, sign, type or tap a phrase. */
 private enum class Talk(val label: String, val channel: Channel?) {
-    PHRASES("Phrases", null), LIPS("Lips", Channel.LIPS), SIGN("Sign", Channel.SIGN), TYPE("Type", Channel.TYPE)
+    LIPS("Lips", Channel.LIPS), SIGN("Sign", Channel.SIGN), TYPE("Type", Channel.TYPE), PHRASES("Phrases", null)
 }
 
 /** How long the button must be held to end a call: long enough that a brush or a stray tap does nothing. */
