@@ -7,12 +7,16 @@ import kotlin.math.min
 /** Which phone action the person asked for. */
 enum class PhoneVerb { CALL, MESSAGE }
 
-/** A person Mouna can reach: a phone number, a web-call room, or both. */
+/**
+ * A person Mouna can reach: a phone number, a web-call room, or both. [starred] is the star on the phone's own contacts
+ * list; it puts the person on the short list when no name was said.
+ */
 data class PhoneContact(
     val name: String,
     val number: String? = null,
     val room: String? = null,
     val aliases: List<String> = emptyList(),
+    val starred: Boolean = false,
 )
 
 /** What the person asked for. name == null: "call" alone, so Mouna asks who. body == null for calls or a message with no text yet. */
@@ -20,7 +24,10 @@ data class PhoneCommand(val verb: PhoneVerb, val name: String?, val body: String
 
 /** How a phone request is carried out. [PhoneRoute.EmergencyDial] only ever opens the dialer, never places a call. */
 sealed interface PhoneRoute {
+    /** A call in the web-call screen, for a contact with no phone number. */
     data class WebRoom(val room: String, val name: String) : PhoneRoute
+
+    /** The phone's own phone app calls [number]. */
     data class Carrier(val number: String, val name: String) : PhoneRoute
     data class EmergencyDial(val number: String) : PhoneRoute
     data class WhatsApp(val url: String) : PhoneRoute
@@ -199,6 +206,14 @@ object NameMatch {
         return best >= 0.92f - EPS && best - second >= 0.08f - EPS
     }
 
+    /** Similarity of two raw strings after the same folding as [rank], 0..1. Zero when either is empty after folding. */
+    internal fun similarity(a: String, b: String): Float {
+        val ka = key(a)
+        val kb = key(b)
+        if (ka.isEmpty() || kb.isEmpty()) return 0f
+        return similar(ka, kb)
+    }
+
     /** Lower case letters and single spaces, with the spelling folds and doubled letters collapsed. */
     private fun key(raw: String): String {
         val letters = raw.lowercase().map { if (it.isLetter()) it else ' ' }.joinToString("")
@@ -262,8 +277,13 @@ object PhoneBook {
     /**
      * Phone favourites (name to number) and web favourites (name to room) merged by name, case-insensitive; order kept,
      * phone first. A duplicate name keeps its first entry. Numbers go through [Phones.normalise]; unusable ones are dropped.
+     * Then the phone's own [device] contacts: a new name is added; a name already here only fills in a missing number.
      */
-    fun merge(phone: List<Pair<String, String>>, web: List<Pair<String, String>>): List<PhoneContact> {
+    fun merge(
+        phone: List<Pair<String, String>>,
+        web: List<Pair<String, String>>,
+        device: List<PhoneContact> = emptyList(),
+    ): List<PhoneContact> {
         val byName = LinkedHashMap<String, PhoneContact>()
         for ((name, number) in phone) {
             val n = name.trim()
@@ -277,17 +297,48 @@ object PhoneBook {
             val existing = byName[n.lowercase()]
             byName[n.lowercase()] = existing?.copy(room = existing.room ?: r) ?: PhoneContact(n, null, r)
         }
+        for (d in device) addDevice(byName, d)
         return byName.values.toList()
+    }
+
+    /** A device contact whose name is new is added; one whose name is already saved only fills in a missing number. */
+    private fun addDevice(byName: MutableMap<String, PhoneContact>, d: PhoneContact) {
+        val n = d.name.trim()
+        if (n.isEmpty()) return
+        val number = d.number?.let { Phones.normalise(it) }
+        val existing = byName[n.lowercase()]
+        when {
+            existing == null -> byName[n.lowercase()] = d.copy(name = n, number = number)
+            existing.number == null && number != null -> byName[n.lowercase()] = existing.copy(number = number)
+        }
     }
 }
 
-/** Chooses how a phone request is carried out, from what the contact has and what this phone can do. */
+/** How many people the picker shows when there are no favourites or starred contacts. */
+private const val PICKER_SIZE = 8
+
+/**
+ * The people for the gaze "Who?" picker when no name was said: the favourites ([favouriteNames], matched
+ * case-insensitively) and then the starred contacts that are not favourites, each in [all] order. When there are
+ * none, the first [PICKER_SIZE] contacts.
+ */
+fun PhoneBook.shortlist(all: List<PhoneContact>, favouriteNames: Set<String>): List<PhoneContact> {
+    val favs = favouriteNames.map { it.trim().lowercase() }.toSet()
+    val favourites = all.filter { it.name.trim().lowercase() in favs }
+    val starred = all.filter { it.starred && it.name.trim().lowercase() !in favs }
+    return (favourites + starred).ifEmpty { all.take(PICKER_SIZE) }
+}
+
+/**
+ * Chooses how a phone request is carried out, from what the contact has and what this phone can do. A call goes to the
+ * phone's own phone app when the contact has a number; a web-call room is only the fallback for a contact without one.
+ */
 object PhoneRouter {
     private val emergency = setOf("112", "100", "101", "102", "108", "911", "999")
 
-    fun route(verb: PhoneVerb, c: PhoneContact, body: String?, hasSim: Boolean, hasWhatsApp: Boolean): PhoneRoute =
+    fun route(verb: PhoneVerb, c: PhoneContact, body: String?, hasWhatsApp: Boolean): PhoneRoute =
         when (verb) {
-            PhoneVerb.CALL -> call(c, hasSim)
+            PhoneVerb.CALL -> call(c)
             PhoneVerb.MESSAGE -> message(c, body, hasWhatsApp)
         }
 
@@ -311,14 +362,13 @@ object PhoneRouter {
         }
     }
 
-    private fun call(c: PhoneContact, hasSim: Boolean): PhoneRoute {
+    private fun call(c: PhoneContact): PhoneRoute {
         val n = c.number
         return when {
             n != null && isEmergency(n) -> PhoneRoute.EmergencyDial(n)
+            n != null -> PhoneRoute.Carrier(n, c.name)
             c.room != null -> PhoneRoute.WebRoom(c.room, c.name)
-            n != null && hasSim -> PhoneRoute.Carrier(n, c.name)
-            n != null -> PhoneRoute.Unreachable("${c.name} has no web room and this phone has no SIM")
-            else -> PhoneRoute.Unreachable("${c.name} has no phone number or web room saved")
+            else -> PhoneRoute.Unreachable("${c.name} has no phone number saved")
         }
     }
 
@@ -379,4 +429,71 @@ object PhoneFlow {
         val start = Math.floorMod(page * 2, items.size)
         return listOf(items[start], items[(start + 1) % items.size])
     }
+}
+
+/** An app the person can open: its label as the launcher shows it, and its package. */
+data class AppInfo(val label: String, val pkg: String)
+
+/**
+ * Reads an open-an-app request ("open youtube", "youtube kholo") with fixed patterns, no ML. It does not decide whether
+ * the name is a real app: [AppMatch] does that against the installed apps, so "open the door" just matches nothing.
+ */
+object AppParser {
+    private val leading = Regex("^(?:(?:can you|could you|would you|will you|please|pls|plz|kindly|mouna|hey|hi|hello|ok|okay|just) )+")
+    private val trailing = Regex("(?: (?:now|abhi|jaldi|please|pls|plz|mouna|today))+$")
+    private val hinglishVerb = Regex("(?:^| )(?:kholo|khol do|open karo|open kar do|chalao|chala do|start karo)$")
+    private val englishVerb = Regex("^(?:open|launch|start|run|show me) (.+)$")
+
+    /** Words that are never an app name on their own, so "open the app" or "start karo" are not requests. */
+    private val notAnApp = setOf("", "app", "the", "a", "an", "it", "this", "that", "karo", "kar", "do", "kholo", "khol", "chalao", "chala")
+
+    /** The app name in [text], lower case as said; null when the text is not an open request. */
+    fun parse(text: String): String? {
+        val s = clean(text).replace(leading, "").replace(trailing, "")
+        val core = s.replace(hinglishVerb, "")
+        val named = englishVerb.matchEntire(core)?.groupValues?.get(1) ?: if (core != s) core else null
+        return named?.let { nameOf(it) }
+    }
+
+    private fun clean(text: String): String =
+        text.lowercase().map { if (it.isLetterOrDigit() || it == ' ') it else ' ' }
+            .joinToString("").split(' ').filter { it.isNotEmpty() }.joinToString(" ")
+
+    /** The name without a leading "the" or a trailing "app"; null when nothing is left. */
+    private fun nameOf(raw: String): String? {
+        val name = raw.removePrefix("the ").removeSuffix(" app").trim()
+        return name.takeIf { it !in notAnApp }
+    }
+}
+
+/**
+ * Matches a spoken app name to the installed apps, with the same folding as [NameMatch]. Spaces are ignored, so
+ * "you tube" and "YouTube" are the same app.
+ */
+object AppMatch {
+    /** Lowest score that still counts as a possible app. */
+    const val THRESHOLD = 0.8f
+
+    private const val EPS = 1e-4f
+
+    /**
+     * Installed apps that may be [spoken], best first, score in 0..1; only scores >= [THRESHOLD]. An exact (normalised)
+     * label match is 1.0 and always first.
+     */
+    fun rank(spoken: String, apps: List<AppInfo>): List<Pair<AppInfo, Float>> {
+        val s = squash(spoken)
+        if (s.isEmpty()) return emptyList()
+        return apps.map { it to NameMatch.similarity(s, squash(it.label)) }
+            .filter { it.second >= THRESHOLD }
+            .sortedByDescending { it.second }
+    }
+
+    /** True when the best app is clearly the one: score >= 0.92 and at least 0.08 ahead of the second. */
+    fun sure(ranked: List<Pair<AppInfo, Float>>): Boolean {
+        val best = ranked.firstOrNull()?.second ?: return false
+        val second = ranked.getOrNull(1)?.second ?: 0f
+        return best >= 0.92f - EPS && best - second >= 0.08f - EPS
+    }
+
+    private fun squash(s: String): String = s.replace(" ", "")
 }

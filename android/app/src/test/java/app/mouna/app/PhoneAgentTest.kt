@@ -1,5 +1,8 @@
 package app.mouna.app
 
+import app.mouna.app.engine.AppInfo
+import app.mouna.app.engine.AppMatch
+import app.mouna.app.engine.AppParser
 import app.mouna.app.engine.NameMatch
 import app.mouna.app.engine.PhoneBook
 import app.mouna.app.engine.PhoneCommand
@@ -10,6 +13,7 @@ import app.mouna.app.engine.PhoneRoute
 import app.mouna.app.engine.PhoneRouter
 import app.mouna.app.engine.PhoneStep
 import app.mouna.app.engine.PhoneVerb
+import app.mouna.app.engine.shortlist
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -298,13 +302,89 @@ class PhoneAgentTest {
         )
     }
 
+    @Test
+    fun deviceContactsAreAddedWhenTheNameIsNew() {
+        val device = listOf(PhoneContact("Ravi", "+91 98765 00002", aliases = listOf("ravi bhai"), starred = true))
+        val merged = PhoneBook.merge(phone = listOf("Amma" to "9876543210"), web = emptyList(), device = device)
+        assertEquals(
+            listOf(
+                PhoneContact("Amma", "9876543210"),
+                PhoneContact("Ravi", "+919876500002", null, listOf("ravi bhai"), starred = true),
+            ),
+            merged,
+        )
+    }
+
+    @Test
+    fun aDeviceContactWithAKnownNameFillsInAMissingNumberOnly() {
+        val device = listOf(PhoneContact("maadhav", "9000000001"), PhoneContact("Nakul", "9000000002"))
+        val merged = PhoneBook.merge(
+            phone = listOf("Nakul" to "9876500001"),
+            web = listOf("Maadhav" to "room-m"),
+            device = device,
+        )
+        assertEquals(
+            listOf(PhoneContact("Nakul", "9876500001"), PhoneContact("Maadhav", "9000000001", "room-m")),
+            merged,
+        )
+    }
+
+    @Test
+    fun deviceNamesAreNotRepeatedAndBadNumbersAreDropped() {
+        val device = listOf(
+            PhoneContact("RAVI", "9000000009"),
+            PhoneContact("Priya", "9000000003"),
+            PhoneContact("priya", "9000000004"),
+            PhoneContact("Bad", "x"),
+            PhoneContact("  "),
+        )
+        val merged = PhoneBook.merge(phone = listOf("Ravi" to "9876543210"), web = emptyList(), device = device)
+        assertEquals(
+            listOf(PhoneContact("Ravi", "9876543210"), PhoneContact("Priya", "9000000003"), PhoneContact("Bad", null)),
+            merged,
+        )
+    }
+
+    // Phone book: the picker
+
+    @Test
+    fun shortlistIsFavouritesThenStarredInTheirOwnOrder() {
+        val all = listOf(
+            PhoneContact("Ravi", "1", starred = true),
+            PhoneContact("Amma", "2"),
+            PhoneContact("Zed", "3"),
+            PhoneContact("Nakul", "4", starred = true),
+            PhoneContact("Priya", "5", starred = true),
+        )
+        val shown = PhoneBook.shortlist(all, setOf("nakul", " AMMA "))
+        assertEquals(listOf("Amma", "Nakul", "Ravi", "Priya"), shown.map { it.name })
+    }
+
+    @Test
+    fun shortlistFallsBackToTheFirstEightWhenNobodyIsFavouriteOrStarred() {
+        val all = (1..10).map { PhoneContact("P$it") }
+        assertEquals(all.take(8), PhoneBook.shortlist(all, emptySet()))
+        assertEquals(all.take(8), PhoneBook.shortlist(all, setOf("nobody")))
+    }
+
+    @Test
+    fun shortlistKeepsEveryFavouriteAndStarredContact() {
+        val all = (1..10).map { PhoneContact("P$it", starred = true) }
+        assertEquals(all, PhoneBook.shortlist(all, emptySet()))
+    }
+
+    @Test
+    fun shortlistIsEmptyWithNoContacts() {
+        assertEquals(emptyList<PhoneContact>(), PhoneBook.shortlist(emptyList(), setOf("nakul")))
+    }
+
     // Routing
 
     @Test
     fun emergencyNumbersOnlyEverDial() {
         val c = contact("Ambulance", "108", "room-x")
-        assertEquals(PhoneRoute.EmergencyDial("108"), PhoneRouter.route(PhoneVerb.CALL, c, null, hasSim = false, hasWhatsApp = true))
-        assertEquals(PhoneRoute.EmergencyDial("108"), PhoneRouter.route(PhoneVerb.CALL, c, null, hasSim = true, hasWhatsApp = false))
+        assertEquals(PhoneRoute.EmergencyDial("108"), PhoneRouter.route(PhoneVerb.CALL, c, null, hasWhatsApp = true))
+        assertEquals(PhoneRoute.EmergencyDial("108"), PhoneRouter.route(PhoneVerb.CALL, c, null, hasWhatsApp = false))
     }
 
     @Test
@@ -318,55 +398,48 @@ class PhoneAgentTest {
     }
 
     @Test
-    fun aWebRoomIsPreferredToACarrierCall() {
+    fun aCallGoesToTheNumberEvenWhenThereIsARoom() {
         val c = contact("Nakul", "9876543210", "room-nakul")
         assertEquals(
-            PhoneRoute.WebRoom("room-nakul", "Nakul"),
-            PhoneRouter.route(PhoneVerb.CALL, c, null, hasSim = true, hasWhatsApp = false),
+            PhoneRoute.Carrier("9876543210", "Nakul"),
+            PhoneRouter.route(PhoneVerb.CALL, c, null, hasWhatsApp = false),
         )
     }
 
     @Test
-    fun aWebRoomWorksWithoutASim() {
+    fun aWebRoomIsTheFallbackWhenThereIsNoNumber() {
         val c = contact("Nakul", null, "room-nakul")
         assertEquals(
             PhoneRoute.WebRoom("room-nakul", "Nakul"),
-            PhoneRouter.route(PhoneVerb.CALL, c, null, hasSim = false, hasWhatsApp = false),
+            PhoneRouter.route(PhoneVerb.CALL, c, null, hasWhatsApp = false),
         )
     }
 
     @Test
-    fun aNumberIsCalledWithASim() {
+    fun aNumberIsCalledByThePhoneApp() {
         val c = contact("Nakul", "9876543210")
         assertEquals(
             PhoneRoute.Carrier("9876543210", "Nakul"),
-            PhoneRouter.route(PhoneVerb.CALL, c, null, hasSim = true, hasWhatsApp = false),
+            PhoneRouter.route(PhoneVerb.CALL, c, null, hasWhatsApp = false),
         )
-    }
-
-    @Test
-    fun aNumberWithoutASimOrRoomIsUnreachable() {
-        val c = contact("Nakul", "9876543210")
-        val route = PhoneRouter.route(PhoneVerb.CALL, c, null, hasSim = false, hasWhatsApp = false)
-        assertEquals(PhoneRoute.Unreachable("Nakul has no web room and this phone has no SIM"), route)
     }
 
     @Test
     fun aContactWithNothingIsUnreachable() {
-        val route = PhoneRouter.route(PhoneVerb.CALL, contact("Nakul"), null, hasSim = true, hasWhatsApp = true)
-        assertEquals(PhoneRoute.Unreachable("Nakul has no phone number or web room saved"), route)
+        val route = PhoneRouter.route(PhoneVerb.CALL, contact("Nakul"), null, hasWhatsApp = true)
+        assertEquals(PhoneRoute.Unreachable("Nakul has no phone number saved"), route)
     }
 
     @Test
     fun aMessageNeedsANumber() {
-        val route = PhoneRouter.route(PhoneVerb.MESSAGE, contact("Nakul", null, "room"), "hi", hasSim = true, hasWhatsApp = true)
+        val route = PhoneRouter.route(PhoneVerb.MESSAGE, contact("Nakul", null, "room"), "hi", hasWhatsApp = true)
         assertEquals(PhoneRoute.Unreachable("Nakul has no phone number saved"), route)
     }
 
     @Test
     fun whatsAppGetsTheBodyEncoded() {
         val c = contact("Nakul", "9876543210")
-        val route = PhoneRouter.route(PhoneVerb.MESSAGE, c, "I'm late, come home", hasSim = false, hasWhatsApp = true)
+        val route = PhoneRouter.route(PhoneVerb.MESSAGE, c, "I'm late, come home", hasWhatsApp = true)
         assertEquals(PhoneRoute.WhatsApp("https://wa.me/919876543210?text=I%27m%20late%2C%20come%20home"), route)
     }
 
@@ -374,14 +447,14 @@ class PhoneAgentTest {
     fun whatsAppWithoutABodyHasNoTextParameter() {
         val c = contact("Nakul", "9876543210")
         val url = "https://wa.me/919876543210"
-        assertEquals(PhoneRoute.WhatsApp(url), PhoneRouter.route(PhoneVerb.MESSAGE, c, null, hasSim = true, hasWhatsApp = true))
-        assertEquals(PhoneRoute.WhatsApp(url), PhoneRouter.route(PhoneVerb.MESSAGE, c, "   ", hasSim = true, hasWhatsApp = true))
+        assertEquals(PhoneRoute.WhatsApp(url), PhoneRouter.route(PhoneVerb.MESSAGE, c, null, hasWhatsApp = true))
+        assertEquals(PhoneRoute.WhatsApp(url), PhoneRouter.route(PhoneVerb.MESSAGE, c, "   ", hasWhatsApp = true))
     }
 
     @Test
     fun whatsAppEncodesSpacesAsPercent20AndNeverPlus() {
         val c = contact("Nakul", "9876543210")
-        val route = PhoneRouter.route(PhoneVerb.MESSAGE, c, "a+b c", hasSim = true, hasWhatsApp = true) as PhoneRoute.WhatsApp
+        val route = PhoneRouter.route(PhoneVerb.MESSAGE, c, "a+b c", hasWhatsApp = true) as PhoneRoute.WhatsApp
         assertEquals("https://wa.me/919876543210?text=a%2Bb%20c", route.url)
     }
 
@@ -390,11 +463,11 @@ class PhoneAgentTest {
         val c = contact("Nakul", "9876543210")
         assertEquals(
             PhoneRoute.Sms("9876543210", "I'm late"),
-            PhoneRouter.route(PhoneVerb.MESSAGE, c, "I'm late", hasSim = false, hasWhatsApp = false),
+            PhoneRouter.route(PhoneVerb.MESSAGE, c, "I'm late", hasWhatsApp = false),
         )
         assertEquals(
             PhoneRoute.Sms("9876543210", ""),
-            PhoneRouter.route(PhoneVerb.MESSAGE, c, null, hasSim = false, hasWhatsApp = false),
+            PhoneRouter.route(PhoneVerb.MESSAGE, c, null, hasWhatsApp = false),
         )
     }
 
@@ -403,7 +476,7 @@ class PhoneAgentTest {
         val c = contact("Nakul", "12")
         assertEquals(
             PhoneRoute.Sms("12", "hi"),
-            PhoneRouter.route(PhoneVerb.MESSAGE, c, "hi", hasSim = true, hasWhatsApp = true),
+            PhoneRouter.route(PhoneVerb.MESSAGE, c, "hi", hasWhatsApp = true),
         )
     }
 
@@ -506,5 +579,101 @@ class PhoneAgentTest {
     fun quickMessagesAreFourDistinctTexts() {
         assertEquals(4, PhoneFlow.QUICK.size)
         assertEquals(PhoneFlow.QUICK.size, PhoneFlow.QUICK.distinct().size)
+    }
+
+    // Apps: parsing "open X"
+
+    @Test
+    fun openRequestsNameTheApp() {
+        val cases = listOf(
+            "open youtube" to "youtube",
+            "launch whatsapp" to "whatsapp",
+            "start the camera app" to "camera",
+            "please open youtube now" to "youtube",
+            "Open YouTube!" to "youtube",
+            "can you open maps" to "maps",
+            "mouna open youtube" to "youtube",
+            "could you please launch google maps" to "google maps",
+            "run the calculator app" to "calculator",
+            "show me the gallery" to "gallery",
+            "open you tube" to "you tube",
+            "open youtube app" to "youtube",
+            "open the door" to "door",
+        )
+        for ((text, want) in cases) assertEquals(text, want, AppParser.parse(text))
+    }
+
+    @Test
+    fun hinglishOpenRequestsNameTheApp() {
+        val cases = listOf(
+            "youtube kholo" to "youtube",
+            "youtube khol do" to "youtube",
+            "youtube open karo" to "youtube",
+            "youtube open kar do" to "youtube",
+            "youtube chalao" to "youtube",
+            "youtube chala do" to "youtube",
+            "youtube start karo" to "youtube",
+            "youtube kholo please" to "youtube",
+            "mouna youtube kholo" to "youtube",
+            "you tube kholo" to "you tube",
+        )
+        for ((text, want) in cases) assertEquals(text, want, AppParser.parse(text))
+    }
+
+    @Test
+    fun textThatIsNotAnOpenRequestGivesNull() {
+        val texts = listOf(
+            "open", "please open", "open the", "open the app", "start", "start karo", "open karo", "kholo",
+            "youtube", "close the app", "i will open the window later", "where is my phone", "",
+        )
+        for (text in texts) assertNull(text, AppParser.parse(text))
+    }
+
+    // Apps: matching installed apps
+
+    private val apps = listOf(
+        AppInfo("YouTube", "com.google.android.youtube"),
+        AppInfo("YouTube Music", "com.google.android.apps.youtube.music"),
+        AppInfo("Maps", "com.google.android.apps.maps"),
+        AppInfo("WhatsApp", "com.whatsapp"),
+        AppInfo("Camera", "com.android.camera"),
+    )
+
+    @Test
+    fun anExactAppNameIsFirstAtFullScore() {
+        val ranked = AppMatch.rank("youtube", apps)
+        assertEquals(listOf("YouTube", "YouTube Music"), ranked.map { it.first.label })
+        assertEquals(1f, ranked.first().second, 1e-6f)
+    }
+
+    @Test
+    fun aFullNameFindsTheLongerApp() {
+        val ranked = AppMatch.rank("youtube music", apps)
+        assertEquals("YouTube Music", ranked.first().first.label)
+        assertEquals(1f, ranked.first().second, 1e-6f)
+    }
+
+    @Test
+    fun spacesAndSpellingDoNotStopAMatch() {
+        assertEquals("YouTube", AppMatch.rank("you tube", apps).first().first.label)
+        assertEquals("YouTube", AppMatch.rank("utube", apps).first().first.label)
+        assertEquals("WhatsApp", AppMatch.rank("whatsap", apps).first().first.label)
+        assertEquals("Camera", AppMatch.rank("camra", apps).first().first.label)
+        assertEquals("Maps", AppMatch.rank("maps", apps).first().first.label)
+    }
+
+    @Test
+    fun aWordThatIsNoAppMatchesNothing() {
+        assertTrue(AppMatch.rank("door", apps).isEmpty())
+        assertTrue(AppMatch.rank("", apps).isEmpty())
+    }
+
+    @Test
+    fun aClearAppNameIsSureAndANearSpellingIsNot() {
+        assertTrue(AppMatch.sure(AppMatch.rank("whatsapp", apps)))
+        assertTrue(AppMatch.sure(AppMatch.rank("maps", apps)))
+        assertTrue(AppMatch.sure(AppMatch.rank("youtube", apps)))
+        assertFalse(AppMatch.sure(AppMatch.rank("utube", apps)))
+        assertFalse(AppMatch.sure(emptyList()))
     }
 }
