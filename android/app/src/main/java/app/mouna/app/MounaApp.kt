@@ -1171,7 +1171,7 @@ class MounaApp(
         val pr = prompt as? Prompt.PhoneConfirm ?: return
         close()
         if (onCall) return // a call started meanwhile: nothing is dialled over it
-        when (val route = PhoneRouter.route(pr.verb, pr.c, pr.body, hasWhatsApp = hasWhatsApp())) {
+        when (val route = PhoneRouter.route(pr.verb, pr.c, pr.body, hasWhatsApp = hasWhatsApp(), hasSim = hasSim())) {
             is PhoneRoute.WebRoom -> {
                 go(Screen.CALL)
                 // No "Calling…" aloud: the voice now goes into the call, and the call screen already names who.

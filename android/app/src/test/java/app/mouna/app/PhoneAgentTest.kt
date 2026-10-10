@@ -734,4 +734,13 @@ class PhoneAgentTest {
         val contacts = PhoneBook.fromDevice(listOf(row("  ", "9876543210"), row("Dadi", " ")))
         assertEquals(listOf(PhoneContact("Dadi", null)), contacts)
     }
+
+    @Test
+    fun noSimCallsTheWebRoomWhenThereIsOne() {
+        val both = PhoneContact("Nakul", "+919876543210", "room1")
+        assertEquals(PhoneRoute.Carrier("+919876543210", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, both, null, hasWhatsApp = false, hasSim = true))
+        assertEquals(PhoneRoute.WebRoom("room1", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, both, null, hasWhatsApp = false, hasSim = false))
+        val numberOnly = PhoneContact("Nakul", "+919876543210")
+        assertEquals(PhoneRoute.Carrier("+919876543210", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, numberOnly, null, hasWhatsApp = false, hasSim = false))
+    }
 }

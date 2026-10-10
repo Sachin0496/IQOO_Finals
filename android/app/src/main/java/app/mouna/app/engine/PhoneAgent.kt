@@ -351,9 +351,10 @@ fun PhoneBook.shortlist(all: List<PhoneContact>, favouriteNames: Set<String>): L
 object PhoneRouter {
     private val emergency = setOf("112", "100", "101", "102", "108", "911", "999")
 
-    fun route(verb: PhoneVerb, c: PhoneContact, body: String?, hasWhatsApp: Boolean): PhoneRoute =
+    /** [hasSim] false: a contact with a web room is called there, since the phone app cannot connect without a SIM. */
+    fun route(verb: PhoneVerb, c: PhoneContact, body: String?, hasWhatsApp: Boolean, hasSim: Boolean = true): PhoneRoute =
         when (verb) {
-            PhoneVerb.CALL -> call(c)
+            PhoneVerb.CALL -> call(c, hasSim)
             PhoneVerb.MESSAGE -> message(c, body, hasWhatsApp)
         }
 
@@ -377,11 +378,11 @@ object PhoneRouter {
         }
     }
 
-    private fun call(c: PhoneContact): PhoneRoute {
+    private fun call(c: PhoneContact, hasSim: Boolean): PhoneRoute {
         val n = c.number
         return when {
             n != null && isEmergency(n) -> PhoneRoute.EmergencyDial(n)
-            n != null -> PhoneRoute.Carrier(n, c.name)
+            n != null && (hasSim || c.room == null) -> PhoneRoute.Carrier(n, c.name)
             c.room != null -> PhoneRoute.WebRoom(c.room, c.name)
             else -> PhoneRoute.Unreachable("${c.name} has no phone number saved")
         }
