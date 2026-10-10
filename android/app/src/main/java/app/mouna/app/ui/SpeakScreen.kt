@@ -48,16 +48,16 @@ import app.mouna.app.Screen
 import app.mouna.app.engine.Knowledge
 import app.mouna.app.engine.isEmulator
 
-private val switchOn = Type.button.copy(fontSize = 15.sp, color = Ink.bg)
-private val switchOff = Type.button.copy(fontSize = 15.sp, color = Ink.bone2)
+private val switchOn get() = Type.button.copy(fontSize = 15.sp, color = Ink.bg)
+private val switchOff get() = Type.button.copy(fontSize = 15.sp, color = Ink.bone2)
 
 private class Status(val text: String, val dot: Color, val pulse: Boolean = false)
 
-private val saidNote = Type.mono.copy(fontSize = 13.sp, color = Ink.mute)
-private val wrongLink = Type.mono.copy(fontSize = 14.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline)
-private val saidStyle = Type.display.copy(fontSize = 32.sp, lineHeight = 36.sp)
-private val teachLink = Type.body.copy(color = Ink.turmeric, textDecoration = TextDecoration.Underline)
-private val waitingStyle = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 32.sp, lineHeight = 36.sp)
+private val saidNote get() = Type.mono.copy(fontSize = 13.sp, color = Ink.mute)
+private val wrongLink get() = Type.mono.copy(fontSize = 14.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline)
+private val saidStyle get() = Type.display.copy(fontSize = 32.sp, lineHeight = 36.sp)
+private val teachLink get() = Type.body.copy(color = Ink.turmeric, textDecoration = TextDecoration.Underline)
+private val waitingStyle get() = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 32.sp, lineHeight = 36.sp)
 
 /** The one thing to tell the person about this channel, in plain words. */
 private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean): Status = when (app.channel) {

@@ -162,8 +162,8 @@ fun WordsScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     }
 }
 
-private val noteStyle = Type.mono.copy(fontSize = 13.sp, color = Ink.leaf)
-private val rowStyle = Type.body.copy(color = Ink.bone)
+private val noteStyle get() = Type.mono.copy(fontSize = 13.sp, color = Ink.leaf)
+private val rowStyle get() = Type.body.copy(color = Ink.bone)
 
 /** A small outlined text button, 48dp tall. */
 @Composable

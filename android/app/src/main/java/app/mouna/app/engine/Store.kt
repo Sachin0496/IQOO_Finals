@@ -55,6 +55,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("careful", false)
         set(v) = prefs.edit().putBoolean("careful", v).apply()
 
+    /** Warm paper theme for bright rooms and sunlight; dark ink-on-black otherwise. */
+    var light: Boolean
+        get() = prefs.getBoolean("light", false)
+        set(v) = prefs.edit().putBoolean("light", v).apply()
+
     /** Keep very clear matches the person doesn't correct as extra examples (see [SelfTrain]). Off until the person turns it on. */
     var selfTrain: Boolean
         get() = prefs.getBoolean("self_train", false)

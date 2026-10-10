@@ -47,11 +47,11 @@ import app.mouna.core.calibrateGaze
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val setupTitle = Type.title
-private val cueTitle = Type.display
-private val targetText = Type.title.copy(fontSize = 24.sp)
-private val noFace = Type.body.copy(color = Ink.bone, fontSize = 16.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
-private val recognised = Type.mono.copy(fontSize = 14.sp)
+private val setupTitle get() = Type.title
+private val cueTitle get() = Type.display
+private val targetText get() = Type.title.copy(fontSize = 24.sp)
+private val noFace get() = Type.body.copy(color = Ink.bone, fontSize = 16.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
+private val recognised get() = Type.mono.copy(fontSize = 14.sp)
 
 /**
  * The frame both setup flows share, so the camera is the same size in the same place and the main button is always at

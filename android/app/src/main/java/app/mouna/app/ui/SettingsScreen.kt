@@ -144,6 +144,18 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
 
         Spacer(Modifier.height(14.dp))
         Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Light mode", style = Type.phrase)
+                    Text("Warm paper theme for bright rooms and sunlight.", style = Type.body.copy(fontSize = 13.sp))
+                }
+                Spacer(Modifier.width(12.dp))
+                MounaSwitch(app.light) { app.chooseLight(it) }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Card {
             Column {
                 SectionLabel("Beyond the lips")
                 SetupRow("Your movement", if (k.switchReady) "Taught · it means yes" else "A raised eyebrow, a half smile… as your yes", k.switchReady,
