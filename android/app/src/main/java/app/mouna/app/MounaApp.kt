@@ -1075,6 +1075,7 @@ class MounaApp(
                 startWebCall(route.room, route.name)
             }
             is PhoneRoute.Carrier -> {
+                go(Screen.CALL) // the call's own screen: phrases, typing and hang-up are there
                 setDial(route.number, route.name)
                 dial()
                 if (callNote == null) announce("Calling ${route.name}")

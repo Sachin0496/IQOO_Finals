@@ -1,5 +1,7 @@
 package app.mouna.app.ui
 
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,6 +57,13 @@ private const val SCAN_MS = 1600L
  */
 @Composable
 fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
+    // A prompt from typed words must not open under the keyboard: its buttons would be hidden.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    LaunchedEffect(Unit) {
+        focus.clearFocus()
+        keyboard?.hide()
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -336,6 +345,14 @@ private fun ColumnScope.PhoneBody(app: MounaApp, p: Prompt.PhoneBody, k: Knowled
 private fun ColumnScope.PhoneConfirm(app: MounaApp, p: Prompt.PhoneConfirm, k: Knowledge) {
     val call = p.verb == PhoneVerb.CALL
     Header(app, "AN ACTION: ALWAYS CONFIRMED", if (call) "Call ${p.c.name}?" else "Message ${p.c.name}?")
+    // How it will go, so the caregiver sees which number or link before anyone says yes.
+    val number = p.c.number?.let { Phones.pretty(it) }
+    val how = when {
+        call && p.c.room != null -> "Web call, on their saved link"
+        number != null -> number
+        else -> null
+    }
+    how?.let { Text(it, style = Type.label.copy(color = Ink.bone2)); Spacer(Modifier.height(16.dp)) }
     p.body?.let { Text("“$it”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.kumkum)) }
     Spacer(Modifier.weight(1f))
     if (!call) Text("You'll tap Send in WhatsApp/Messages.", style = Type.body.copy(fontSize = 15.sp))
