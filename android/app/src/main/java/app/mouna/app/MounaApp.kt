@@ -123,19 +123,9 @@ class MounaApp(
     private var lastHeard: String? = null
     private val main = Handler(Looper.getMainLooper())
     private val asr = Executors.newSingleThreadExecutor()
-    private val listener = Listener(
-        onLevel = { l -> main.post { micLevel = l } },
-        onUtterance = { samples ->
-            main.post { hearingBusy = true }
-            asr.execute {
-                val text = runCatching { hearing.transcribe(samples) }.getOrDefault("")
-                main.post {
-                    hearingBusy = false
-                    onHeard(text)
-                }
-            }
-        },
-    )
+    private lateinit var listener: Listener
+    /** One-shot mic capture for a caregiver's own Ask question; null when nobody is listening for one. */
+    private var askListen: ((String) -> Unit)? = null
 
     // ---------------- calls ----------------
 
@@ -188,6 +178,28 @@ class MounaApp(
 
     init {
         Ink.light = store.light
+        listener = Listener(
+            onLevel = { l -> main.post { micLevel = l } },
+            onUtterance = { samples ->
+                main.post { hearingBusy = true }
+                asr.execute {
+                    val text = runCatching { hearing.transcribe(samples) }.getOrDefault("")
+                    main.post {
+                        hearingBusy = false
+                        // A one-shot caregiver question (Ask screen) takes its words directly; anything else is this
+                        // person's voice to match against their phrases. Never both: a transcript must not speak.
+                        val once = askListen
+                        if (once != null) {
+                            askListen = null
+                            listener.stop()
+                            once(text)
+                        } else {
+                            onHeard(text)
+                        }
+                    }
+                }
+            },
+        )
         web.server = ::callServer
         web.callerName = { callerName }
         web.tokenFor = { room -> store.webTokens[room] ?: Rooms.newToken() }
@@ -664,6 +676,47 @@ class MounaApp(
         voice.say(node.phrase, text, lang, voiceId)
         showSaid(Said(p, text, "ask"))
     }
+
+    /**
+     * The caregiver's own Ask question, answered yes or no. The answer is said aloud (in the caregiver's language,
+     * from the person's own yes/no words) so the ward hears it; the question is kept on screen with it.
+     */
+    fun answerCustom(question: String, yes: Boolean) {
+        val p = phrases[if (yes) "yes" else "no"]
+        val text = p?.say(lang) ?: when (lang) {
+            Lang.HI -> if (yes) "हाँ" else "नहीं"
+            Lang.TA -> if (yes) "ஆம்" else "இல்லை"
+            else -> if (yes) "Yes" else "No"
+        }
+        voice.say(null, text, lang, voiceId)
+        showSaid(Said(null, "$question — $text", "ask"))
+    }
+
+    /**
+     * Ask screen: capture one question from the caregiver's voice. Calls back with its words (blank if nothing was
+     * caught or the mic was refused). The mic is idle on Ask (it only listens on Speak), so this never fights the
+     * Voice channel; [stopQuestion] gives the mic back when leaving early.
+     */
+    fun listenQuestion(onText: (String) -> Unit) {
+        askMic { granted ->
+            if (!granted) {
+                onText("")
+                return@askMic
+            }
+            ensureHearing()
+            askListen = onText
+            listener.start()
+        }
+    }
+
+    /** Leaving Ask mid-listen: forget the question and give the mic back. */
+    fun stopQuestion() {
+        askListen = null
+        if (screen != Screen.SPEAK || channel != Channel.VOICE) listener.stop()
+    }
+
+    /** Ask screen entering its Voice source: start loading the voice model so Listen is ready when tapped. */
+    fun preloadVoice() = ensureHearing()
 
     /** A "yes" from the body: the personal switch, a nod or a double blink ([via]). */
     private fun switched(via: String) {
