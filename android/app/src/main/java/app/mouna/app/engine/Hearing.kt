@@ -188,7 +188,7 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
                 for (x in chunk) e += x * x
                 val rms = sqrt(e / n)
                 onLevel(min(1f, rms / (noise * 12)))
-                val loud = rms > max(noise * 3.2f, 0.004f)
+                val loud = rms > max(noise * 4f, 0.006f) // a busy room must not count as a voice
                 if (speech.isEmpty()) {
                     if (!loud) noise = 0.95f * noise + 0.05f * rms // learn the room only between utterances
                     pre.addLast(chunk)
@@ -228,10 +228,10 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
     companion object {
         const val FRAME = 480 // 30 ms
         const val PRE_FRAMES = 10 // 300 ms kept from before the voice started
-        const val START_FRAMES = 4 // 120 ms of voice starts an utterance
+        const val START_FRAMES = 7 // 210 ms of voice starts an utterance
         const val END_FRAMES = 27 // 800 ms of quiet ends it (slow, effortful speech has long pauses)
         const val MAX_MS = 8000L
-        const val MIN_S = 0.35f
+        const val MIN_S = 0.6f
     }
 }
 
@@ -278,6 +278,21 @@ object VoiceMatcher {
         "i", "a", "an", "the", "to", "me", "my", "please", "am", "is", "are", "uh", "um", "you", "can", "could", "it",
         "in", "of", "for", "do", "and", "be", "with", "this", "that", "on",
     )
+
+    /** What Whisper tiny says for silence, music or a noisy room: never a person's phrase. */
+    fun noise(text: String): Boolean {
+        val t = text.lowercase().replace(Regex("[^a-z ]"), " ").replace(Regex(" +"), " ").trim()
+        if (t.isEmpty() || words(text).isEmpty()) return true
+        return t in HALLUCINATIONS || Regex("\\[.*]|\\(.*\\)").matches(text.trim())
+    }
+
+    private val HALLUCINATIONS = setOf(
+        "thank you", "thanks", "thank you very much", "thanks for watching", "thank you for watching", "you", "bye",
+        "bye bye", "okay", "ok", "oh", "so", "yeah", "hmm", "blank audio", "music", "applause", "silence", "the end",
+    )
+
+    /** The same phrase is not spoken twice by voice within this long. */
+    const val REPEAT_MS = 6000L
 
     /** Speak when the best is clearly good and clearly ahead; otherwise show the top choices. */
     const val SPEAK = 0.78
