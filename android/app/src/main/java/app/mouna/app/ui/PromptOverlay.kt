@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +68,7 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
     Box(
         Modifier
             .fillMaxSize()
+            .testTag(EYE_SCOPE) // eye control outlines only the prompt's buttons, not the screen under it
             .background(Ink.bg)
             .clickable(enabled = false) {}
             .systemBarsPadding()
@@ -121,7 +123,7 @@ private fun ColumnScope.Confirm(app: MounaApp, id: String, why: String, switchRe
     Header(app, if (action) "AN ACTION: ALWAYS CONFIRMED" else "FAIRLY SURE", "Did you mean…?")
     app.phrases[id]?.let { PhraseTile(it, app.lang, Modifier.fillMaxWidth().height(300.dp), big = true, selected = true, accent = if (action) Ink.kumkum else Ink.turmeric) }
     Spacer(Modifier.weight(1f))
-    Hint(if (switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no.")
+    Hint(app.blinkHint(if (switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no."))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.wrong() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.choose(id, "confirm") }
@@ -196,7 +198,7 @@ private fun ColumnScope.DidYouSign(app: MounaApp, p: Prompt.Signed) {
     val w = p.words[p.index]
     Text("“${w.replaceFirstChar { it.uppercase() }}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
     Spacer(Modifier.weight(1f))
-    Hint(if (p.index + 1 < p.words.size) "Nod or blink twice to say it, or shake your head for the next guess." else "Nod or blink twice to say it, or shake your head to say nothing.")
+    Hint(app.blinkHint(if (p.index + 1 < p.words.size) "Nod or blink twice to say it, or shake your head for the next guess." else "Nod or blink twice to say it, or shake your head to say nothing."))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextSign() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayWord(w) }
@@ -245,7 +247,7 @@ private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
         }
     }
     Spacer(Modifier.weight(1f))
-    Hint("Nod or blink twice to say it, shake your head for the next reading, or tap another.")
+    Hint(app.blinkHint("Nod or blink twice to say it, shake your head for the next reading, or tap another."))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextRead() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayRead(top) }
@@ -373,7 +375,7 @@ private fun ColumnScope.PhoneConfirm(app: MounaApp, p: Prompt.PhoneConfirm, k: K
     p.body?.let { Text("“$it”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.kumkum)) }
     Spacer(Modifier.weight(1f))
     if (!call) Text("You'll tap Send in WhatsApp/Messages.", style = Type.body.copy(fontSize = 15.sp))
-    Hint(if (k.switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no.")
+    Hint(app.blinkHint(if (k.switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no."))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.phoneCancel() }
         BigButton(if (call) "Yes, call" else "Yes, open message", Tone.YES, Modifier.weight(1.4f)) { app.phoneGo() }
@@ -433,6 +435,9 @@ private fun NoneTile(modifier: Modifier, selected: Boolean, onClick: () -> Unit)
         Text("None of these", style = Type.phrase.copy(fontStyle = FontStyle.Italic, color = Ink.bone2), textAlign = TextAlign.Center)
     }
 }
+
+/** With eye control on, two blinks mean "back", not "yes": the hint then only offers the nod. */
+private fun MounaApp.blinkHint(text: String) = if (eyeControl) text.replace("Nod or blink twice", "Nod") else text
 
 @Composable
 private fun ColumnScope.Hint(text: String) {

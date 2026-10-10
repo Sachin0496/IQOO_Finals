@@ -45,6 +45,8 @@ class Frame(
     val blend: FloatArray? = null,
     /** Iris position between the eye corners, 0..1 (look to choose); NaN without a face. */
     val iris: Double = Double.NaN,
+    /** Iris position across the eye's height (eye control); 0 without a face. See [irisVertical]. */
+    val irisY: Float = 0f,
     val yawDeg: Float = 0f,
     /** Head pitch proxy and eye openness, for nod / shake / double blink. */
     val pitch: Float = 0f,
@@ -286,6 +288,7 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
                 avsr = if (wantAvsr && n >= 468) cutMouthAvsr(frame) else null,
                 blend = blend,
                 iris = iris,
+                irisY = if (n > 473) irisVertical(xs, ys, frame.width, frame.height) else 0f,
                 yawDeg = f.yawDeg,
                 pitch = pitchProxy(xs, ys, frame.width, frame.height),
                 eyeOpen = eyeOpenness(xs, ys, frame.width, frame.height),

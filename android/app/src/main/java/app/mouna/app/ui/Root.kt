@@ -69,7 +69,7 @@ fun MounaRoot(
         when {
             welcome -> activity?.moveTaskToBack(true)
             app.prompt != null -> app.close()
-            app.screen == Screen.EYES || app.screen == Screen.SWITCH || app.screen == Screen.RECORD -> app.go(Screen.SETTINGS)
+            app.screen == Screen.EYES || app.screen == Screen.SWITCH || app.screen == Screen.RECORD || app.screen == Screen.EYE_CONTROL -> app.go(Screen.SETTINGS)
             app.screen == Screen.WORDS -> app.go(app.wordsBack)
             app.screen == Screen.SIGNS -> app.go(app.signsBack)
             app.screen != Screen.SPEAK -> app.go(Screen.SPEAK)
@@ -78,6 +78,10 @@ fun MounaRoot(
     }
     if (welcome) {
         Welcome(onWelcomeDone)
+        return
+    }
+    if (app.screen == Screen.EYE_CONTROL && cameraReady) {
+        EyeControlSetup(app, bindCamera) // full screen: the dots reach the corners, where Back and Settings are
         return
     }
     Box(Modifier.fillMaxSize().background(Ink.bg)) {
@@ -102,6 +106,7 @@ fun MounaRoot(
                             Screen.RECORD -> RecordScreen(app, k, bindCamera)
                             Screen.WORDS -> WordsScreen(app, k, bindCamera)
                             Screen.SIGNS -> SignsScreen(app, k, bindCamera)
+                            Screen.EYE_CONTROL -> Unit // drawn full screen above
                         }
                     }
                 }

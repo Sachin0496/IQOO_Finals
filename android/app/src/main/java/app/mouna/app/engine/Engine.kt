@@ -339,7 +339,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                 Gesture.SHAKE -> _events.tryEmit(Event.Answer(false, "shake"))
                 null -> Unit
             }
-            if (blink.push(f.eyeOpen, f.tMs)) _events.tryEmit(Event.Answer(true, "double blink"))
+            if (blink.push(f.eyeOpen, f.tMs) && blinkAnswers) _events.tryEmit(Event.Answer(true, "double blink"))
         }
 
         if (freeOn && f.face) {
@@ -635,6 +635,15 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     fun gesturesOn(on: Boolean) {
         if (on && !gestures) onAnalysis { head = HeadGesture(); blink = DoubleBlink() }
         gestures = on
+    }
+
+    /** Eye control owns blinks (a long blink presses, two quick ones go back): then two blinks no longer mean yes. */
+    @Volatile var blinkAnswers = true
+
+    /** Every face frame, on the analysis thread, until the returned function is called (eye control). */
+    fun watch(listener: (Frame) -> Unit): () -> Unit {
+        taps.add(listener)
+        return { taps.remove(listener) }
     }
 
     /** Look-to-choose is only armed while two pictures are on screen. */

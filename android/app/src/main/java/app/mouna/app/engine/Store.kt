@@ -2,6 +2,7 @@ package app.mouna.app.engine
 
 import android.content.Context
 import android.util.Log
+import app.mouna.app.sense.GazeMap
 import app.mouna.core.GazeModel
 import app.mouna.core.SwitchChannel
 import app.mouna.core.SwitchModel
@@ -84,6 +85,16 @@ class Store(context: Context) {
             prefs.getString("gaze", null)?.let { s -> s.split(",").map { it.toDouble() }.let { GazeModel(it[0], it[1], it[2]) } }
         }.getOrNull()
         set(v) = prefs.edit().putString("gaze", v?.let { "${it.center},${it.left},${it.right}" }).apply()
+
+    /** Eye control: look to outline a button, long blink to press, two quick blinks for back. Needs [gazeMap]. */
+    var eyeControl: Boolean
+        get() = prefs.getBoolean("eye_control", false)
+        set(v) = prefs.edit().putBoolean("eye_control", v).apply()
+
+    /** Eye control's calibration (9 dots), see [GazeMap]. */
+    var gazeMap: GazeMap?
+        get() = prefs.getString("gaze_map", null)?.let { GazeMap.fromText(it) }
+        set(v) = prefs.edit().putString("gaze_map", v?.toText()).apply()
 
     var switchModel: SwitchModel?
         get() = prefs.getString("switch", null)?.let { s ->

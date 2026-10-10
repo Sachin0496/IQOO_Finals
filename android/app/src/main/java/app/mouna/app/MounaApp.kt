@@ -24,6 +24,7 @@ import app.mouna.app.engine.Phones
 import app.mouna.app.engine.Rooms
 import app.mouna.app.engine.shortlist
 import app.mouna.app.engine.WebLink
+import app.mouna.app.sense.GazeMap
 import app.mouna.BuildConfig
 import android.os.SystemClock
 import app.mouna.app.engine.Event
@@ -48,7 +49,7 @@ import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, CALL, SETTINGS, EYES, SWITCH, RECORD, WORDS, SIGNS }
+enum class Screen { SPEAK, CALL, SETTINGS, EYES, SWITCH, RECORD, WORDS, SIGNS, EYE_CONTROL }
 
 /** On a call, the lower half of the Call screen: tap-to-speak phrases, the live Speak screen (lips, sign), or typing. */
 enum class CallTab { PHRASES, MOUTH, TYPE }
@@ -330,6 +331,15 @@ class MounaApp(
     /** Keep very clear, uncorrected matches as extra examples (off by default; see SelfTrain). */
     var selfTrain by mutableStateOf(store.selfTrain)
         private set
+    /** Eye control's calibration, and whether eye control is on (it needs one). See ui/EyeControl.kt. */
+    var gazeMap by mutableStateOf(store.gazeMap)
+        private set
+    var eyeControl by mutableStateOf(store.eyeControl && gazeMap != null)
+        private set
+
+    init {
+        engine.blinkAnswers = !eyeControl
+    }
     /** Bumped on each "yes" from the body (switch, nod, double blink), for screens that react to it (scanning, switch setup). */
     var switchPresses by mutableStateOf(0)
         private set
@@ -950,6 +960,9 @@ class MounaApp(
         Ink.light = store.light
         selfTrain = store.selfTrain
         devType = store.devType
+        gazeMap = store.gazeMap
+        eyeControl = store.eyeControl && gazeMap != null
+        engine.blinkAnswers = !eyeControl
         channel = storedChannel()
         callMode = storedCallMode()
         callServerNow = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
@@ -982,6 +995,24 @@ class MounaApp(
         light = on
         store.light = on
         Ink.light = on
+    }
+
+    /** Turning eye control on the first time calibrates first; the calibration turns it on when it is done. */
+    fun chooseEyeControl(on: Boolean) {
+        if (on && gazeMap == null) {
+            go(Screen.EYE_CONTROL)
+            return
+        }
+        eyeControl = on
+        store.eyeControl = on
+        engine.blinkAnswers = !on // two blinks mean "back" now, never "yes"
+    }
+
+    /** A finished eye-control calibration: kept, and eye control turned on. */
+    fun calibratedEyes(map: GazeMap) {
+        gazeMap = map
+        store.gazeMap = map
+        chooseEyeControl(true)
     }
 
     fun chooseSelfTrain(on: Boolean) {
