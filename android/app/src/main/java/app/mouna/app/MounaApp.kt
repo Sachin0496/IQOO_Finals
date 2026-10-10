@@ -59,8 +59,9 @@ sealed interface Prompt {
 /**
  * Lips: open-vocabulary lip reading (once called free talk), every sentence confirmed. The old phrase-pack lips
  * (taught phrases, encoder + core) is off for now; the engine keeps it for learning new words later.
+ * Type: anything typed is spoken aloud in the caregiver's language (for anyone who can tap or use a keyboard).
  */
-enum class Channel { LIPS, VOICE, SIGN }
+enum class Channel { LIPS, VOICE, SIGN, TYPE }
 
 data class Said(val phrase: Phrase?, val text: String, val via: String)
 
@@ -1016,7 +1017,7 @@ class MounaApp(
 
     fun quick(q: app.mouna.app.engine.QuickPhrase) = sayCall(q.packId, q.say(lang), lang, "call")
 
-    /** Anything typed on the call screen, in whichever script it is written. */
+    /** Anything typed (Speak's Type channel, or the call screen), in whichever script it is written. */
     fun sayTyped(text: String) {
         val t = text.trim()
         if (t.isNotEmpty()) sayCall(null, t, CallPhrases.langOf(t, lang), "typed")
