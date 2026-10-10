@@ -625,10 +625,8 @@ class MounaApp(
             speak(d.options[0], "lips")
             return
         }
-        if (d.kind == DecisionKind.ASK && d.options.isEmpty()) {
-            if (!onCall) go(Screen.ASK) // never walk away from a call
-            return
-        }
+        // Nothing to offer: stay put. Jumping to Ask by itself confused people (Ask is one tap away in the nav bar).
+        if (d.kind == DecisionKind.ASK && d.options.isEmpty()) return
         lastHeard = null
         prompt = Prompt.FromCore(d)
         applyChannel() // lips (and voice) wait while the person answers with eyes, switch or touch
@@ -726,9 +724,8 @@ class MounaApp(
         val pr = prompt
         if (!onSpeakSurface()) return
         when {
-            // Idle: the person's own movement means "I need something" -> the yes/no questions.
-            // Only from Speak, and never on a call: the call screen must stay where it is.
-            pr == null -> if (via == "switch" && screen == Screen.SPEAK && !onCall) go(Screen.ASK)
+            // Idle: ignore. A stray switch (eyebrow) used to jump to Ask on its own; Ask is opened from the nav bar.
+            pr == null -> Unit
             pr is Prompt.Heard -> sayHeard(pr.text)
             pr is Prompt.Read -> sayRead(pr.options[pr.index])
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.CONFIRM -> choose(pr.d.options[0], via)

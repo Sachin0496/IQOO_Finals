@@ -149,7 +149,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
      * ~0.7 s don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
      * Waits for free talk's own crop: the lip encoder's crop is only made while Lips listens.
      */
-    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 30, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
+    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 40, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
