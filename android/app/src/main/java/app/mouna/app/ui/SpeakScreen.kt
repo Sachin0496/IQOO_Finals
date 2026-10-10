@@ -56,6 +56,7 @@ private class Status(val text: String, val dot: Color, val pulse: Boolean = fals
 private val saidNote = Type.mono.copy(fontSize = 13.sp, color = Ink.mute)
 private val wrongLink = Type.mono.copy(fontSize = 14.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline)
 private val saidStyle = Type.display.copy(fontSize = 32.sp, lineHeight = 36.sp)
+private val teachLink = Type.body.copy(color = Ink.turmeric, textDecoration = TextDecoration.Underline)
 private val waitingStyle = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 32.sp, lineHeight = 36.sp)
 
 /** The one thing to tell the person about this channel, in plain words. */
@@ -142,7 +143,16 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                 label = "said",
             ) { said ->
                 if (said == null) {
-                    Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English." }, style = waitingStyle)
+                    Column {
+                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English." }, style = waitingStyle)
+                        if (app.channel == Channel.LIPS && !app.onCall) { // never walk away from a call
+                            Text(
+                                "A name or word Lips can’t read? Teach it →",
+                                style = teachLink,
+                                modifier = Modifier.heightIn(min = 48.dp).clickable { app.openWords(Screen.SPEAK) }.wrapContentHeight(Alignment.CenterVertically),
+                            )
+                        }
+                    }
                 } else {
                     Column {
                         Text(said.text, style = saidStyle, maxLines = 2)

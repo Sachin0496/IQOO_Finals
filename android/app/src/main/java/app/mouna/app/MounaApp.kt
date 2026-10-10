@@ -15,6 +15,8 @@ import android.os.SystemClock
 import app.mouna.app.engine.Event
 import app.mouna.app.engine.Lang
 import app.mouna.app.engine.Listen
+import app.mouna.app.engine.Suggestion
+import app.mouna.app.engine.Words
 import app.mouna.app.engine.Phrase
 import app.mouna.app.engine.Hearing
 import app.mouna.app.engine.Isl
@@ -31,7 +33,7 @@ import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, ASK, CALL, SETTINGS, EYES, SWITCH, RECORD }
+enum class Screen { SPEAK, ASK, CALL, SETTINGS, EYES, SWITCH, RECORD, WORDS }
 
 /** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
 enum class CallTab { PHRASES, MOUTH }
@@ -49,8 +51,8 @@ sealed interface Prompt {
     data class Heard(val text: String) : Prompt
     /** Sign mode wasn't sure: the likeliest ISL words to pick from. */
     data class Signed(val words: List<String>) : Prompt
-    /** Lips read a sentence: always confirmed before it is spoken; shake = the next candidate. */
-    data class Read(val sentences: List<String>, val index: Int = 0, val personal: List<Boolean> = emptyList()) : Prompt
+    /** Lips read a sentence (or a taught word): always confirmed before it is spoken; shake = the next candidate. */
+    data class Read(val options: List<Suggestion>, val index: Int = 0) : Prompt
 }
 
 /**
@@ -269,6 +271,7 @@ class MounaApp(
         if (s != screen) showSaid(null) // what was said belongs to the screen it was said on
         screen = s
         prompt = null
+        if (s != Screen.WORDS && wordTeaching != null) stopTeachingWord()
         if (s != Screen.RECORD && recording) { recording = false; engine.recordNext(null, null) } // leaving stops recording
         engine.gazeOn(false)
         applyChannel()
@@ -280,7 +283,7 @@ class MounaApp(
         engine.listen(Listen.PAUSED) // phrase-pack lips is off (see Channel)
         armGestures(prompt != null || screen == Screen.ASK)
         engine.signing(onSpeakSurface() && channel == Channel.SIGN)
-        engine.freeTalk((speak && channel == Channel.LIPS) || (screen == Screen.RECORD && recording))
+        engine.freeTalk((speak && channel == Channel.LIPS) || (screen == Screen.RECORD && recording) || (screen == Screen.WORDS && wordTeaching != null))
         val mic = speak && channel == Channel.VOICE && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
@@ -422,6 +425,8 @@ class MounaApp(
             is Event.Looked -> looked(e.zone)
             is Event.Read -> read(e)
             is Event.Recorded -> recorded(e)
+            is Event.WordTaught -> wordTaught(e)
+            is Event.WordMissed -> wordMissed(e)
         }
     }
 
@@ -490,14 +495,17 @@ class MounaApp(
 
     private fun read(e: Event.Read) {
         if (!onSpeakSurface() || prompt != null || channel != Channel.LIPS) return
-        // open readings and the person's own sentences, merged by the model's score (Personal.merge); else open only
-        val opts = e.options.ifEmpty { e.sentences.map { app.mouna.core.Personal.Option(it, 0.0, false) } }
-            .map { it.copy(text = sentenceCase(it.text)) }.distinctBy { it.text }.take(4)
+        // open readings and the person's own sentences, merged by the model's score (Personal.merge); else open only;
+        // then the words they taught, matched on the same clip (Words.merge)
+        val open = e.options.ifEmpty { e.sentences.map { app.mouna.core.Personal.Option(it, 0.0, false) } }
+            .map { it.copy(text = sentenceCase(it.text)) }
+        val words = store.words.toMap()
+        val opts = Words.merge(open, e.words) { words[it] }
         if (opts.isEmpty()) {
             said = Said(null, "I couldn't read that. Try again, a little slower.", "none")
             return
         }
-        prompt = Prompt.Read(opts.map { it.text }, personal = opts.map { it.personal })
+        prompt = Prompt.Read(opts)
         applyChannel() // lips wait while the person confirms
     }
 
@@ -506,19 +514,90 @@ class MounaApp(
 
     fun chooseFreeTalkModel(id: String) = engine.chooseFreeTalkModel(id)
 
-    /** Lips: say the confirmed sentence in the phone's voice (English: the model reads English). */
-    fun sayRead(text: String) {
-        engine.rememberSentence(text) // offered again next time, scored by the model (issue #5 A)
+    /**
+     * Lips: say the confirmed suggestion. A sentence in the phone's voice (English: the model reads English), kept to be
+     * offered again; a taught word in the person's chosen voice and language, and that clip becomes one more example.
+     */
+    fun sayRead(s: Suggestion) {
         prompt = null
-        voice.say(null, text, Lang.EN, Voice.DEVICE)
-        said = Said(null, text, "lips")
+        if (s.word != null) {
+            engine.wordConfirmed(s.word)
+            voice.say(null, s.text, lang, voiceId)
+        } else {
+            engine.wordPassed() // words were offered and this was not one: the clip is "not one of my words"
+            engine.rememberSentence(s.text) // offered again next time, scored by the model (issue #5 A)
+            voice.say(null, s.text, Lang.EN, Voice.DEVICE)
+        }
+        said = Said(null, s.text, "lips")
         applyChannel()
+    }
+
+    // ---------------- words taught to Lips ----------------
+
+    /** The word being taught on the Words screen, and what the last clip did, in words. */
+    var wordTeaching by mutableStateOf<String?>(null)
+        private set
+    var wordNote by mutableStateOf<String?>(null)
+        private set
+    /** Where Back goes from the Words screen: Settings or Speak, whichever opened it. */
+    var wordsBack = Screen.SETTINGS
+        private set
+
+    fun openWords(from: Screen) {
+        wordsBack = from
+        wordNote = null
+        go(Screen.WORDS)
+    }
+
+    /** Teach [id]: each Lips clip is one example, until it has [Words.SHOTS]. */
+    fun teachWord(id: String) {
+        wordTeaching = id
+        wordNote = null
+        engine.teachWord(id)
+        applyChannel()
+    }
+
+    fun stopTeachingWord() {
+        wordTeaching = null
+        engine.teachWord(null)
+        applyChannel()
+    }
+
+    private val rearmWord = Runnable { wordTeaching?.let { engine.teachWord(it) } }
+
+    private fun wordTaught(e: Event.WordTaught) {
+        if (wordTeaching != e.id) return
+        val n = engine.knowledge.value.wordCounts[e.id] ?: 0
+        wordNote = when (e.check) {
+            null -> "Got it."
+            true -> "Got it, and Mouna already knew it ✓"
+            false -> "Got it. Mouna missed it that time, so this one helps."
+        }
+        if (n >= Words.SHOTS) {
+            wordTeaching = null
+            applyChannel()
+        } else {
+            main.postDelayed(rearmWord, 1200) // a breath between examples
+        }
+    }
+
+    private fun wordMissed(e: Event.WordMissed) {
+        if (wordTeaching != e.id) return
+        wordNote = "That didn’t work. Mouth just the word, then keep your lips still."
+        main.postDelayed(rearmWord, 1200)
+    }
+
+    fun addWord(text: String): String = engine.addWord(text)
+
+    fun removeWord(id: String) {
+        if (wordTeaching == id) stopTeachingWord()
+        engine.removeWord(id)
     }
 
     /** "No" to the sentence on screen: show the next candidate, or give up after the last. */
     fun nextRead() {
         val pr = prompt as? Prompt.Read ?: return
-        if (pr.index + 1 < pr.sentences.size) prompt = pr.copy(index = pr.index + 1) else close()
+        if (pr.index + 1 < pr.options.size) prompt = pr.copy(index = pr.index + 1) else close()
     }
 
     private fun decided(d: Decision) {
@@ -592,7 +671,7 @@ class MounaApp(
             // Only from Speak, and never on a call: the call screen must stay where it is.
             pr == null -> if (via == "switch" && screen == Screen.SPEAK && !onCall) go(Screen.ASK)
             pr is Prompt.Heard -> sayHeard(pr.text)
-            pr is Prompt.Read -> sayRead(pr.sentences[pr.index])
+            pr is Prompt.Read -> sayRead(pr.options[pr.index])
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.CONFIRM -> choose(pr.d.options[0], via)
             // RESCUE: the switch confirms the side the eyes are on (the demo's "look left, raise an eyebrow").
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.RESCUE -> when (engine.live.value.gazeZone) {
@@ -681,6 +760,8 @@ class MounaApp(
         heard = null
         lastHeard = null
         prompt = null
+        wordTeaching = null
+        wordNote = null
         webName = ""
         dialNumber = ""
         dialName = null

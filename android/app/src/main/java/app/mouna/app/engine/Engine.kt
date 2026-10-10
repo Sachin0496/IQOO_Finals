@@ -85,6 +85,10 @@ data class Knowledge(
     /** The free-talk model in use (its label), and its id. */
     val freeModel: String = "",
     val freeModelId: String? = null,
+    /** Words taught to Lips (Words.kt): id -> text, examples per word, and the word the next clip teaches. */
+    val words: List<Pair<String, String>> = emptyList(),
+    val wordCounts: Map<String, Int> = emptyMap(),
+    val teachingWord: String? = null,
 )
 
 sealed interface Event {
@@ -97,7 +101,18 @@ sealed interface Event {
     /** A sign was seen; the most likely words from the ISL model, best first. */
     data class Signed(val guesses: List<Isl.Guess>, val ms: Double) : Event
     /** Free talk read a sentence: candidates best first (empty: nothing readable). [ms]: end of mouthing to sentences. */
-    data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double, val options: List<app.mouna.core.Personal.Option> = emptyList()) : Event
+    data class Read(
+        val sentences: List<String>,
+        val ms: Double,
+        val npuMs: Double,
+        val options: List<app.mouna.core.Personal.Option> = emptyList(),
+        /** The taught words' decision on the same clip (Words.kt); null: no words, or the clip is not word-sized. */
+        val words: Decision? = null,
+    ) : Event
+    /** A Lips clip taught word [id]; [check]: null for a first example, else whether Mouna already knew it. */
+    data class WordTaught(val id: String, val check: Boolean?) : Event
+    /** The clip meant to teach [id] could not be used (too long for a word, too short, or the lip crop was not ready). */
+    data class WordMissed(val id: String) : Event
     /** Recording for training (issue #5 B): the clip for [text] was saved; [read] is what free talk made of it. */
     data class Recorded(val text: String, val frames: Int, val read: String?) : Event
     /** Nod or double blink = yes, shake = no. Only while Mouna is asking (see [Engine.gesturesOn]). */
@@ -162,6 +177,13 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     /** A clear Speak match that may be kept as an example if the person does not correct it (see [SelfTrain]). */
     private var pendingSelf: Pair<String, FloatArray>? = null
     private var lastMs: Double? = null
+    // Words taught to Lips (worker thread): their own learner and examples, apart from the old phrase pack.
+    private var wordLearner = Learner()
+    private var wordExamples = Store.Examples(LinkedHashMap(), mutableListOf())
+    /** The last word-sized Lips clip and the words offered for it: confirming one teaches it, confirming another reading makes the clip a negative. */
+    private var lastWord: Pair<FloatArray, List<String>>? = null
+    @Volatile private var teachWord: String? = null
+    @Volatile private var wordCount = 0
     private var isl: Isl? = null
     @Volatile private var islKnown = false
     @Volatile private var signMode = false
@@ -234,6 +256,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             learner = Learner()
             for ((k, xs) in examples.samples) for (x in xs) learner.addSample(k, x)
             for (x in examples.negatives) learner.addNegative(x)
+            loadWords()
             ready = true
             publish(report)
             Log.i(PERF, "encoder ready in ${SystemClock.elapsedRealtime() - t0} ms (${encoder.label})")
@@ -261,7 +284,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
 
     /** Tells the sensor what is consumed right now, so it does not produce what nobody reads (see [Sensor.wantCrop]). */
     private fun syncSensor(s: Sensor) {
-        val crop = ready && listen != Listen.PAUSED
+        val crop = ready && (listen != Listen.PAUSED || (freeOn && (wordCount > 0 || teachWord != null)))
         if (s.wantCrop != crop) s.wantCrop = crop
         val blend = personalSwitch != null || setupSeen
         if (s.wantBlend != blend) s.wantBlend = blend
@@ -312,8 +335,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                 perfN = 0; perfDt = 0; perfLm = 0f; perfAn = 0f
             }
         }
-        if (freeOn && openVsr != null) {
-            freeSegmenter.push(f)?.let { c -> submit(freeWorker) { readClip(c) } }
+        if (freeOn && (openVsr != null || teachWord != null || (ready && wordCount > 0))) {
+            freeSegmenter.push(f)?.let { c -> lipsClip(c) }
         } else {
             freeSegmenter.reset()
         }
@@ -452,6 +475,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             freeLoading = k.freeLoading,
             freeModel = k.freeModel,
             freeModelId = k.freeModelId,
+            words = store.words,
+            wordCounts = wordLearner.intents.associateWith { wordLearner.count(it) },
+            teachingWord = teachWord,
         )
     }
 
@@ -511,6 +537,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         store.wipe()
         learner = Learner()
         examples = Store.Examples(LinkedHashMap(), mutableListOf())
+        wordLearner = Learner()
+        wordExamples = Store.Examples(LinkedHashMap(), mutableListOf())
+        lastWord = null
+        teachWord = null
+        wordCount = 0
         pendingSelf = null
         personalSwitch = null
         gazeModel = null
@@ -603,6 +634,105 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         store.freeTalkSentences = (store.freeTalkSentences.filter { !it.equals(t, ignoreCase = true) } + t).takeLast(MAX_LEARNED)
     }
 
+    // ---------------- words taught to Lips (Words.kt) ----------------
+
+    /** One Lips clip (analysis thread): it teaches the armed word, or is read, with the taught words matched alongside. */
+    private fun lipsClip(c: Clip) {
+        val word = teachWord
+        if (word != null) {
+            onWorker { teachWordFrom(c, word) }
+            return
+        }
+        val match = if (ready && wordCount > 0) java.util.concurrent.CompletableFuture<Decision?>().also { f -> onWorker { f.complete(matchWords(c)) } } else null
+        submit(freeWorker) { readClip(c, match) }
+    }
+
+    private val wordsKey get() = "words-${encoder.id}"
+
+    /** Worker thread, after the encoder is up: the taught words' examples, for this encoder. */
+    private fun loadWords() {
+        wordExamples = store.load(wordsKey)
+        val ids = store.words.map { it.first }.toSet()
+        wordExamples.samples.keys.retainAll(ids)
+        wordLearner = Learner()
+        for ((k, xs) in wordExamples.samples) for (x in xs) wordLearner.addSample(k, x)
+        for (x in wordExamples.negatives) wordLearner.addNegative(x)
+        wordCount = wordLearner.intents.size
+    }
+
+    /** Worker thread: the taught words' decision for a Lips clip, or null when the clip is not word-sized. */
+    private fun matchWords(c: Clip): Decision? {
+        val wc = Words.clip(c) ?: return null
+        val emb = runCatching { encoder.embed(wc) }.onFailure { Log.e(TAG, "word embed", it) }.getOrNull() ?: return null
+        val d = decide(wordLearner.predict(emb), careful = store.careful)
+        lastWord = emb to (if (Words.offers(d)) d.options else emptyList())
+        return d
+    }
+
+    /** Worker thread: one example of [id] from a Lips clip. */
+    private fun teachWordFrom(c: Clip, id: String) {
+        if (teachWord != id) return // disarmed meanwhile
+        val emb = Words.clip(c)?.let { wc -> runCatching { encoder.embed(wc) }.onFailure { Log.e(TAG, "word embed", it) }.getOrNull() }
+        if (emb == null) {
+            _events.tryEmit(Event.WordMissed(id))
+            return
+        }
+        val check = wordLearner.teach(id, emb)
+        wordExamples.samples.getOrPut(id) { mutableListOf() }.add(emb)
+        store.save(wordsKey, wordExamples)
+        wordCount = wordLearner.intents.size
+        teachWord = null
+        publish()
+        _events.tryEmit(Event.WordTaught(id, check))
+    }
+
+    /** A new word for Lips: [text] is what Mouna says, in any language. Teach it with [teachWord]. */
+    fun addWord(text: String): String {
+        val id = "w_" + System.currentTimeMillis().toString(36)
+        store.words = store.words + (id to text.trim())
+        refresh()
+        return id
+    }
+
+    fun removeWord(id: String) = onWorker {
+        store.words = store.words.filter { it.first != id }
+        wordLearner.forget(id)
+        wordExamples.samples.remove(id)
+        store.save(wordsKey, wordExamples)
+        wordCount = wordLearner.intents.size
+        if (teachWord == id) teachWord = null
+        publish()
+    }
+
+    /** The next Lips clip becomes an example of [id] (null: stop). Lips must be listening ([freeTalk]). */
+    fun teachWord(id: String?) = onWorker {
+        teachWord = id
+        onAnalysis { freeSegmenter.reset() }
+        publish()
+    }
+
+    /** The person confirmed taught word [id] for the last clip: one more example of it, up to MAX_SHOTS. */
+    fun wordConfirmed(id: String) = onWorker {
+        val (e, _) = lastWord ?: return@onWorker
+        lastWord = null
+        if (wordLearner.count(id) == 0 || wordLearner.count(id) >= CoreConstants.MAX_SHOTS) return@onWorker
+        wordLearner.addSample(id, e)
+        wordExamples.samples.getOrPut(id) { mutableListOf() }.add(e)
+        store.save(wordsKey, wordExamples)
+        publish()
+    }
+
+    /** The person confirmed another reading although words were offered: that clip is "not one of my words". */
+    fun wordPassed() = onWorker {
+        val (e, offered) = lastWord ?: return@onWorker
+        lastWord = null
+        if (offered.isEmpty()) return@onWorker
+        wordLearner.addNegative(e)
+        wordExamples.negatives.add(e)
+        while (wordExamples.negatives.size > MAX_WORD_NEGATIVES) wordExamples.negatives.removeAt(0)
+        store.save(wordsKey, wordExamples)
+    }
+
     /** The free-talk models on the phone (Settings > Free talk model). */
     fun freeTalkModels(): List<OpenVsr.Model> = runCatching { OpenVsr.models(context) }.getOrDefault(emptyList())
 
@@ -658,9 +788,14 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         recordTo = if (file != null && text != null) file to text else null
     }
 
-    private fun readClip(c: Clip) {
-        val r = openVsr ?: return
+    private fun readClip(c: Clip, words: java.util.concurrent.Future<Decision?>?) {
         val endMs = c.frames.last().tMs
+        val r = openVsr ?: run {
+            // Lips is still loading (a first NPU set-up takes minutes): taught words alone
+            val d = words?.let { runCatching { it.get(WORD_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() }
+            if (d != null && freeOn) _events.tryEmit(Event.Read(emptyList(), (SystemClock.uptimeMillis() - endMs).toDouble(), 0.0, words = d))
+            return
+        }
         runCatching {
             val (crops, t) = c.avsrCrops()
             recordTo?.let { (f, text) ->
@@ -690,7 +825,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, decode ${"%.0f".format(res.decodeMs)} ms (${res.steps} steps), " +
                 "yours ${"%.0f".format(res.personalMs)} ms, total ${"%.0f".format(ms)} ms -> " +
                 res.options.joinToString(" | ") { (if (it.personal) "*" else "") + it.text + " %.1f".format(it.score) })
-            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs, res.options))
+            // the words were matched on the worker meanwhile (~20 ms on the NPU): long done by now
+            val d = words?.let { runCatching { it.get(WORD_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() }
+            if (d != null) ftLog("words: ${d.kind} ${d.options.joinToString()}")
+            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs, res.options, d))
         }.onFailure { ftLog("free talk", it) }
     }
 
@@ -762,5 +900,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         private const val PERF = "MounaPerf"
         private const val MAX_PERSONAL = 200 // 25 scorer runs on the NPU (~15 ms each)
         private const val MAX_LEARNED = 200
+        /** How long a Lips reading waits for the taught words' match (it runs in parallel and takes ~20 ms). */
+        private const val WORD_WAIT_MS = 400L
+        /** "Not one of my words" examples kept from confirmations; the oldest go first. */
+        private const val MAX_WORD_NEGATIVES = 40
     }
 }
