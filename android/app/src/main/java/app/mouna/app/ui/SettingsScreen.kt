@@ -151,6 +151,45 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 SetupRow("Look to choose", if (k.gazeReady) "Calibrated · look left or right" else "Pick between two pictures with your eyes", k.gazeReady,
                     if (k.gazeReady) "Redo" else "Set up") { app.go(Screen.EYES) }
+                Spacer(Modifier.height(12.dp))
+                val recorded = app.recordedCount
+                SetupRow("Teach Lips", if (recorded > 0) "$recorded sentences recorded · they are offered first" else "Mouth sentences you want to say, so Lips learns you",
+                    recorded > 0, "Record") { app.go(Screen.RECORD) }
+            }
+        }
+
+        val models = remember(k.freeModelId, k.freeLoading) { app.freeTalkModels() }
+        if (models.size > 1) {
+            Spacer(Modifier.height(14.dp))
+            Card {
+                Column {
+                    SectionLabel("Lips model")
+                    Text(
+                        "The original reads anyone. A model tuned to one person reads that person better, and others less well.",
+                        style = Type.body.copy(fontSize = 13.sp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        models.forEach { m ->
+                            Chip(m.label, m.id == (k.freeModelId ?: models.first().id)) {
+                                if (m.id != k.freeModelId && !k.freeLoading) app.chooseFreeTalkModel(m.id)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val status = when {
+                        k.freeLoading -> k.freeTalk
+                        k.freeReady -> "In use: ${k.freeModel}"
+                        else -> k.freeTalk
+                    }
+                    Text(status, style = Type.body.copy(fontSize = 13.sp, color = if (k.freeReady) Ink.leaf else Ink.mute))
+                    models.filter { !it.ready }.takeIf { it.isNotEmpty() }?.let { notReady ->
+                        Text(
+                            "First use of ${notReady.joinToString { it.label }} sets it up on the NPU (about 25 min, keep the phone unlocked).",
+                            style = Type.body.copy(fontSize = 12.sp, color = Ink.mute),
+                        )
+                    }
+                }
             }
         }
 
@@ -343,6 +382,7 @@ private fun Advanced(app: MounaApp, k: Knowledge, openProbe: () -> Unit, off: ()
                 )
                 Spacer(Modifier.height(10.dp))
                 BigButton("Open the probe", Tone.NO, Modifier.fillMaxWidth(), onClick = openProbe)
+
                 Spacer(Modifier.height(14.dp))
                 Text("On a call, play Mouna's voice as (which one the microphone hears best differs by phone):", style = Type.body.copy(fontSize = 13.sp))
                 Spacer(Modifier.height(8.dp))

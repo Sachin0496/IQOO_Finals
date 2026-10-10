@@ -31,7 +31,7 @@ import app.mouna.core.Decision
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 
-enum class Screen { SPEAK, TEACH, ASK, CALL, SETTINGS, EYES, SWITCH }
+enum class Screen { SPEAK, ASK, CALL, SETTINGS, EYES, SWITCH, RECORD }
 
 /** On a call, the lower half of the Call screen: tap-to-speak phrases, or the live Speak screen (lips, sign). */
 enum class CallTab { PHRASES, MOUTH }
@@ -49,11 +49,15 @@ sealed interface Prompt {
     data class Heard(val text: String) : Prompt
     /** Sign mode wasn't sure: the likeliest ISL words to pick from. */
     data class Signed(val words: List<String>) : Prompt
-    /** Free talk read a sentence: always confirmed before it is spoken; shake = the next candidate. */
-    data class Read(val sentences: List<String>, val index: Int = 0) : Prompt
+    /** Lips read a sentence: always confirmed before it is spoken; shake = the next candidate. */
+    data class Read(val sentences: List<String>, val index: Int = 0, val personal: List<Boolean> = emptyList()) : Prompt
 }
 
-enum class Channel { LIPS, VOICE, SIGN, FREE }
+/**
+ * Lips: open-vocabulary lip reading (once called free talk), every sentence confirmed. The old phrase-pack lips
+ * (taught phrases, encoder + core) is off for now; the engine keeps it for learning new words later.
+ */
+enum class Channel { LIPS, VOICE, SIGN }
 
 data class Said(val phrase: Phrase?, val text: String, val via: String)
 
@@ -111,9 +115,6 @@ class MounaApp(
     var voiceLoading by mutableStateOf(false)
         private set
     private var hearingRequested = false
-    /** Voice teaching: the phrase whose next utterance becomes a template. */
-    var voiceTeaching by mutableStateOf<String?>(null)
-        private set
     var voiceTemplates by mutableStateOf(store.voiceTemplates)
         private set
     private var lastHeard: String? = null
@@ -191,7 +192,7 @@ class MounaApp(
             l.onState = { st -> if (l === link) onLinkState(st) }
         }
         // Whisper competes with the NPU encoder for the CPU at start-up, so it loads only when it is needed: the Voice
-        // channel (chosen now or restored from last time), voice teaching, or once the encoder is ready.
+        // channel (chosen now or restored from last time), or once the encoder is ready.
         if (channel == Channel.VOICE) ensureHearing() else waitForEncoder()
     }
 
@@ -260,11 +261,6 @@ class MounaApp(
         private set
     var lastAnswerVia by mutableStateOf<String?>(null)
         private set
-    var lastTeach by mutableStateOf<Event.Taught?>(null)
-        private set
-    /** Counts taught examples, so "keep going" fires even when two in a row look the same. */
-    var teachSeq by mutableStateOf(0)
-        private set
 
     /** Where lips, voice and sign listen: Speak, or the Mouth/Sign half of the Call screen. */
     private fun onSpeakSurface() = screen == Screen.SPEAK || (screen == Screen.CALL && callTab == CallTab.MOUTH)
@@ -273,19 +269,19 @@ class MounaApp(
         if (s != screen) showSaid(null) // what was said belongs to the screen it was said on
         screen = s
         prompt = null
-        voiceTeaching = null
+        if (s != Screen.RECORD && recording) { recording = false; engine.recordNext(null, null) } // leaving stops recording
         engine.gazeOn(false)
         applyChannel()
     }
 
-    /** Lips listen through the camera; Voice through the microphone. Only on Speak (Teach arms them itself). */
+    /** Lips listen through the camera; Voice through the microphone. Only on Speak (and Record, while recording). */
     private fun applyChannel() {
         val speak = onSpeakSurface() && prompt == null
-        engine.listen(if (speak && channel == Channel.LIPS) Listen.SPEAK else Listen.PAUSED)
+        engine.listen(Listen.PAUSED) // phrase-pack lips is off (see Channel)
         armGestures(prompt != null || screen == Screen.ASK)
         engine.signing(onSpeakSurface() && channel == Channel.SIGN)
-        engine.freeTalk(speak && channel == Channel.FREE)
-        val mic = ((speak && channel == Channel.VOICE) || voiceTeaching != null) && !onCall
+        engine.freeTalk((speak && channel == Channel.LIPS) || (screen == Screen.RECORD && recording))
+        val mic = speak && channel == Channel.VOICE && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
     }
@@ -328,13 +324,6 @@ class MounaApp(
 
     private fun onHeard(text: String) {
         heard = text
-        val teach = voiceTeaching
-        if (teach != null) {
-            if (text.isNotBlank()) addTemplate(teach, text)
-            voiceTeaching = null
-            applyChannel()
-            return
-        }
         if (!onSpeakSurface() || prompt != null || text.isBlank()) return
         val ranked = VoiceMatcher.rank(text, voiceCandidates())
         if (Stage.debug) android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
@@ -376,22 +365,6 @@ class MounaApp(
         val list = (voiceTemplates[id].orEmpty() + text).takeLast(6)
         voiceTemplates = voiceTemplates + (id to list)
         store.voiceTemplates = voiceTemplates
-    }
-
-    /** Teach: the next thing the person says becomes a template for [id]. */
-    fun teachVoice(id: String) {
-        askMic { granted ->
-            if (!granted) return@askMic
-            ensureHearing()
-            heard = null
-            voiceTeaching = id
-            applyChannel()
-        }
-    }
-
-    fun stopVoiceTeaching() {
-        voiceTeaching = null
-        applyChannel()
     }
 
     /** A sign: speak a clear winner, otherwise offer the likeliest words. Words are spoken by the phone's voice. */
@@ -441,37 +414,104 @@ class MounaApp(
     fun onEvent(e: Event) {
         when (e) {
             is Event.Decided -> if (onSpeakSurface() && prompt == null) decided(e.decision)
-            is Event.Taught -> {
-                lastTeach = e
-                teachSeq++
-            }
+            is Event.Taught -> Unit
             is Event.NegativeAdded -> Unit
             is Event.SwitchPressed -> switched("switch")
             is Event.Signed -> signed(e.guesses)
             is Event.Answer -> if (e.yes) switched(e.via) else shook()
             is Event.Looked -> looked(e.zone)
             is Event.Read -> read(e)
+            is Event.Recorded -> recorded(e)
         }
     }
 
-    // ---------------- free talk ----------------
+    // ---------------- lips (open vocabulary) ----------------
+
+    // Recording for training (issue #5 B): prompted sentences, mouthed silently, saved as mouth crops + text for the
+    // laptop fine-tune (python -m mouna_encoder avsr-adapt). No video is kept: only the 96 px grey mouth crops.
+    val recordPrompts: List<String> by lazy { engine.recordPrompts() }
+    /** Sentences recorded so far, all sessions (Settings shows it). Reads [recordCount] so it updates after recording. */
+    val recordedCount: Int
+        get() {
+            @Suppress("UNUSED_VARIABLE") val changed = recordCount
+            return engine.recordedCount()
+        }
+    var recordIndex by mutableStateOf(0)
+        private set
+    var recording by mutableStateOf(false)
+        private set
+    var recordCount by mutableStateOf(0)
+        private set
+    var lastRecorded by mutableStateOf<Event.Recorded?>(null)
+        private set
+    private var recordSession: java.io.File? = null
+
+    fun startRecording() {
+        recordSession = java.io.File(engine.trainFolder(),
+            java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date()))
+        // carry on from the first sentence not recorded yet (any session); everything recorded -> from the top again
+        val done = engine.recordedTexts().map { it.lowercase() }.toSet()
+        recordIndex = recordPrompts.indexOfFirst { it.lowercase() !in done }.coerceAtLeast(0)
+        recordCount = 0
+        lastRecorded = null
+        recording = true
+        armRecording()
+        applyChannel()
+    }
+
+    fun stopRecording() {
+        recording = false
+        engine.recordNext(null, null)
+        applyChannel()
+    }
+
+    /** Skip this sentence (or go back one with [step] = -1 to redo it; its file is overwritten). */
+    fun recordStep(step: Int) {
+        recordIndex = (recordIndex + step).coerceIn(0, recordPrompts.size - 1)
+        armRecording()
+    }
+
+    private fun armRecording() {
+        val dir = recordSession ?: return
+        if (!recording || recordIndex >= recordPrompts.size) return engine.recordNext(null, null)
+        engine.recordNext(java.io.File(dir, "%03d".format(recordIndex)), recordPrompts[recordIndex])
+    }
+
+    private fun recorded(e: Event.Recorded) {
+        lastRecorded = e
+        recordCount++
+        if (recordIndex + 1 >= recordPrompts.size) {
+            stopRecording()
+            return
+        }
+        recordIndex++
+        armRecording()
+    }
 
     private fun read(e: Event.Read) {
-        if (!onSpeakSurface() || prompt != null || channel != Channel.FREE) return
-        val sentences = e.sentences.map(::sentenceCase).distinct().take(4)
-        if (sentences.isEmpty()) {
+        if (!onSpeakSurface() || prompt != null || channel != Channel.LIPS) return
+        // open readings and the person's own sentences, merged by the model's score (Personal.merge); else open only
+        val opts = e.options.ifEmpty { e.sentences.map { app.mouna.core.Personal.Option(it, 0.0, false) } }
+            .map { it.copy(text = sentenceCase(it.text)) }.distinctBy { it.text }.take(4)
+        if (opts.isEmpty()) {
             said = Said(null, "I couldn't read that. Try again, a little slower.", "none")
             return
         }
-        prompt = Prompt.Read(sentences)
-        applyChannel() // free talk waits while the person confirms
+        prompt = Prompt.Read(opts.map { it.text }, personal = opts.map { it.personal })
+        applyChannel() // lips wait while the person confirms
     }
 
-    /** Free talk: say the confirmed sentence in the phone's voice (English: the model reads English). */
+    /** Lips' models (Settings): re-read when Settings opens; switching closes one model and loads the other. */
+    fun freeTalkModels() = engine.freeTalkModels()
+
+    fun chooseFreeTalkModel(id: String) = engine.chooseFreeTalkModel(id)
+
+    /** Lips: say the confirmed sentence in the phone's voice (English: the model reads English). */
     fun sayRead(text: String) {
+        engine.rememberSentence(text) // offered again next time, scored by the model (issue #5 A)
         prompt = null
         voice.say(null, text, Lang.EN, Voice.DEVICE)
-        said = Said(null, text, "free talk")
+        said = Said(null, text, "lips")
         applyChannel()
     }
 
@@ -635,14 +675,11 @@ class MounaApp(
         voiceId = store.voice
         careful = store.careful
         selfTrain = store.selfTrain
-        channel =runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
+        channel = runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
         callMode = storedCallMode()
         callServerNow = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
-        lastTeach = null
-        teachSeq = 0
         heard = null
         lastHeard = null
-        voiceTeaching = null
         prompt = null
         webName = ""
         dialNumber = ""

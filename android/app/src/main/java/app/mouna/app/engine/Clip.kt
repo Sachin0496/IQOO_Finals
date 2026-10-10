@@ -37,6 +37,8 @@ class Segmenter(
     private val tail: Int = 0,
     /** Still frames kept at the end of a clip (the rest of the [tail] is cut: long stillness invites repeated words). */
     private val keepTail: Int = Int.MAX_VALUE,
+    /** The crop this segmenter's reader needs: the lip encoder's by default, free talk's Auto-AVSR crop for free talk. */
+    private val hasCrop: (Frame) -> Boolean = { it.crop != null },
 ) {
     private val ring = ArrayDeque<Frame>()
     private var current: MutableList<Frame>? = null
@@ -46,7 +48,7 @@ class Segmenter(
 
     /** Feed every frame; returns a finished clip on the frame the utterance ends. */
     fun push(f: Frame): Clip? {
-        if (!f.face || f.features == null || f.crop == null) {
+        if (!f.face || f.features == null || !hasCrop(f)) {
             // A lost face ends an utterance early; a clip with a gap would teach the wrong thing.
             return current?.let { finish() }
         }

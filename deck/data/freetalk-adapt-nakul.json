@@ -1,0 +1,136 @@
+{
+ "what": "Free talk tuned to one person (issue #5 B): LoRA rank 8 on encoder + decoder attention/feed-forward and the front end's BatchNorm; base weights unchanged",
+ "data": "105 prompted silent recordings from the app; held out by sentence: 21 sentences never trained on",
+ "training": {
+  "epochs": 8,
+  "lr": 0.0005,
+  "batch": 4,
+  "device": "cpu",
+  "seconds": 2010
+ },
+ "before": {
+  "wer": 0.4787,
+  "exact": "5/21",
+  "list_first": "20/21"
+ },
+ "after": {
+  "wer": 0.2553,
+  "exact": "10/21",
+  "list_first": "21/21"
+ },
+ "held_out": [
+  {
+   "ref": "Is my family coming today",
+   "before": "THIS IS MY FAMILY COMING TODAY",
+   "after": "IT'S MY FAMILY COMING TODAY"
+  },
+  {
+   "ref": "There is something in my throat",
+   "before": "THAT IS SOMETHING IN MY STROKE",
+   "after": "THAT IS SOMETHING IN MY THROAT"
+  },
+  {
+   "ref": "Tell them I am fine",
+   "before": "OLYMPIA I AM AFRAID",
+   "after": "TELL ME I AM FINE"
+  },
+  {
+   "ref": "I feel cold",
+   "before": "I FAILED COLD",
+   "after": "I FEEL COLD"
+  },
+  {
+   "ref": "How are you today",
+   "before": "WHAT ARE YOU DOING TODAY",
+   "after": "HOW ARE YOU TODAY"
+  },
+  {
+   "ref": "Can I have some tea",
+   "before": "GALLI HAVE SOME MONEY",
+   "after": "CAN I HAVE SOME MONEY"
+  },
+  {
+   "ref": "Please help me lie down",
+   "before": "PLEASE KILL ME LIKE NOW",
+   "after": "PLEASE HELP ME LIE DOWN"
+  },
+  {
+   "ref": "Please wait a moment",
+   "before": "PLEASE FACE THAT MOMENT",
+   "after": "PLEASE FACE THE MOMENT"
+  },
+  {
+   "ref": "I am not hungry",
+   "before": "I AM NOT HUNGRY",
+   "after": "I AM NOT HUNGRY"
+  },
+  {
+   "ref": "I feel worse today",
+   "before": "I FEEL WORSE TODAY",
+   "after": "I FEEL WORSE TODAY"
+  },
+  {
+   "ref": "I want to watch the news",
+   "before": "I WANT TO WATCH THE NEWS",
+   "after": "I WANT TO WATCH THE NEWS"
+  },
+  {
+   "ref": "I cannot sleep",
+   "before": "I CANNOT SLEEP I AM NOT SLEEPING I AM SLEEPING",
+   "after": "I CANNOT SLEEP"
+  },
+  {
+   "ref": "When can I go home",
+   "before": "WHEN CAN YOU COME",
+   "after": "WHEN CAN YOU GO HOME"
+  },
+  {
+   "ref": "Bring my blue shirt tomorrow",
+   "before": "I'M PLAYING MY COMPUTER TRICK TOMORROW",
+   "after": "I'M BLEEDING MY BLOOD SUGAR TOMORROW"
+  },
+  {
+   "ref": "Bring some fruit next time",
+   "before": "BUT IF SOME FOOD IS TIME",
+   "after": "BUT IF SOME FOOD TAKES TIME"
+  },
+  {
+   "ref": "I miss home",
+   "before": "I MISS HOME",
+   "after": "I MISS HOME"
+  },
+  {
+   "ref": "How was your day",
+   "before": "FOR YOUR DAY",
+   "after": "FOR YOUR DAY"
+  },
+  {
+   "ref": "Do not leave me alone",
+   "before": "PLEASE DO NOT LEAVE ME ALONE",
+   "after": "PLEASE DON'T LEAVE ME ALONE"
+  },
+  {
+   "ref": "My throat hurts when I swallow",
+   "before": "MY SOUL AND FINITE IS FAR LOWER",
+   "after": "MY SHORT HAND IS VERY HIGH"
+  },
+  {
+   "ref": "I feel better today",
+   "before": "I FEEL BETTER TODAY",
+   "after": "I FEEL BETTER TODAY"
+  },
+  {
+   "ref": "I am scared",
+   "before": "I AM SAD",
+   "after": "I AM SCARED"
+  }
+ ],
+ "caveat": "one person, one evening (three sessions minutes apart), 20% held out; list = the 154 prompts",
+ "on_the_phone": {
+  "measured": "2026-10-10 04:15-04:16, iQOO 15, tuned graphs fp16 on the NPU (adapter folded in), trimmed clips, personal list = his recorded sentences + the app's phrases",
+  "held_out_first_suggestion_correct": "21/21",
+  "note": "the 21 held-out sentences were never trained on, but they are in his sentence list (he recorded them), which is how the app is meant to be used",
+  "npu_selftest": "argmax agrees on every frame (48/48, 96/96, 192/192); NPU 22 / 41 / 94 ms",
+  "first_start_compile": "about 25 min for 9 graphs, once (compiled one at a time: loading six while compiling the seventh got the app killed for memory)"
+ }
+}

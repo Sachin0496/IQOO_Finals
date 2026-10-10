@@ -70,6 +70,42 @@ object FreeTalk {
         return doubleArrayOf(a, -b, tx, b, a, ty)
     }
 
+    private const val TRIM_REL = 0.35
+    private const val TRIM_MIN = 1.2
+    private const val TRIM_PAD = 6
+
+    /**
+     * [start, end) of the moving part of a clip, from the mouth crops themselves (port of avsr.py active_span): mean
+     * absolute frame-to-frame change over the mouth (rows 24-71, columns 16-79), averaged over 5 frames, above
+     * max(1.2, 0.35 x its 90th percentile), padded by 6 frames. Measured on 24 silent recordings: clips ran on for
+     * seconds and the decoder filled the stillness with invented words; trimming took WER 114% -> 85%.
+     */
+    fun activeSpan(crops: List<ByteArray>): IntRange {
+        val n = crops.size
+        if (n == 0) return IntRange.EMPTY
+        val mv = DoubleArray(n)
+        for (i in 1 until n) {
+            val a = crops[i - 1]
+            val b = crops[i]
+            var sum = 0L
+            for (r in 24 until 72) for (c in 16 until 80) {
+                val o = r * CROP + c
+                sum += kotlin.math.abs((b[o].toInt() and 0xff) - (a[o].toInt() and 0xff))
+            }
+            mv[i] = sum / (48.0 * 64.0)
+        }
+        val sm = DoubleArray(n) { i -> (maxOf(0, i - 2)..minOf(n - 1, i + 2)).sumOf { mv[it] * 0.2 } }
+        val sorted = sm.sorted()
+        val h = (n - 1) * 0.9
+        val lo = kotlin.math.floor(h).toInt()
+        val p90 = if (lo + 1 < n) sorted[lo] + (h - lo) * (sorted[lo + 1] - sorted[lo]) else sorted[lo]
+        val thr = maxOf(TRIM_MIN, TRIM_REL * p90)
+        val first = sm.indexOfFirst { it > thr }
+        if (first < 0) return 0 until n
+        val last = sm.indexOfLast { it > thr }
+        return maxOf(0, first - TRIM_PAD) until minOf(n, last + TRIM_PAD + 1)
+    }
+
     /** Index of the bucket a clip of [frames] frames runs in (the longest one if it is longer: the clip is cut). */
     fun bucket(frames: Int): Int = BUCKETS.firstOrNull { frames <= it } ?: BUCKETS.last()
 

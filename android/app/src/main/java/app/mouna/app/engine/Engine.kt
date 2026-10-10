@@ -76,8 +76,13 @@ data class Knowledge(
     /** The ISL model has been looked for (found or not): until then the screen says "Loading…", not "No ISL model". */
     val islKnown: Boolean = false,
     /** Free talk (open-vocabulary English, NPU): status line, and whether it is ready to read. */
-    val freeTalk: String = "Free talk · Loading…",
+    val freeTalk: String = "Lips · Loading…",
     val freeReady: Boolean = false,
+    /** Free talk is loading or setting up a model (a first start compiles it for the NPU: minutes). */
+    val freeLoading: Boolean = true,
+    /** The free-talk model in use (its label), and its id. */
+    val freeModel: String = "",
+    val freeModelId: String? = null,
 )
 
 sealed interface Event {
@@ -90,7 +95,9 @@ sealed interface Event {
     /** A sign was seen; the most likely words from the ISL model, best first. */
     data class Signed(val guesses: List<Isl.Guess>, val ms: Double) : Event
     /** Free talk read a sentence: candidates best first (empty: nothing readable). [ms]: end of mouthing to sentences. */
-    data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double) : Event
+    data class Read(val sentences: List<String>, val ms: Double, val npuMs: Double, val options: List<app.mouna.core.Personal.Option> = emptyList()) : Event
+    /** Recording for training (issue #5 B): the clip for [text] was saved; [read] is what free talk made of it. */
+    data class Recorded(val text: String, val frames: Int, val read: String?) : Event
     /** Nod or double blink = yes, shake = no. Only while Mouna is asking (see [Engine.gesturesOn]). */
     data class Answer(val yes: Boolean, val via: String) : Event
     data class Looked(val zone: Zone) : Event
@@ -113,7 +120,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     /** Free talk owns its own thread: its first NPU compile takes minutes and must not hold up the lip encoder. */
     private val freeWorker = Executors.newSingleThreadExecutor()
     @Volatile private var openVsr: OpenVsr? = null
-    @Volatile var freeTalkStatus = "Free talk · Loading…"
+    @Volatile var freeTalkStatus = "Lips · Loading…"
         private set
     @Volatile private var freeOn = false
     private var perfN = 0
@@ -121,10 +128,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     private var perfLm = 0f
     private var perfAn = 0f
     /**
-     * Sentences, not phrases: up to 10 s; pauses between words (under ~0.7 s at the ~20 fps the front camera gives)
-     * don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
+     * Sentences, not phrases (frames at the 30 fps the camera now asks for): up to 10 s; pauses between words under
+     * ~0.7 s don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
+     * Waits for free talk's own crop: the lip encoder's crop is only made while Lips listens.
      */
-    private val freeSegmenter = Segmenter(preRoll = 6, minFrames = 22, maxFrames = 300, tail = 14, keepTail = 6)
+    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 30, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
@@ -230,14 +238,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             publish(report)
             Log.i(PERF, "encoder ready in ${SystemClock.elapsedRealtime() - t0} ms (${encoder.label})")
             // Free talk after the lip encoder (start-up order above), on its own thread: a first NPU compile takes minutes.
-            submit(freeWorker) {
-                val (r, msg) = runCatching { OpenVsr.open(context) { ftLog(it) } }
-                    .getOrElse { null to "Free talk: ${it.message}" }
-                openVsr = r
-                freeTalkStatus = msg
-                ftLog(msg)
-                _knowledge.value = _knowledge.value.copy(freeTalk = msg.lineSequence().first(), freeReady = r != null)
-            }
+            openFreeTalk(store.freeTalkModel)
 
             val t1 = SystemClock.elapsedRealtime()
             isl = runCatching { Isl.open(context) }.getOrNull()
@@ -453,6 +454,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             islKnown = islKnown,
             freeTalk = freeTalkStatus.lineSequence().first(),
             freeReady = openVsr != null,
+            freeLoading = k.freeLoading,
+            freeModel = k.freeModel,
+            freeModelId = k.freeModelId,
         )
     }
 
@@ -577,7 +581,67 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         }
     }
 
-    /** Free talk listens (Speak screen, Free talk channel, no prompt open). */
+    /**
+     * The person's own sentences for free talk (issue #5 A): what they confirmed before (newest first), then their
+     * phrases and the family's words in English. Capped so scoring stays within a few NPU runs.
+     */
+    private fun personalSentences(): List<String> =
+        (store.freeTalkSentences.asReversed() + recordedSentences() + phrases.phrases.map { it.say(Lang.EN) })
+            .map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.take(MAX_PERSONAL)
+
+    fun recordedCount(): Int = recordedSentences().size
+
+    fun recordedTexts(): List<String> = recordedSentences()
+
+    /** Sentences this person recorded for training (avsr/train/<session>/NNN.txt): what they want to say, so offered. */
+    @Volatile private var recorded: List<String>? = null
+
+    private fun recordedSentences(): List<String> = recorded ?: runCatching {
+        trainFolder().walkTopDown().filter { it.isFile && it.name.endsWith(".txt") && !it.name.endsWith(".t.txt") }
+            .sortedBy { it.path }.map { it.readText().trim() }.toList()
+    }.getOrDefault(emptyList()).also { recorded = it }
+
+    /** A confirmed free-talk sentence: offered again next time by the model's own score. */
+    fun rememberSentence(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        store.freeTalkSentences = (store.freeTalkSentences.filter { !it.equals(t, ignoreCase = true) } + t).takeLast(MAX_LEARNED)
+    }
+
+    /** The free-talk models on the phone (Settings > Free talk model). */
+    fun freeTalkModels(): List<OpenVsr.Model> = runCatching { OpenVsr.models(context) }.getOrDefault(emptyList())
+
+    /** Switch free talk to another model: the old one is closed first (one model in memory at a time). */
+    fun chooseFreeTalkModel(id: String) {
+        store.freeTalkModel = id
+        openFreeTalk(id)
+    }
+
+    private fun openFreeTalk(id: String?) = submit(freeWorker) {
+        openVsr?.close()
+        openVsr = null
+        val label = freeTalkModels().firstOrNull { it.id == id }?.label ?: "lip reading"
+        freeTalkStatus = "Lips · Loading $label…"
+        _knowledge.value = _knowledge.value.copy(freeTalk = freeTalkStatus, freeReady = false, freeLoading = true)
+        val (r, msg) = runCatching {
+            OpenVsr.open(context, id) { line ->
+                ftLog(line)
+                if ("compiling" in line) {
+                    freeTalkStatus = "Setting up $label on the NPU (first time only, about 25 min)…"
+                    _knowledge.value = _knowledge.value.copy(freeTalk = freeTalkStatus)
+                }
+            }
+        }.getOrElse { null to "Lips: ${it.message}" }
+        openVsr = r
+        freeTalkStatus = msg
+        ftLog(msg)
+        _knowledge.value = _knowledge.value.copy(
+            freeTalk = msg.lineSequence().first(), freeReady = r != null, freeLoading = false,
+            freeModel = r?.model?.label ?: "", freeModelId = r?.model?.id,
+        )
+    }
+
+    /** Free talk listens (Speak screen, Lips channel, no prompt open). */
     fun freeTalk(on: Boolean) {
         freeOn = on
     }
@@ -585,11 +649,38 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     /** QA (debug builds, adb broadcast): keep each free-talk clip's mouth crops in avsr/clips/ to replay on the laptop. */
     @Volatile var saveClips = false
 
+    /** The prompted sentences for recording (res/raw/freetalk_prompts.txt). */
+    fun recordPrompts(): List<String> =
+        context.resources.openRawResource(app.mouna.R.raw.freetalk_prompts).bufferedReader().readLines().map { it.trim() }.filter { it.isNotEmpty() }
+
+    /** Where recordings go: avsr/train/<session>/NNN.{bin,t.txt,txt} (adb pull for the laptop fine-tune). */
+    fun trainFolder(): java.io.File = java.io.File(OpenVsr.folder(context), "train")
+
+    /** Recording for training (issue #5 B): the next free-talk clip is saved as [file] (.bin crops, .t.txt ms, .txt text). */
+    @Volatile private var recordTo: Pair<java.io.File, String>? = null
+
+    fun recordNext(file: java.io.File?, text: String?) {
+        recordTo = if (file != null && text != null) file to text else null
+    }
+
     private fun readClip(c: Clip) {
         val r = openVsr ?: return
         val endMs = c.frames.last().tMs
         runCatching {
             val (crops, t) = c.avsrCrops()
+            recordTo?.let { (f, text) ->
+                recordTo = null
+                f.parentFile?.mkdirs()
+                java.io.File(f.path + ".bin").outputStream().use { o -> crops.forEach { o.write(it) } }
+                java.io.File(f.path + ".t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
+                java.io.File(f.path + ".txt").writeText(text)
+                val span = app.mouna.core.FreeTalk.activeSpan(crops) // the recording itself stays whole, for training
+                val read = runCatching { r.read(crops.slice(span), t.sliceArray(span)).sentences.firstOrNull() }.getOrNull()
+                ftLog("free talk: recorded ${f.name} (${crops.size} frames) \"$text\" -> ${read ?: "-"}")
+                recorded = null // the list is read again, with this sentence
+                _events.tryEmit(Event.Recorded(text, crops.size, read))
+                return@runCatching
+            }
             if (saveClips) runCatching {
                 val dir = java.io.File(OpenVsr.folder(context), "clips").apply { mkdirs() }
                 val name = java.text.SimpleDateFormat("HHmmss", java.util.Locale.US).format(java.util.Date())
@@ -597,11 +688,14 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                 java.io.File(dir, "$name.t.txt").writeText(t.joinToString("\n") { (it - t[0]).toString() })
                 ftLog("free talk: saved clip $name (${crops.size} frames)")
             }
-            val res = r.read(crops, t)
+            // read only the moving part: stillness around a sentence makes the decoder invent words (FreeTalk.activeSpan)
+            val span = app.mouna.core.FreeTalk.activeSpan(crops)
+            val res = r.read(crops.slice(span), t.sliceArray(span), personal = personalSentences())
             val ms = (SystemClock.uptimeMillis() - endMs).toDouble()
             ftLog("free talk: ${res.frames} frames, NPU ${"%.0f".format(res.npuMs)} ms, decode ${"%.0f".format(res.decodeMs)} ms (${res.steps} steps), " +
-                "total ${"%.0f".format(ms)} ms -> " + res.sentences.take(3).joinToString(" | "))
-            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs))
+                "yours ${"%.0f".format(res.personalMs)} ms, total ${"%.0f".format(ms)} ms -> " +
+                res.options.joinToString(" | ") { (if (it.personal) "*" else "") + it.text + " %.1f".format(it.score) })
+            if (freeOn) _events.tryEmit(Event.Read(res.sentences, ms, res.npuMs, res.options))
         }.onFailure { ftLog("free talk", it) }
     }
 
@@ -611,7 +705,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
      */
     fun freeTalkSelfTest() = freeWorker.execute {
         val r = openVsr ?: run { ftLog("free talk self-test: $freeTalkStatus"); return@execute }
-        val dir = OpenVsr.folder(context)
+        val dir = r.model?.dir ?: OpenVsr.folder(context)
         for (t in app.mouna.core.FreeTalk.BUCKETS) {
             val fx = java.io.File(dir, "selftest_t${t}_x.bin")
             if (!fx.exists()) continue
@@ -650,9 +744,11 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             val crops = List(n) { bytes.copyOfRange(it * 96 * 96, (it + 1) * 96 * 96) }
             val t = LongArray(n) { (it * 1000.0 / fps).toLong() }
             r.dump = java.io.File(file.parentFile, "dump_" + file.nameWithoutExtension)
-            val res = try { r.read(crops, t) } finally { r.dump = null }
+            val span = app.mouna.core.FreeTalk.activeSpan(crops)
+            val res = try { r.read(crops.slice(span), t.sliceArray(span), personal = personalSentences()) } finally { r.dump = null }
             ftLog("free talk read ${file.name}: ${res.frames} frames (bucket ${res.bucket}), NPU ${"%.1f".format(res.npuMs)} ms, " +
-                "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps)")
+                "decode ${"%.1f".format(res.decodeMs)} ms (${res.steps} steps), yours ${"%.0f".format(res.personalMs)} ms")
+            res.options.forEach { o -> ftLog("  option ${if (o.personal) "(yours) " else ""}${o.text} (${"%.2f".format(o.score)})") }
             res.sentences.take(5).forEachIndexed { i, s -> ftLog("  ${i + 1}. $s  (${"%.2f".format(res.scores[i])})") }
         }.onFailure { ftLog("free talk read", it) }
     }
@@ -669,5 +765,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     companion object {
         private const val TAG = "Mouna"
         private const val PERF = "MounaPerf"
+        private const val MAX_PERSONAL = 200 // 25 scorer runs on the NPU (~15 ms each)
+        private const val MAX_LEARNED = 200
     }
 }

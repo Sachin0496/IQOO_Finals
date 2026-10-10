@@ -96,7 +96,7 @@ fun Welcome(onContinue: () -> Unit) {
                 Spacer(Modifier.height(36.dp))
                 Reveal(shown, 1) { Point(MounaIcons.RecordVoiceOver, "Mouth or sign", "Mouna speaks it aloud, in your caregiver’s language.") }
                 Spacer(Modifier.height(24.dp))
-                Reveal(shown, 2) { Point(MounaIcons.School, "Teach it your phrases", "A minute of practice makes them yours.") }
+                Reveal(shown, 2) { Point(MounaIcons.School, "It learns you", "Sentences you confirm are offered first next time.") }
                 Spacer(Modifier.height(24.dp))
                 Reveal(shown, 3) { Point(Icons.Rounded.Lock, "Private by design", "Nothing you show the camera leaves this phone.") }
                 Spacer(Modifier.height(24.dp))
