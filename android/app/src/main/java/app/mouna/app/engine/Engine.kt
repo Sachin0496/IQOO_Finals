@@ -51,9 +51,11 @@ data class Live(
     val fps: Float = 0f,
     val switchLevel: Double = 0.0,
     val gazeZone: Zone = Zone.CENTER,
-    /** Sign mode: a body is in view / hands are up / a sign is being recorded. */
+    /** Sign mode: a body is in view / hands seen / a sign is being recorded. */
     val body: Boolean = false,
     val hands: Int = 0,
+    /** A wrist is above chest level (what starts a sign). */
+    val handsRaised: Boolean = false,
     val signing: Boolean = false,
     val yawDeg: Float = 0f,
 )
@@ -165,10 +167,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     @Volatile private var signMode = false
     /** The switch setup (or anything else that captures frames) has run: the landmarker keeps its blendshape output. */
     @Volatile private var setupSeen = false
-    // analysis thread: the sign being recorded
-    private var signFrames: MutableList<FloatArray>? = null
-    private var handsUp = 0
-    private var handsDown = 0
+    // analysis thread: cuts the stream into signs
+    private val signCutter = SignSegmenter()
 
     @Volatile private var listen = Listen.PAUSED
     @Volatile private var teaching: String? = null
@@ -285,7 +285,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             _live.value = prev.copy(
                 face = false, hearing = false, outer = emptyList(), imageW = f.imageW, imageH = f.imageH,
                 fps = if (dt > 0) prev.fps + 0.1f * (1000f / dt - prev.fps) else prev.fps,
-                body = f.sign != null, hands = f.hands, signing = signFrames != null,
+                body = f.sign != null, hands = f.hands, signing = signCutter.recording,
+                handsRaised = SignSegmenter.raised(SignSegmenter.Step(f.sign, f.wrists)),
             )
             return
         }
@@ -337,32 +338,14 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         )
     }
 
-    /** A sign = hands up, signing, hands down (or out of view). Recorded only while a body is in view. */
+    /** A sign = a wrist raised above chest level until both come down ([SignSegmenter]). */
     private fun onSignFrame(f: Frame) {
-        val kp = f.sign
-        val rec = signFrames
-        if (rec == null) {
-            handsUp = if (kp != null && f.hands > 0) handsUp + 1 else 0
-            if (handsUp >= 3 && kp != null) {
-                signFrames = mutableListOf(kp)
-                handsDown = 0
-            }
-            return
-        }
-        if (kp != null) rec.add(kp)
-        handsDown = if (kp == null || f.hands == 0) handsDown + 1 else 0
-        if (handsDown >= 10 || rec.size >= 150) {
-            signFrames = null
-            handsUp = 0
-            val frames = rec.dropLast(minOf(handsDown, rec.size))
-            if (frames.size >= 12) {
-                val endMs = f.tMs
-                onWorker {
-                    val model = isl ?: return@onWorker
-                    val g = runCatching { model.classify(frames) }.onFailure { Log.e(TAG, "isl", it) }.getOrNull() ?: return@onWorker
-                    _events.tryEmit(Event.Signed(g, (SystemClock.uptimeMillis() - endMs).toDouble()))
-                }
-            }
+        val frames = signCutter.push(SignSegmenter.Step(f.sign, f.wrists)) ?: return
+        val endMs = f.tMs
+        onWorker {
+            val model = isl ?: return@onWorker
+            val g = runCatching { model.classify(frames) }.onFailure { Log.e(TAG, "isl", it) }.getOrNull() ?: return@onWorker
+            _events.tryEmit(Event.Signed(g, (SystemClock.uptimeMillis() - endMs).toDouble()))
         }
     }
 
@@ -372,12 +355,24 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         Log.i(TAG, "isl check -> " + (g?.joinToString { "${it.word} %.4f".format(it.p) } ?: "no model"))
     }
 
+    /** QA: a recorded stream (Signer keypoints + pose wrists per frame) through a fresh [SignSegmenter] and the model. */
+    fun signStream(steps: List<SignSegmenter.Step>) = onWorker {
+        val cut = SignSegmenter()
+        var n = 0
+        for (s in steps) cut.push(s)?.let { frames ->
+            n++
+            val g = isl?.classify(frames)
+            Log.i(TAG, "isl stream sign $n (${frames.size} frames) -> " + (g?.joinToString { "${it.word} %.4f".format(it.p) } ?: "no model"))
+        }
+        Log.i(TAG, "isl stream done: ${steps.size} frames, $n signs")
+    }
+
     /** Sign mode: the camera runs body + hands for ISL instead of the face. */
     fun signing(on: Boolean) {
         if (on == signMode) return
         signMode = on
         sensor?.let { syncSensor(it) } // not built yet: start() applies it
-        onAnalysis { signFrames = null; handsUp = 0 }
+        onAnalysis { signCutter.reset() }
     }
 
     // ---------------- worker thread ----------------

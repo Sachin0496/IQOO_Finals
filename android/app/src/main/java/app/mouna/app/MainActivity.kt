@@ -31,6 +31,7 @@ import android.provider.ContactsContract
 import app.mouna.app.engine.CallUsage
 import app.mouna.app.engine.CarrierLink
 import app.mouna.app.engine.Engine
+import app.mouna.app.engine.SignSegmenter
 import app.mouna.app.engine.Lang
 import app.mouna.app.engine.Hearing
 import app.mouna.app.engine.PhrasePack
@@ -173,8 +174,19 @@ class MainActivity : ComponentActivity() {
                 if (i.getBooleanExtra("record", false)) app.go(Screen.RECORD) // --ez record true: the recording screen
                 i.getStringExtra("crops")?.let { engine.freeTalkRead(File(it), i.getFloatExtra("fps", 25f).toDouble()) }
             }
-            // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>
+            // adb shell am broadcast -a app.mouna.SIGN --es json <path to [[54 floats], ...]>       one sign
+            // adb shell am broadcast -a app.mouna.SIGN --es stream <path to {"points": [...], "wrists": [...]}>
+            //   a recording, cut into signs as Sign mode does (models/isl/eval/include_eval.py device)
             debugReceiver("app.mouna.SIGN") { i ->
+                i.getStringExtra("stream")?.let { path ->
+                    runCatching {
+                        val o = org.json.JSONObject(File(path).readText())
+                        val pts = o.getJSONArray("points")
+                        val wr = o.getJSONArray("wrists")
+                        fun floats(a: Any?) = (a as? org.json.JSONArray)?.let { r -> FloatArray(r.length()) { r.getDouble(it).toFloat() } }
+                        engine.signStream(List(pts.length()) { SignSegmenter.Step(floats(pts.opt(it)), floats(wr.opt(it))) })
+                    }.onFailure { Log.e("Mouna", "sign stream", it) }
+                }
                 val path = i.getStringExtra("json") ?: return@debugReceiver
                 runCatching {
                     val a = org.json.JSONArray(File(path).readText())
