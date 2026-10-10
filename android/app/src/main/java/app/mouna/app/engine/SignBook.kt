@@ -20,7 +20,7 @@ class SignBook(private val file: File?) {
     data class Sign(val id: String, val text: String, val examples: List<FloatArray>)
     data class Match(val id: String, val text: String, val cos: Float)
 
-    /** Speak a match on its own, or offer the likeliest taught signs to tap. */
+    /** Speak a match on its own, or ask about the likeliest taught signs one at a time ("Did you sign …?", nod or blink). */
     sealed interface Decision {
         data class Speak(val match: Match) : Decision
         data class Offer(val matches: List<Match>) : Decision
