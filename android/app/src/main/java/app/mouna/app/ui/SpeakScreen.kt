@@ -124,7 +124,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
         ) { st ->
             if (app.channel == Channel.VOICE) VoiceRing(app, Modifier.align(Alignment.Center))
             Row(
-                Modifier.align(Alignment.TopStart).padding(14.dp).fillMaxWidth(),
+                Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 14.dp, end = 62.dp).fillMaxWidth(), // the flip button sits top right
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val main = status(app, k, st, micHot)
