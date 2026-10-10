@@ -161,6 +161,14 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall
                                 modifier = Modifier.heightIn(min = 48.dp).clickable { app.openWords(Screen.SPEAK) }.wrapContentHeight(Alignment.CenterVertically),
                             )
                         }
+                        if (app.channel == Channel.SIGN && !app.onCall && k.signsTeachable) {
+                            val taught = k.signs.count { (k.signCounts[it.first] ?: 0) > 0 }
+                            Text(
+                                if (taught == 0) "Teach Mouna your own signs →" else "Your signs ($taught) →",
+                                style = teachLink,
+                                modifier = Modifier.heightIn(min = 48.dp).clickable { app.openSigns(Screen.SPEAK) }.wrapContentHeight(Alignment.CenterVertically),
+                            )
+                        }
                     }
                 } else {
                     Column {

@@ -48,7 +48,7 @@ class Hearing(private val context: Context) : AutoCloseable {
         private set
 
     /** adb push the sherpa-onnx Whisper files here: tiny.en-encoder.int8.onnx, tiny.en-decoder.int8.onnx, tiny.en-tokens.txt */
-    fun folder(): File = File(context.getExternalFilesDir(null), "asr").apply { mkdirs() }
+    fun folder(): File = ModelStore.dir(context, "asr")
 
     fun load() {
         val waited = WhisperGate.await()

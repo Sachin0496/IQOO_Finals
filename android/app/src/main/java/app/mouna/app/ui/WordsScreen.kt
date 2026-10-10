@@ -167,7 +167,7 @@ private val rowStyle get() = Type.body.copy(color = Ink.bone)
 
 /** A small outlined text button, 48dp tall. */
 @Composable
-private fun ChipButton(text: String, color: Color, onClick: () -> Unit) {
+internal fun ChipButton(text: String, color: Color, onClick: () -> Unit) {
     Text(
         text,
         style = Type.mono.copy(color = color, fontSize = 13.sp),

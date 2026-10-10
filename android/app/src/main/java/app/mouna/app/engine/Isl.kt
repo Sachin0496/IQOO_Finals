@@ -11,21 +11,30 @@ import kotlin.math.sqrt
 
 /**
  * Indian Sign Language with AI4Bharat's existing OpenHands SL-GCN (INCLUDE, 263 isolated signs). We only exported it
- * (models/isl). Input: one sign's keypoints from [app.mouna.app.sense.Signer]; output: the most likely words.
+ * (models/isl). Input: one sign's keypoints from [app.mouna.app.sense.Signer]; output: the most likely INCLUDE words and
+ * the features [SignBook] matches the person's own taught signs by.
  */
 class Isl private constructor(private val session: OrtSession, private val env: OrtEnvironment, val labels: List<String>) : AutoCloseable {
     data class Guess(val word: String, val p: Float)
+    /** One sign: INCLUDE's likeliest words, and the 256-d features the person's own signs are matched by (null with an old model). */
+    data class Reading(val guesses: List<Guess>, val features: FloatArray?)
 
-    fun classify(frames: List<FloatArray>): List<Guess> {
+    fun classify(frames: List<FloatArray>): List<Guess> = read(frames).guesses
+
+    fun read(frames: List<FloatArray>): Reading {
         val t = frames.size
         val x = normalise(frames)
         OnnxTensor.createTensor(env, FloatBuffer.wrap(x), longArrayOf(1, 2, t.toLong(), V.toLong())).use { input ->
             session.run(mapOf("keypoints" to input)).use { out ->
                 val p = (out.get(0) as OnnxTensor).floatBuffer.let { b -> FloatArray(b.remaining()).also { b.get(it) } }
-                return top(p, labels)
+                val f = if (out.size() > 1) (out.get(1) as OnnxTensor).floatBuffer.let { b -> FloatArray(b.remaining()).also { b.get(it) } } else null
+                return Reading(top(p, labels), f)
             }
         }
     }
+
+    /** The model has the "features" output (export_isl.py since 10 Oct): the person's own signs can be taught. */
+    val canTeach: Boolean get() = session.outputNames.size > 1
 
     override fun close() = session.close()
 
@@ -79,7 +88,7 @@ class Isl private constructor(private val session: OrtSession, private val env: 
             return byWord.entries.sortedByDescending { it.value }.take(5).map { Guess(it.key, it.value) }
         }
 
-        fun folder(context: Context) = File(context.getExternalFilesDir(null), "isl").apply { mkdirs() }
+        fun folder(context: Context) = ModelStore.dir(context, "isl")
 
         fun open(context: Context): Isl? {
             // This ONNX Runtime (QNN edition, no XNNPACK / NNAPI) traps on the emulator's CPU for this model (Apple M4

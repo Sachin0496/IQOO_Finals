@@ -14,6 +14,12 @@ python export_isl.py   # -> isl_include_slgcn.onnx (16 MB), isl_include_labels.j
 adb push isl_include_slgcn.onnx isl_include_labels.json /sdcard/Android/data/app.mouna/files/isl/
 ```
 
+Two outputs: `probs` (263 INCLUDE words) and `features` (the encoder's pooled 256-d output, before the classifier; added
+10 Oct). The app matches a new sign against the person's own taught signs by the cosine of `features`
+(`engine/SignBook.kt`), measured in `eval/teach.json` (`eval/teach_eval.py`). With the env this was rebuilt in:
+`uv venv -p 3.12 && uv pip install torch onnx onnxruntime pyyaml omegaconf numpy`. Push the model to `/sdcard/Mouna/isl/`
+(kept across reinstalls once "Keep models" is on) or `/sdcard/Android/data/app.mouna/files/isl/`.
+
 Input `keypoints` float32 (1, 2, T, 27), any T: MediaPipe Holistic "minimal 27" points (pose 0, 2, 5, 11, 12, 13, 14;
 each hand's wrist and finger points 4, 5, 8, 9, 12, 13, 16, 17, 20), x and y, centred on the mean shoulder midpoint
 and scaled by the mean shoulder distance over the clip. Output `probs` (1, 263), labels in `isl_include_labels.json`

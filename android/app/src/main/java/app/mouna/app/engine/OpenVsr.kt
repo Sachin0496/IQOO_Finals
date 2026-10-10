@@ -20,7 +20,8 @@ import java.nio.FloatBuffer
  * CTC head (`python -m mouna_encoder avsr-export`), one fixed-length graph per bucket, on the Hexagon NPU only, then
  * CTC prefix beam search on the CPU ([Ctc]). Every sentence it proposes is shown and confirmed before it is spoken.
  *
- * Files, pushed with adb (weights stay out of git): /sdcard/Android/data/app.mouna/files/avsr/
+ * Files, pushed with adb (weights stay out of git) to [ModelStore.dir] "avsr": /sdcard/Mouna/avsr/ (kept across
+ * reinstalls) or /sdcard/Android/data/app.mouna/files/avsr/
  *   avsr_vsr_t{64,128,256}.onnx   plain fp32 graphs; compiled for the NPU on the phone at first start (fp16) and
  *                                 cached next to them as avsr_vsr_t*.qnn_ctx_fp16.onnx
  *   tokens.txt                    5,049 units, one per line (0 = blank)
@@ -274,7 +275,7 @@ class OpenVsr private constructor(
         private const val D = 768
         private const val ROI = FreeTalk.ROI.toLong()
 
-        fun folder(context: Context): File = File(context.getExternalFilesDir(null), "avsr").apply { mkdirs() }
+        fun folder(context: Context): File = ModelStore.dir(context, "avsr")
 
         /**
          * Every model pushed to the phone (python -m mouna_encoder avsr-export --out ... --label ...), e.g. the original

@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.REORDER_TASKS" />
+    <!-- Models in /sdcard/Mouna survive reinstalls and Clear storage (engine/ModelStore.kt). Hackathon build, never Play Store. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Lets the app ask the system TTS engine which voices exist (fallback voice). -->
