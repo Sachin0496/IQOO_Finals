@@ -120,6 +120,8 @@ class MounaApp(
     var voiceTemplates by mutableStateOf(store.voiceTemplates)
         private set
     private var lastHeard: String? = null
+    private var lastVoiceId: String? = null
+    private var lastVoiceAt = 0L
     private val main = Handler(Looper.getMainLooper())
     private val asr = Executors.newSingleThreadExecutor()
     private lateinit var listener: Listener
@@ -334,14 +336,21 @@ class MounaApp(
     private fun onHeard(text: String) {
         heard = text
         if (!onSpeakSurface() || prompt != null || text.isBlank()) return
+        // Whisper turns room noise into stock phrases ("Thank you.", "[BLANK_AUDIO]"): not the person speaking
+        if (VoiceMatcher.noise(text)) { android.util.Log.i("Mouna", "heard \"$text\" -> ignored (noise)"); return }
         val ranked = VoiceMatcher.rank(text, voiceCandidates())
-        if (Stage.debug) android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
+        android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
         val best = ranked.firstOrNull()
         val second = ranked.getOrNull(1)?.score ?: 0.0
         lastHeard = text
         if (best != null && best.score >= VoiceMatcher.SPEAK && best.score - second >= VoiceMatcher.MARGIN) {
-            addTemplate(best.id, text) // a clear hit sharpens the template too
+            // Not learned: an unconfirmed hit taught from noise snowballed ("I need water" over and over). Templates
+            // grow only from a phrase the person picked (choose). The same phrase is not repeated within a few seconds.
             lastHeard = null
+            val now = android.os.SystemClock.uptimeMillis()
+            if (best.id == lastVoiceId && now - lastVoiceAt < VoiceMatcher.REPEAT_MS) return
+            lastVoiceId = best.id
+            lastVoiceAt = now
             speak(best.id, "voice")
             return
         }
