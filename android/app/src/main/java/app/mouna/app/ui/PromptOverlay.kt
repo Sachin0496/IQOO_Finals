@@ -1,5 +1,7 @@
 package app.mouna.app.ui
 
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,12 +33,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mouna.app.MounaApp
 import app.mouna.app.Prompt
 import app.mouna.app.Screen
 import app.mouna.app.engine.Knowledge
+import app.mouna.app.engine.PhoneContact
+import app.mouna.app.engine.PhoneFlow
+import app.mouna.app.engine.PhoneVerb
+import app.mouna.app.engine.Phones
 import app.mouna.core.DecisionKind
 import app.mouna.core.Zone
 import kotlinx.coroutines.delay
@@ -50,6 +57,13 @@ private const val SCAN_MS = 1600L
  */
 @Composable
 fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
+    // A prompt from typed words must not open under the keyboard: its buttons would be hidden.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    LaunchedEffect(Unit) {
+        focus.clearFocus()
+        keyboard?.hide()
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -64,6 +78,10 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
                 is Prompt.Heard -> SayClearly(app, prompt.text)
                 is Prompt.Signed -> DidYouSign(app, prompt.words)
                 is Prompt.Read -> DidYouMean(app, prompt)
+                is Prompt.PhoneWhat -> PhoneWhat(app, k)
+                is Prompt.PhoneWho -> PhoneWho(app, prompt, k)
+                is Prompt.PhoneBody -> PhoneBody(app, prompt, k)
+                is Prompt.PhoneConfirm -> PhoneConfirm(app, prompt, k)
                 is Prompt.FromCore -> {
                     val d = prompt.d
                     when (d.kind) {
@@ -235,6 +253,130 @@ private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextRead() }
         BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayRead(top) }
+    }
+}
+
+/** One pick on a phone screen: a name, and a line under it (a number, "web call") when there is one. */
+private class PhoneOption(val title: String, val sub: String? = null)
+
+/** Two big tiles side by side, as Rescue: the one under the gaze is lit, and a tap picks either. One tile keeps half the row. */
+@Composable
+private fun ColumnScope.PhonePair(app: MounaApp, options: List<PhoneOption>, onPick: (Int) -> Unit) {
+    val zone by app.engine.live.collectSlice { it.gazeZone } // not the whole 30 Hz frame: only the gaze side
+    Row(Modifier.fillMaxWidth().height(330.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        options.take(2).forEachIndexed { i, o ->
+            val side = if (i == 0) Zone.LEFT else Zone.RIGHT
+            PhoneTile(o, selected = zone == side, Modifier.weight(1f).fillMaxSize()) { onPick(i) }
+        }
+        if (options.size == 1) Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun PhoneTile(o: PhoneOption, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(22.dp))
+            .background(Ink.card)
+            .border(if (selected) 2.dp else 1.dp, if (selected) Ink.turmeric else Ink.rule2, RoundedCornerShape(22.dp))
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(o.title, style = Type.display.copy(fontSize = 30.sp, lineHeight = 34.sp), textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        o.sub?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, style = Type.mono.copy(fontSize = 15.sp), textAlign = TextAlign.Center)
+        }
+    }
+}
+
+/** Call or message: two big tiles, the call on the left and the message on the right. */
+@Composable
+private fun ColumnScope.PhoneWhat(app: MounaApp, k: Knowledge) {
+    Header(app, "PHONE", "Call or message?")
+    PhonePair(app, listOf(PhoneOption("Call"), PhoneOption("Message"))) { app.phonePick(it) }
+    Spacer(Modifier.weight(1f))
+    Hint(pickHint(k, more = false))
+    BigButton("Cancel", Tone.NO, Modifier.fillMaxWidth()) { app.close() }
+}
+
+/** Who to call or message: two people at a time, from the phone book (the Call screen's favourites, both kinds). */
+@Composable
+private fun ColumnScope.PhoneWho(app: MounaApp, p: Prompt.PhoneWho, k: Knowledge) {
+    Header(app, if (p.verb == PhoneVerb.CALL) "CALL" else "MESSAGE", "Who?")
+    if (p.people.isEmpty()) {
+        Text("No one saved yet.", style = Type.body.copy(fontSize = 18.sp))
+        Spacer(Modifier.weight(1f))
+        BigButton("Add people", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.CALL) }
+        BigButton("Cancel", Tone.NO, Modifier.fillMaxWidth()) { app.close() }
+        return
+    }
+    val more = p.people.size > 2
+    PhonePair(app, PhoneFlow.pair(p.people, p.page).map { PhoneOption(it.name, personLine(p.verb, it)) }) { app.phonePick(it) }
+    Spacer(Modifier.weight(1f))
+    Hint(pickHint(k, more))
+    MoreOrCancel(app, more)
+}
+
+/** The line under a name: "web call" for a call by web link, else the number, else that there is none. */
+private fun personLine(verb: PhoneVerb, c: PhoneContact): String = when {
+    verb == PhoneVerb.CALL && c.room != null -> "web call"
+    c.number != null -> Phones.pretty(c.number)
+    else -> "no number saved"
+}
+
+/** The text of a message, two choices at a time: what Mouna last said, then the quick messages. */
+@Composable
+private fun ColumnScope.PhoneBody(app: MounaApp, p: Prompt.PhoneBody, k: Knowledge) {
+    val more = p.options.size > 2
+    Header(app, "MESSAGE ${p.c.name.uppercase()}", "What should it say?")
+    PhonePair(app, PhoneFlow.pair(p.options, p.page).map { PhoneOption(it) }) { app.phonePick(it) }
+    Spacer(Modifier.weight(1f))
+    Hint(pickHint(k, more))
+    MoreOrCancel(app, more)
+}
+
+/** The one action, always confirmed. Nothing is dialled or sent until the person says yes here. */
+@Composable
+private fun ColumnScope.PhoneConfirm(app: MounaApp, p: Prompt.PhoneConfirm, k: Knowledge) {
+    val call = p.verb == PhoneVerb.CALL
+    Header(app, "AN ACTION: ALWAYS CONFIRMED", if (call) "Call ${p.c.name}?" else "Message ${p.c.name}?")
+    // How it will go, so the caregiver sees which number or link before anyone says yes.
+    val number = p.c.number?.let { Phones.pretty(it) }
+    val how = when {
+        call && p.c.room != null -> "Web call, on their saved link"
+        number != null -> number
+        else -> null
+    }
+    how?.let { Text(it, style = Type.label.copy(color = Ink.bone2)); Spacer(Modifier.height(16.dp)) }
+    p.body?.let { Text("“$it”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.kumkum)) }
+    Spacer(Modifier.weight(1f))
+    if (!call) Text("You'll tap Send in WhatsApp/Messages.", style = Type.body.copy(fontSize = 15.sp))
+    Hint(if (k.switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no.")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        BigButton("No", Tone.NO, Modifier.weight(1f)) { app.phoneCancel() }
+        BigButton(if (call) "Yes, call" else "Yes, open message", Tone.YES, Modifier.weight(1.4f)) { app.phoneGo() }
+    }
+}
+
+/** How to pick on a phone screen: by look (held), by look then the person's movement, or by tap when eyes are not set up. */
+private fun pickHint(k: Knowledge, more: Boolean): String {
+    val pick = when {
+        !k.gazeReady -> "Tap one."
+        k.switchReady -> "Look at one, then use your movement."
+        else -> "Look at one and hold your gaze, or tap."
+    }
+    return if (more) "$pick Shake your head for more." else pick
+}
+
+/** More (only with more to see) and Cancel, side by side. */
+@Composable
+private fun ColumnScope.MoreOrCancel(app: MounaApp, more: Boolean) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (more) BigButton("More", Tone.PRIMARY, Modifier.weight(1f)) { app.phoneNext() }
+        BigButton("Cancel", Tone.NO, Modifier.weight(1f)) { app.close() }
     }
 }
 

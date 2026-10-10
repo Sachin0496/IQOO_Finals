@@ -23,10 +23,20 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
     <!-- Lets the app ask the system TTS engine which voices exist (fallback voice). -->
+    <!-- Phone actions open other apps (the dialler, WhatsApp, messages) and check WhatsApp is there. No SMS send, no contacts. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <package android:name="com.whatsapp" />
     </queries>
 
     <application

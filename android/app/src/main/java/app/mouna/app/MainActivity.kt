@@ -124,6 +124,8 @@ class MainActivity : ComponentActivity() {
                 contactAnswer = answer
                 pickContactResult.launch(Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
             },
+            openIntent = { intent -> runCatching { startActivity(intent) }.isSuccess },
+            hasWhatsApp = ::hasWhatsApp,
         )
         welcome.value = !engine.store.welcomed
         engine.start()
@@ -353,6 +355,9 @@ class MainActivity : ComponentActivity() {
     private fun hasSim(): Boolean =
         packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY) &&
             getSystemService(TelephonyManager::class.java)?.simState == TelephonyManager.SIM_STATE_READY
+
+    /** WhatsApp installed? Visible to this app through the <package> entry in the manifest's <queries>. */
+    private fun hasWhatsApp(): Boolean = runCatching { packageManager.getPackageInfo("com.whatsapp", 0) }.isSuccess
 
     /** Name and number of the contact row the picker returned. */
     private fun readContact(uri: android.net.Uri): Pair<String, String>? = runCatching {

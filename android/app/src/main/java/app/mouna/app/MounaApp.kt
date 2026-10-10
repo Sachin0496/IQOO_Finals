@@ -3,10 +3,20 @@ package app.mouna.app
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.content.Intent
+import android.net.Uri
 import app.mouna.app.engine.CallLink
 import app.mouna.app.engine.CallPhrases
 import app.mouna.app.engine.CallState
 import app.mouna.app.engine.Engine
+import app.mouna.app.engine.PhoneBook
+import app.mouna.app.engine.PhoneContact
+import app.mouna.app.engine.PhoneFlow
+import app.mouna.app.engine.PhoneParser
+import app.mouna.app.engine.PhoneRoute
+import app.mouna.app.engine.PhoneRouter
+import app.mouna.app.engine.PhoneStep
+import app.mouna.app.engine.PhoneVerb
 import app.mouna.app.engine.Phones
 import app.mouna.app.engine.Rooms
 import app.mouna.app.engine.WebLink
@@ -54,6 +64,14 @@ sealed interface Prompt {
     data class Signed(val words: List<String>) : Prompt
     /** Lips read a sentence (or a taught word): always confirmed before it is spoken; shake = the next candidate. */
     data class Read(val options: List<Suggestion>, val index: Int = 0) : Prompt
+    /** A phone request with no "call" or "message" said: pick one (left call, right message). */
+    data object PhoneWhat : Prompt
+    /** Who to call or message: two at a time. [body] is the text if the person already gave one. */
+    data class PhoneWho(val verb: PhoneVerb, val body: String?, val people: List<PhoneContact>, val page: Int = 0) : Prompt
+    /** The text of a message, two at a time: the last thing Mouna said, then the quick messages. */
+    data class PhoneBody(val c: PhoneContact, val options: List<String>, val page: Int = 0) : Prompt
+    /** The one action, always confirmed: nothing is dialled or sent until the person says yes. */
+    data class PhoneConfirm(val verb: PhoneVerb, val c: PhoneContact, val body: String?) : Prompt
 }
 
 /**
@@ -97,6 +115,10 @@ class MounaApp(
     private val askCall: ((Boolean) -> Unit) -> Unit,
     /** Opens the contact picker; calls back with the name and number picked, or null. */
     private val pickContact: ((Pair<String, String>?) -> Unit) -> Unit,
+    /** Opens another app's screen (the dialler, WhatsApp, messages); true if one opened. */
+    private val openIntent: (Intent) -> Boolean,
+    /** Whether WhatsApp is installed, so a message can go there rather than by SMS. */
+    private val hasWhatsApp: () -> Boolean,
 ) {
     val store = engine.store
     var phrases by mutableStateOf(engine.phrases)
@@ -340,6 +362,7 @@ class MounaApp(
         if (!onSpeakSurface() || prompt != null || text.isBlank()) return
         // Whisper turns room noise into stock phrases ("Thank you.", "[BLANK_AUDIO]"): not the person speaking
         if (VoiceMatcher.noise(text)) { android.util.Log.i("Mouna", "heard \"$text\" -> ignored (noise)"); return }
+        if (phoneCommand(text)) return
         val ranked = VoiceMatcher.rank(text, voiceCandidates())
         android.util.Log.i("Mouna", "heard \"$text\" -> " + ranked.take(3).joinToString { "${it.id} %.2f".format(it.score) })
         val best = ranked.firstOrNull()
@@ -407,7 +430,14 @@ class MounaApp(
         if (Stage.debug) android.util.Log.i("Mouna", "signed -> " + g.take(3).joinToString { "${it.word} %.2f".format(it.p) })
         val best = g[0]
         val second = g.getOrNull(1)?.p ?: 0f
-        if (best.p >= SIGN_SPEAK && best.p - second >= SIGN_MARGIN) {
+        val sure = best.p >= SIGN_SPEAK && best.p - second >= SIGN_MARGIN
+        // "telephone" or "letter" opens the phone flow, when it is the clear winner or among the likeliest three.
+        val verb = (if (sure) g.take(1) else g.take(3)).firstNotNullOfOrNull { PhoneParser.fromSign(it.word) }
+        if (verb != null && !onCall) {
+            phone(verb)
+            return
+        }
+        if (sure) {
             sayWord(best.word)
             return
         }
@@ -416,6 +446,11 @@ class MounaApp(
     }
 
     fun sayWord(word: String) {
+        val verb = PhoneParser.fromSign(word)
+        if (verb != null && !onCall) {
+            phone(verb)
+            return
+        }
         prompt = null
         voice.say(null, word, Lang.EN, Voice.DEVICE)
         showSaid(Said(null, word.replaceFirstChar { it.uppercase() }, "sign"))
@@ -554,12 +589,13 @@ class MounaApp(
         prompt = null
         if (s.word != null) {
             engine.wordConfirmed(s.word)
-            voice.say(null, s.text, lang, voiceId)
         } else {
             engine.wordPassed() // words were offered and this was not one: the clip is "not one of my words"
             engine.rememberSentence(s.text) // offered again next time, scored by the model (issue #5 A)
-            voice.say(null, s.text, Lang.EN, Voice.DEVICE)
         }
+        // "call nakul" read from the lips opens the phone flow; it is not spoken as a sentence.
+        if (phoneCommand(s.text)) return
+        if (s.word != null) voice.say(null, s.text, lang, voiceId) else voice.say(null, s.text, Lang.EN, Voice.DEVICE)
         said = Said(null, s.text, "lips")
         applyChannel()
     }
@@ -743,6 +779,8 @@ class MounaApp(
             pr == null -> Unit
             pr is Prompt.Heard -> sayHeard(pr.text)
             pr is Prompt.Read -> sayRead(pr.options[pr.index])
+            pr is Prompt.PhoneConfirm -> phoneGo() // the only yes that dials or sends
+            isPhonePick(pr) -> sideOf(engine.live.value.gazeZone)?.let { phonePick(it) }
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.CONFIRM -> choose(pr.d.options[0], via)
             // RESCUE: the switch confirms the side the eyes are on (the demo's "look left, raise an eyebrow").
             pr is Prompt.FromCore && pr.d.kind == DecisionKind.RESCUE -> when (engine.live.value.gazeZone) {
@@ -761,13 +799,22 @@ class MounaApp(
         when (val pr = prompt) {
             is Prompt.Heard -> close()
             is Prompt.Read -> nextRead()
+            is Prompt.PhoneWhat -> close()
+            is Prompt.PhoneWho, is Prompt.PhoneBody -> phoneNext()
+            is Prompt.PhoneConfirm -> phoneCancel()
             is Prompt.FromCore -> if (pr.d.kind == DecisionKind.CONFIRM || pr.d.kind == DecisionKind.RESCUE) wrong()
             else -> Unit
         }
     }
 
     private fun looked(zone: Zone) {
-        val pr = prompt as? Prompt.FromCore ?: return
+        val now = prompt
+        if (isPhonePick(now)) {
+            // Like Rescue: a long look picks only without a personal switch. A look never confirms a phone action.
+            if (!engine.knowledge.value.switchReady) sideOf(zone)?.let { phonePick(it) }
+            return
+        }
+        val pr = now as? Prompt.FromCore ?: return
         if (pr.d.kind != DecisionKind.RESCUE) return
         // Without a personal switch, a long look is the answer; with one, the look only highlights.
         if (engine.knowledge.value.switchReady) return
@@ -938,6 +985,139 @@ class MounaApp(
         if (!link.hangUp()) callNote = "Mouna can't end the call itself on this phone. End it on the phone's call screen."
     }
 
+    // ---------------- phone: call or message (always confirmed) ----------------
+
+    /** Opens the phone flow: what to do when [verb] is null, else who to [verb]. Nothing is dialled or sent here. */
+    fun phone(verb: PhoneVerb?) {
+        if (onCall) return // never walk away from a call
+        showPhone(if (verb == null) Prompt.PhoneWhat else Prompt.PhoneWho(verb, null, phoneBook()))
+    }
+
+    fun phoneBook() = PhoneBook.merge(store.favourites, webFavourites)
+
+    /**
+     * A phone request, said, typed, read from the lips or signed. True when it was one: the flow is open, or the
+     * "not saved" line is shown, and the words must not be spoken as a sentence.
+     */
+    private fun phoneCommand(text: String): Boolean {
+        if (onCall) return false
+        val cmd = PhoneParser.parse(text) ?: return false
+        lastHeard = null
+        when (val step = PhoneFlow.start(cmd, phoneBook())) {
+            is PhoneStep.Missing -> {
+                close()
+                showSaid(Said(null, "No one called ${step.name} is saved. Add them on the Call screen.", "none"))
+            }
+            is PhoneStep.Who -> showPhone(Prompt.PhoneWho(step.verb, step.body, step.people))
+            is PhoneStep.Confirm -> showPhone(confirmOrText(step.verb, step.c, step.body))
+        }
+        return true
+    }
+
+    /** A message with no text yet goes to the text choices first, so no message is ever sent blank. */
+    private fun confirmOrText(verb: PhoneVerb, c: PhoneContact, body: String?): Prompt =
+        if (verb == PhoneVerb.MESSAGE && body == null) Prompt.PhoneBody(c, bodyOptions())
+        else Prompt.PhoneConfirm(verb, c, body)
+
+    /** Message texts: the last thing Mouna said (when the person said it), then the quick messages. */
+    private fun bodyOptions(): List<String> {
+        val last = said?.takeIf { it.via != "phone" && it.via != "none" }?.text?.takeIf { it.isNotBlank() }
+        return (listOfNotNull(last) + PhoneFlow.QUICK).distinct()
+    }
+
+    /** Shows a phone step. Gaze is on for the pick screens only, so a look can choose but never confirm. */
+    private fun showPhone(p: Prompt) {
+        prompt = p
+        engine.gazeOn(p !is Prompt.PhoneConfirm)
+        applyChannel()
+    }
+
+    private fun isPhonePick(p: Prompt?) = p is Prompt.PhoneWhat || p is Prompt.PhoneWho || p is Prompt.PhoneBody
+
+    /** The side of the screen the eyes are on: 0 for left, 1 for right, null for the middle. */
+    private fun sideOf(z: Zone): Int? = when (z) {
+        Zone.LEFT -> 0
+        Zone.RIGHT -> 1
+        Zone.CENTER -> null
+    }
+
+    /** The tile on [side] (0 left, 1 right) of the pair on screen was chosen. A pick only moves on; nothing acts here. */
+    fun phonePick(side: Int) {
+        when (val pr = prompt) {
+            is Prompt.PhoneWhat -> phone(if (side == 0) PhoneVerb.CALL else PhoneVerb.MESSAGE)
+            is Prompt.PhoneWho -> PhoneFlow.pair(pr.people, pr.page).getOrNull(side)?.let { c ->
+                showPhone(confirmOrText(pr.verb, c, pr.body))
+            }
+            is Prompt.PhoneBody -> PhoneFlow.pair(pr.options, pr.page).getOrNull(side)?.let { text ->
+                showPhone(Prompt.PhoneConfirm(PhoneVerb.MESSAGE, pr.c, text))
+            }
+            else -> Unit
+        }
+    }
+
+    /** Shake for more: the next two people, or the next two messages. */
+    fun phoneNext() {
+        val pr = prompt
+        prompt = when (pr) {
+            is Prompt.PhoneWho -> pr.copy(page = pr.page + 1)
+            is Prompt.PhoneBody -> pr.copy(page = pr.page + 1)
+            else -> pr
+        }
+    }
+
+    /** "No" on the confirm, or a shake: nothing is dialled or sent. */
+    fun phoneCancel() {
+        close()
+        showSaid(Said(null, "Cancelled", "none"))
+    }
+
+    /**
+     * The one action, after a yes to the confirm. Routing depends on what the contact has and what this phone can do.
+     * Calls use the same paths as the Call screen; messages open WhatsApp or the messages app, where the person taps Send.
+     */
+    fun phoneGo() {
+        val pr = prompt as? Prompt.PhoneConfirm ?: return
+        close()
+        if (onCall) return // a call started meanwhile: nothing is dialled over it
+        when (val route = PhoneRouter.route(pr.verb, pr.c, pr.body, hasSim = hasSim(), hasWhatsApp = hasWhatsApp())) {
+            is PhoneRoute.WebRoom -> {
+                go(Screen.CALL)
+                // No "Calling…" aloud: the voice now goes into the call, and the call screen already names who.
+                startWebCall(route.room, route.name)
+            }
+            is PhoneRoute.Carrier -> {
+                go(Screen.CALL) // the call's own screen: phrases, typing and hang-up are there
+                setDial(route.number, route.name)
+                dial()
+                if (callNote == null) announce("Calling ${route.name}")
+            }
+            // The dialler only opens: the person still presses Call, so the line says so.
+            is PhoneRoute.EmergencyDial ->
+                openApp("Opening the dialler for ${pr.c.name}", Intent(Intent.ACTION_DIAL, Uri.parse("tel:${route.number}")))
+            is PhoneRoute.WhatsApp -> {
+                val uri = Uri.parse(route.url)
+                openApp("Messaging ${pr.c.name}", Intent(Intent.ACTION_VIEW, uri).setPackage("com.whatsapp"), Intent(Intent.ACTION_VIEW, uri))
+            }
+            is PhoneRoute.Sms -> openApp(
+                "Messaging ${pr.c.name}",
+                Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${route.number}")).putExtra("sms_body", route.text),
+            )
+            is PhoneRoute.Unreachable -> showSaid(Said(null, route.why, "none"))
+        }
+    }
+
+    /** Opens the first of [intents] that the phone can open, then says [line]; if none opens, says so. */
+    private fun openApp(line: String, vararg intents: Intent) {
+        if (intents.any { openIntent(it) }) announce(line) else showSaid(Said(null, "This phone could not open that.", "none"))
+    }
+
+    /** Says [line] aloud in the phone's voice and shows it on Speak, once the action has started. */
+    private fun announce(line: String) {
+        voice.say(null, line, Lang.EN, Voice.DEVICE)
+        showSaid(Said(null, line, "phone"))
+        applyChannel()
+    }
+
     // ---------------- web calls ----------------
 
     /** The relay's address as a state, so the Call screen follows Settings (or adb) the moment it changes. */
@@ -1031,7 +1211,7 @@ class MounaApp(
     /** Anything typed (Speak's Type channel, or the call screen), in whichever script it is written. */
     fun sayTyped(text: String) {
         val t = text.trim()
-        if (t.isNotEmpty()) sayCall(null, t, CallPhrases.langOf(t, lang), "typed")
+        if (t.isNotEmpty() && !phoneCommand(t)) sayCall(null, t, CallPhrases.langOf(t, lang), "typed")
     }
 
     /** QA: speak [text] as if on a call or not, through the same Voice path (adb: app.mouna.SAY). */
