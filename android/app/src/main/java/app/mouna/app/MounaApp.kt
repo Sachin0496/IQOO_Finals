@@ -446,6 +446,15 @@ class MounaApp(
     }
 
     fun sayWord(word: String) {
+        // a sign taught for one of Mouna's phrases: say the phrase itself, in the caregiver's language and voice
+        engine.knowledge.value.signs.firstOrNull { (id, text) -> id.startsWith("p_") && text.equals(word, ignoreCase = true) }
+            ?.let { (id, _) -> phrases[id.removePrefix("p_")] }
+            ?.let { p ->
+                prompt = null
+                speak(p.id, "sign")
+                applyChannel()
+                return
+            }
         val verb = PhoneParser.fromSign(word)
         if (verb != null && !onCall) {
             phone(verb)
@@ -700,6 +709,12 @@ class MounaApp(
     }
 
     fun addSign(text: String): String = engine.addSign(text)
+
+    /** Teach a sign for one of Mouna's phrases: when signed, the phrase is said in the caregiver's language and voice. */
+    fun teachPhraseSign(phraseId: String) {
+        val p = phrases[phraseId] ?: return
+        teachSign(engine.addSign(p.say(Lang.EN), "p_$phraseId"))
+    }
 
     fun removeSign(id: String) {
         if (signTeaching == id) stopTeachingSign()

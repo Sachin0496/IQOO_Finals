@@ -398,7 +398,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     }
 
     /** A new sign of the person's own: [text] is what Mouna says. Teach it with [teachSign]. */
-    fun addSign(text: String): String = signBook.add(text).also { refresh() }
+    fun addSign(text: String, id: String? = null): String = signBook.add(text, id).also { refresh() }
 
     fun removeSign(id: String) = onWorker {
         signBook.remove(id)

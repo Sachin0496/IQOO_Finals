@@ -29,7 +29,12 @@ class SignBook(private val file: File?) {
     var signs: List<Sign> = load()
         private set
 
-    fun add(text: String): String {
+    /** A new sign; [id] for one of Mouna's phrases ("p_<phrase id>"), else a fresh one. An existing [id] is kept as is. */
+    fun add(text: String, id: String? = null): String {
+        if (id != null) {
+            if (signs.none { it.id == id }) { signs = signs + Sign(id, text.trim(), emptyList()); save() }
+            return id
+        }
         val base = "s_" + System.currentTimeMillis().toString(36)
         val id = generateSequence(0) { it + 1 }.map { if (it == 0) base else "${base}_$it" }.first { c -> signs.none { it.id == c } }
         signs = signs + Sign(id, text.trim(), emptyList())
