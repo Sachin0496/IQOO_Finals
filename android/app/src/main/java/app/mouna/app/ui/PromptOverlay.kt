@@ -204,21 +204,29 @@ private fun ColumnScope.SayClearly(app: MounaApp, text: String) {
     }
 }
 
-/** Lips: the sentence Mouna read, the other readings below; nothing is spoken until the person says yes. */
+/** Lips: the sentence (or taught word) Mouna read, the others below; nothing is spoken until the person says yes. */
 @Composable
 private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
     Header(app, "READ FROM YOUR LIPS", "Did you mean…?")
-    Text("“${p.sentences[p.index]}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
-    if (p.personal.getOrElse(p.index) { false }) Text("ONE OF YOUR SENTENCES", style = Type.label.copy(color = Ink.leaf))
-    val others = p.sentences.indices.filter { it != p.index }
+    val top = p.options[p.index]
+    Text("“${top.text}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
+    when {
+        top.word != null -> Text("A WORD YOU TAUGHT", style = Type.label.copy(color = Ink.leaf))
+        top.personal -> Text("ONE OF YOUR SENTENCES", style = Type.label.copy(color = Ink.leaf))
+    }
+    val others = p.options.indices.filter { it != p.index }
     if (others.isNotEmpty()) {
         Spacer(Modifier.height(20.dp))
         Text("Or…", style = Type.label)
         Spacer(Modifier.height(8.dp))
         others.forEach { i ->
-            val s = p.sentences[i]
+            val s = p.options[i]
             Text(
-                if (p.personal.getOrElse(i) { false }) "$s  ·  yours" else s,
+                when {
+                    s.word != null -> "${s.text}  ·  your word"
+                    s.personal -> "${s.text}  ·  yours"
+                    else -> s.text
+                },
                 style = Type.body.copy(fontSize = 20.sp),
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { app.sayRead(s) }.padding(vertical = 10.dp),
             )
@@ -228,7 +236,7 @@ private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
     Hint("Nod or blink twice to say it, shake your head for the next reading, or tap another.")
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextRead() }
-        BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayRead(p.sentences[p.index]) }
+        BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayRead(top) }
     }
 }
 

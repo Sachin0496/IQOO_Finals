@@ -115,6 +115,13 @@ class Store(context: Context) {
         } ?: emptyList()
         set(v) = prefs.edit().putString("custom", JSONArray(v.map { (id, t) -> JSONObject().put("id", id).put("text", t) }).toString()).apply()
 
+    /** Words taught to Lips (Words.kt): id -> what Mouna says, in any language. Examples: examples-words-<encoder>.json. */
+    var words: List<Pair<String, String>>
+        get() = prefs.getString("words", null)?.let { s ->
+            runCatching { JSONArray(s).let { a -> List(a.length()) { a.getJSONObject(it).let { o -> o.getString("id") to o.getString("text") } } } }.getOrNull()
+        } ?: emptyList()
+        set(v) = prefs.edit().putString("words", JSONArray(v.map { (id, t) -> JSONObject().put("id", id).put("text", t) }).toString()).apply()
+
     var listenWith: String
         get() = text("listenWith", "lips")
         set(v) = prefs.edit().putString("listenWith", v).apply()

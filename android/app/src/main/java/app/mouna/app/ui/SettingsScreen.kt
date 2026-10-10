@@ -155,6 +155,10 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 val recorded = app.recordedCount
                 SetupRow("Teach Lips", if (recorded > 0) "$recorded sentences recorded · they are offered first" else "Mouth sentences you want to say, so Lips learns you",
                     recorded > 0, "Record") { app.go(Screen.RECORD) }
+                Spacer(Modifier.height(12.dp))
+                val taught = k.words.count { (k.wordCounts[it.first] ?: 0) > 0 }
+                SetupRow("Teach Lips a word", if (taught > 0) "$taught word${if (taught == 1) "" else "s"} · names, any language" else "Names and words Lips can’t read, in any language",
+                    taught > 0, if (taught > 0) "Edit" else "Teach") { app.openWords(Screen.SETTINGS) }
             }
         }
 

@@ -70,6 +70,7 @@ fun MounaRoot(
             welcome -> activity?.moveTaskToBack(true)
             app.prompt != null -> app.close()
             app.screen == Screen.EYES || app.screen == Screen.SWITCH || app.screen == Screen.RECORD -> app.go(Screen.SETTINGS)
+            app.screen == Screen.WORDS -> app.go(app.wordsBack)
             app.screen != Screen.SPEAK -> app.go(Screen.SPEAK)
             else -> activity?.moveTaskToBack(true)
         }
@@ -99,6 +100,7 @@ fun MounaRoot(
                             Screen.EYES -> EyesSetup(app, bindCamera)
                             Screen.SWITCH -> SwitchSetup(app, bindCamera)
                             Screen.RECORD -> RecordScreen(app, k, bindCamera)
+                            Screen.WORDS -> WordsScreen(app, k, bindCamera)
                         }
                     }
                 }
@@ -130,7 +132,7 @@ private fun TopBar(app: MounaApp) {
         if (app.screen in MAIN) {
             IconButtonSoft(Icons.Rounded.Settings, "Settings") { app.go(Screen.SETTINGS) }
         } else {
-            BackButton { app.go(if (app.screen == Screen.SETTINGS) Screen.SPEAK else Screen.SETTINGS) }
+            BackButton { app.go(if (app.screen == Screen.SETTINGS) Screen.SPEAK else if (app.screen == Screen.WORDS) app.wordsBack else Screen.SETTINGS) }
         }
     }
 }
