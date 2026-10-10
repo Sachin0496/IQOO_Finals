@@ -103,7 +103,7 @@ class MounaApp(
     var phrases by mutableStateOf(engine.phrases)
         private set
 
-    var channel by mutableStateOf(runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS))
+    var channel by mutableStateOf(storedChannel())
         private set
     /** Microphone level 0..1, for the voice ring. */
     var micLevel by mutableStateOf(0f)
@@ -324,6 +324,10 @@ class MounaApp(
             main.postDelayed(armNow, GESTURE_ARM_MS)
         }
     }
+
+    /** The saved channel. Voice is no longer offered on Speak, so a phone that last used it opens on Lips. */
+    private fun storedChannel(): Channel =
+        runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrNull()?.takeIf { it != Channel.VOICE } ?: Channel.LIPS
 
     fun chooseChannel(c: Channel) {
         if (c == Channel.VOICE) {
@@ -815,7 +819,7 @@ class MounaApp(
         light = store.light
         Ink.light = store.light
         selfTrain = store.selfTrain
-        channel = runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
+        channel = storedChannel()
         callMode = storedCallMode()
         callServerNow = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
         heard = null
