@@ -45,10 +45,10 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val welcomeWordmark = Type.title.copy(fontSize = 30.sp, fontStyle = FontStyle.Italic)
-private val welcomeTitle = Type.display.copy(fontSize = 46.sp, lineHeight = 52.sp)
-private val welcomeHead = Type.phrase.copy(fontSize = 20.sp, lineHeight = 26.sp)
-private val welcomeBody = Type.body.copy(fontSize = 16.sp, lineHeight = 22.sp)
+private val welcomeWordmark get() = Type.title.copy(fontSize = 30.sp, fontStyle = FontStyle.Italic)
+private val welcomeTitle get() = Type.display.copy(fontSize = 46.sp, lineHeight = 52.sp)
+private val welcomeHead get() = Type.phrase.copy(fontSize = 20.sp, lineHeight = 26.sp)
+private val welcomeBody get() = Type.body.copy(fontSize = 16.sp, lineHeight = 22.sp)
 
 /**
  * First launch, before the camera permission is asked: what Mouna is, in one screen. The three lines say how it is

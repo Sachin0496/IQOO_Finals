@@ -137,8 +137,8 @@ private fun TopBar(app: MounaApp) {
     }
 }
 
-private val wordmark = Type.title.copy(fontSize = 30.sp, fontStyle = FontStyle.Italic)
-private val chipStyle = Type.body.copy(color = Ink.bone, fontSize = 14.sp, lineHeight = 20.sp)
+private val wordmark get() = Type.title.copy(fontSize = 30.sp, fontStyle = FontStyle.Italic)
+private val chipStyle get() = Type.body.copy(color = Ink.bone, fontSize = 14.sp, lineHeight = 20.sp)
 
 /** The way back: an arrow and the word, so nobody has to guess what it does. */
 @Composable

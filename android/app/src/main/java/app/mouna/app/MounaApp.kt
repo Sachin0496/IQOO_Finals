@@ -24,6 +24,7 @@ import app.mouna.app.engine.Listener
 import app.mouna.app.engine.Voice
 import app.mouna.app.engine.VoiceMatcher
 import app.mouna.app.engine.CallUsage
+import app.mouna.app.ui.Ink
 import app.mouna.app.ui.Stage
 import android.os.Handler
 import android.os.Looper
@@ -186,6 +187,7 @@ class MounaApp(
     }
 
     init {
+        Ink.light = store.light
         web.server = ::callServer
         web.callerName = { callerName }
         web.tokenFor = { room -> store.webTokens[room] ?: Rooms.newToken() }
@@ -251,6 +253,9 @@ class MounaApp(
     var voiceId by mutableStateOf(store.voice)
         private set
     var careful by mutableStateOf(store.careful)
+        private set
+    /** Warm paper theme for bright rooms; false is the ink-on-black default. */
+    var light by mutableStateOf(store.light)
         private set
     /** Keep very clear, uncorrected matches as extra examples (off by default; see SelfTrain). */
     var selfTrain by mutableStateOf(store.selfTrain)
@@ -753,6 +758,8 @@ class MounaApp(
         lang = store.lang
         voiceId = store.voice
         careful = store.careful
+        light = store.light
+        Ink.light = store.light
         selfTrain = store.selfTrain
         channel = runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrDefault(Channel.LIPS)
         callMode = storedCallMode()
@@ -780,6 +787,12 @@ class MounaApp(
     fun chooseCareful(on: Boolean) {
         careful = on
         store.careful = on
+    }
+
+    fun chooseLight(on: Boolean) {
+        light = on
+        store.light = on
+        Ink.light = on
     }
 
     fun chooseSelfTrain(on: Boolean) {

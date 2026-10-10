@@ -261,7 +261,7 @@ private fun ColumnScope.NotTaught(app: MounaApp, k: Knowledge, maybe: List<Strin
     }
 }
 
-private val signWord = Type.display.copy(fontSize = 30.sp)
+private val signWord get() = Type.display.copy(fontSize = 30.sp)
 
 @Composable
 private fun NoneTile(modifier: Modifier, selected: Boolean, onClick: () -> Unit) {

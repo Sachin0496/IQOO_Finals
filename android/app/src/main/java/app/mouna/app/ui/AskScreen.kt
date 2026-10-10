@@ -124,12 +124,12 @@ fun AskScreen(app: MounaApp) {
     }
 }
 
-private val crumbStyle = Type.mono.copy(fontSize = 14.sp, color = Ink.bone2)
-private val backStyle = Type.mono.copy(color = Ink.bone2, fontSize = 14.sp, textDecoration = TextDecoration.Underline)
-private val askStyle = Type.display.copy(fontSize = 44.sp, lineHeight = 50.sp)
-private val askUrgent = askStyle.copy(color = Ink.turmeric)
-private val doneStyle = Type.display.copy(fontSize = 40.sp, lineHeight = 46.sp)
-private val doneNote = Type.hint.copy(fontStyle = FontStyle.Italic)
+private val crumbStyle get() = Type.mono.copy(fontSize = 14.sp, color = Ink.bone2)
+private val backStyle get() = Type.mono.copy(color = Ink.bone2, fontSize = 14.sp, textDecoration = TextDecoration.Underline)
+private val askStyle get() = Type.display.copy(fontSize = 44.sp, lineHeight = 50.sp)
+private val askUrgent get() = askStyle.copy(color = Ink.turmeric)
+private val doneStyle get() = Type.display.copy(fontSize = 40.sp, lineHeight = 46.sp)
+private val doneNote get() = Type.hint.copy(fontStyle = FontStyle.Italic)
 
 @Composable
 private fun Answer(text: String, icon: ImageVector, bg: Color, fg: Color, modifier: Modifier, onClick: () -> Unit) {

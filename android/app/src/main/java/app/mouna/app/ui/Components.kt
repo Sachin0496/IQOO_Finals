@@ -102,7 +102,7 @@ private val CardShape = RoundedCornerShape(28.dp)
 data class CameraFacing(val front: Boolean = true, val canFlip: Boolean = false, val flip: () -> Unit = {})
 
 val LocalCameraFacing = compositionLocalOf { CameraFacing() }
-private val LipFaint = Ink.bone.copy(alpha = 0.45f)
+private val LipFaint get() = Ink.bone.copy(alpha = 0.45f)
 
 /** The camera, softly framed, with the lip contour drawn in turmeric while Mouna is hearing. */
 @Composable
@@ -203,8 +203,8 @@ fun Pill(text: String, dot: Color = Ink.mute, pulse: Boolean = false, modifier: 
 
 private val TileShape = RoundedCornerShape(22.dp)
 private val BigTileShape = RoundedCornerShape(28.dp)
-private val phraseStyle = Type.phrase
-private val tileSub = Type.label.copy(letterSpacing = 0.sp, fontSize = 11.sp, lineHeight = 14.sp)
+private val phraseStyle get() = Type.phrase
+private val tileSub get() = Type.label.copy(letterSpacing = 0.sp, fontSize = 11.sp, lineHeight = 14.sp)
 private const val TILE_LINES = 3
 
 /** The starting size for a phrase in [lang]: Indic scripts are wider and taller than Latin at the same size. */
