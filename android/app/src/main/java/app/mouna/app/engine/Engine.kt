@@ -149,7 +149,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
      * ~0.7 s don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
      * Waits for free talk's own crop: the lip encoder's crop is only made while Lips listens.
      */
-    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 30, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
+    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 40, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
@@ -643,8 +643,28 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             onWorker { teachWordFrom(c, word) }
             return
         }
+        if (recordTo == null && !speechLike(c)) return // breathing, a twitch, a resting jaw: not worth reading
         val match = if (ready && wordCount > 0) java.util.concurrent.CompletableFuture<Decision?>().also { f -> onWorker { f.complete(matchWords(c)) } } else null
         submit(freeWorker) { readClip(c, match) }
+    }
+
+    /**
+     * Speech opens and closes the lips; a still face mostly doesn't. Spread of the inner-lip gap (p90 - p10, in mouth
+     * widths) and how often it crosses its middle. Logged per clip ("lips gate") to tune [OPEN_SPREAD] and [OPEN_CYCLES].
+     */
+    private fun speechLike(c: Clip): Boolean {
+        val a = c.frames.filter { it.face }.map { it.aperture }
+        if (a.size < MIN_SPEECH_FRAMES) { ftLog("lips gate: ${a.size} frames -> skip (short)"); return false }
+        val s = a.sorted()
+        val p10 = s[(s.size * 0.1).toInt()]
+        val p90 = s[(s.size * 0.9).toInt().coerceAtMost(s.size - 1)]
+        val spread = p90 - p10
+        val mid = (p10 + p90) / 2
+        var cycles = 0
+        for (i in 1 until a.size) if ((a[i - 1] < mid) != (a[i] < mid)) cycles++
+        val ok = spread >= OPEN_SPREAD && cycles >= OPEN_CYCLES
+        ftLog("lips gate: ${a.size} frames, spread ${"%.3f".format(spread)}, crossings $cycles -> ${if (ok) "read" else "skip"}")
+        return ok
     }
 
     private val wordsKey get() = "words-${encoder.id}"
@@ -902,6 +922,12 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         private const val MAX_LEARNED = 200
         /** How long a Lips reading waits for the taught words' match (it runs in parallel and takes ~20 ms). */
         private const val WORD_WAIT_MS = 400L
+        /** Lips: a clip is read only if the inner-lip gap spreads at least this far (mouth widths)... */
+        private const val OPEN_SPREAD = 0.15f
+        /** ...and crosses its middle this often (two opens and closes). */
+        private const val OPEN_CYCLES = 4
+        /** ...over at least this many face frames (~2 s): shorter bursts on the phone were twitches read as filler. */
+        private const val MIN_SPEECH_FRAMES = 60
         /** "Not one of my words" examples kept from confirmations; the oldest go first. */
         private const val MAX_WORD_NEGATIVES = 40
     }

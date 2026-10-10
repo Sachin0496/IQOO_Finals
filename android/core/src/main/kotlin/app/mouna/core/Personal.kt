@@ -16,10 +16,15 @@ object Personal {
     private const val NEG = -1e30
 
     /**
-     * A listed sentence goes before the open reading when its score is within this many nats of the open best
-     * (GRID: 23/30 in-list sentences, 0/30 false when the truth was not in the list). Below it, it is still offered.
+     * A listed sentence goes before the open reading when its score is within this many nats of the open best; below
+     * it, it is still offered. Was -20 (GRID). Laptop replay of Nakul's 21 held-out silent clips (adapt.py seed 0,
+     * 10 Oct; not yet saved in deck/data): -20 put a wrong listed sentence first 19/21 when the truth was not listed
+     * ("I am not hungry" -> "I am hungry"); -8 on the original model and -6 on a model tuned to the person
+     * ([FIRST_WITHIN_TUNED]) put it first 0/21 and kept listed truths first or second.
      */
-    const val FIRST_WITHIN = -20.0
+    const val FIRST_WITHIN = -8.0
+    /** [FIRST_WITHIN] for a model tuned to the person: it already reads their sentences well, so they need less help. */
+    const val FIRST_WITHIN_TUNED = -6.0
     /** Further than this behind the open reading, a listed sentence is not offered at all. */
     const val OFFER_WITHIN = -35.0
     /**
@@ -65,13 +70,13 @@ object Personal {
 
     /**
      * What "Did you mean…?" shows, best first: listed sentences in [Option.rank] order; the best leads when its score is
-     * within [FIRST_WITHIN] of the open reading, otherwise the open reading leads; then they alternate. Listed sentences further than
+     * within [firstWithin] of the open reading, otherwise the open reading leads; then they alternate. Listed sentences further than
      * [OFFER_WITHIN] behind are dropped. Duplicates (same text) keep their first place.
      */
-    fun merge(open: List<Option>, listed: List<Option>, max: Int = 4): List<Option> {
+    fun merge(open: List<Option>, listed: List<Option>, max: Int = 4, firstWithin: Double = FIRST_WITHIN): List<Option> {
         val openBest = open.firstOrNull()?.score ?: Double.NEGATIVE_INFINITY
         val mine = listed.sortedByDescending { it.rank }.filter { open.isEmpty() || it.score - openBest > OFFER_WITHIN }
-        val mineFirst = mine.isNotEmpty() && (open.isEmpty() || mine[0].score - openBest > FIRST_WITHIN)
+        val mineFirst = mine.isNotEmpty() && (open.isEmpty() || mine[0].score - openBest > firstWithin)
         val a = if (mineFirst) mine else open
         val b = if (mineFirst) open else mine
         val out = LinkedHashMap<String, Option>()
