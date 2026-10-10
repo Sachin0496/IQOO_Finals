@@ -82,6 +82,8 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
                 is Prompt.PhoneWho -> PhoneWho(app, prompt, k)
                 is Prompt.PhoneBody -> PhoneBody(app, prompt, k)
                 is Prompt.PhoneConfirm -> PhoneConfirm(app, prompt, k)
+                is Prompt.AppWho -> AppWho(app, prompt, k)
+                is Prompt.AppConfirm -> AppConfirm(app, prompt, k)
                 is Prompt.FromCore -> {
                     val d = prompt.d
                     when (d.kind) {
@@ -319,7 +321,7 @@ private fun ColumnScope.PhoneWho(app: MounaApp, p: Prompt.PhoneWho, k: Knowledge
     PhonePair(app, PhoneFlow.pair(p.people, p.page).map { PhoneOption(it.name, personLine(p.verb, it)) }) { app.phonePick(it) }
     Spacer(Modifier.weight(1f))
     Hint(pickHint(k, more))
-    MoreOrCancel(app, more)
+    MoreOrCancel(app, more) { app.phoneNext() }
 }
 
 /** The line under a name: "web call" for a call by web link, else the number, else that there is none. */
@@ -337,7 +339,30 @@ private fun ColumnScope.PhoneBody(app: MounaApp, p: Prompt.PhoneBody, k: Knowled
     PhonePair(app, PhoneFlow.pair(p.options, p.page).map { PhoneOption(it) }) { app.phonePick(it) }
     Spacer(Modifier.weight(1f))
     Hint(pickHint(k, more))
-    MoreOrCancel(app, more)
+    MoreOrCancel(app, more) { app.phoneNext() }
+}
+
+/** Open an app, always confirmed: nothing opens until the person says yes here. */
+@Composable
+private fun ColumnScope.AppConfirm(app: MounaApp, p: Prompt.AppConfirm, k: Knowledge) {
+    Header(app, "OPEN AN APP", "Open ${p.app.label}?")
+    Spacer(Modifier.weight(1f))
+    Hint(if (k.switchReady) "Use your movement or nod for yes, shake your head for no." else "Nod or blink twice for yes, shake your head for no.")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        BigButton("No", Tone.NO, Modifier.weight(1f)) { app.appCancel() }
+        BigButton("Yes, open", Tone.YES, Modifier.weight(1.4f)) { app.appGo() }
+    }
+}
+
+/** The apps that may be the one said: two at a time, as the phone pictures; a look or a tap picks, shake for more. */
+@Composable
+private fun ColumnScope.AppWho(app: MounaApp, p: Prompt.AppWho, k: Knowledge) {
+    val more = p.apps.size > 2
+    Header(app, "OPEN", "Which app?")
+    PhonePair(app, PhoneFlow.pair(p.apps, p.page).map { PhoneOption(it.label) }) { app.appPick(it) }
+    Spacer(Modifier.weight(1f))
+    Hint(pickHint(k, more))
+    MoreOrCancel(app, more) { app.appNext() }
 }
 
 /** The one action, always confirmed. Nothing is dialled or sent until the person says yes here. */
@@ -375,9 +400,9 @@ private fun pickHint(k: Knowledge, more: Boolean): String {
 
 /** More (only with more to see) and Cancel, side by side. */
 @Composable
-private fun ColumnScope.MoreOrCancel(app: MounaApp, more: Boolean) {
+private fun ColumnScope.MoreOrCancel(app: MounaApp, more: Boolean, onMore: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (more) BigButton("More", Tone.PRIMARY, Modifier.weight(1f)) { app.phoneNext() }
+        if (more) BigButton("More", Tone.PRIMARY, Modifier.weight(1f), onClick = onMore)
         BigButton("Cancel", Tone.NO, Modifier.weight(1f)) { app.close() }
     }
 }

@@ -3,6 +3,7 @@ package app.mouna.app
 import app.mouna.app.engine.AppInfo
 import app.mouna.app.engine.AppMatch
 import app.mouna.app.engine.AppParser
+import app.mouna.app.engine.DeviceNumber
 import app.mouna.app.engine.NameMatch
 import app.mouna.app.engine.PhoneBook
 import app.mouna.app.engine.PhoneCommand
@@ -675,5 +676,62 @@ class PhoneAgentTest {
         assertTrue(AppMatch.sure(AppMatch.rank("youtube", apps)))
         assertFalse(AppMatch.sure(AppMatch.rank("utube", apps)))
         assertFalse(AppMatch.sure(emptyList()))
+    }
+
+    // Apps: a leading "Google " is also offered without it
+
+    @Test
+    fun aGooglePrefixedAppIsAlsoFoundByItsShortName() {
+        val maps = listOf(AppInfo("Google Maps", "com.google.android.apps.maps"))
+        assertEquals(listOf("Google Maps", "Maps"), AppMatch.aliases(maps).map { it.label })
+        val found = AppMatch.search("maps", maps)
+        assertEquals("Google Maps", found.first().first.label)
+        assertEquals(1f, found.first().second, 1e-6f)
+    }
+
+    @Test
+    fun aFullGoogleNameAndAnAppWithoutThePrefixAreUnchanged() {
+        val maps = listOf(AppInfo("Google Maps", "com.google.android.apps.maps"))
+        assertEquals("Google Maps", AppMatch.search("google maps", maps).first().first.label)
+        val plain = listOf(AppInfo("Google", "com.google.android.googlequicksearchbox"), AppInfo("YouTube", "com.google.android.youtube"))
+        assertEquals(plain, AppMatch.aliases(plain))
+    }
+
+    @Test
+    fun anAppIsListedOnceWhateverItsNamesMatch() {
+        val maps = listOf(AppInfo("Google Maps", "com.google.android.apps.maps"))
+        assertEquals(1, AppMatch.search("google maps", maps).size)
+        assertEquals(1, AppMatch.search("maps", maps).size)
+    }
+
+    // The phone's own contacts, one per name
+
+    private fun row(name: String, number: String, mobile: Boolean = true, starred: Boolean = false) =
+        DeviceNumber(name, number, mobile, starred)
+
+    @Test
+    fun aDeviceNameIsOneContactWithItsMobileNumberFirst() {
+        val contacts = PhoneBook.fromDevice(
+            listOf(row("Nakul", "011 2345 6789", mobile = false), row("Nakul", "98765 43210"), row("Nakul", "9000000000")),
+        )
+        assertEquals(listOf(PhoneContact("Nakul", "98765 43210")), contacts)
+    }
+
+    @Test
+    fun withNoMobileTheFirstUsableNumberIsKept() {
+        val contacts = PhoneBook.fromDevice(listOf(row("Amma", "", mobile = true), row("Amma", "0112345678", mobile = false)))
+        assertEquals("0112345678", contacts.single().number)
+    }
+
+    @Test
+    fun starredIsTakenFromAnyRowOfTheName() {
+        assertTrue(PhoneBook.fromDevice(listOf(row("Ravi", "9876543210"), row("Ravi", "9123456780", starred = true))).single().starred)
+        assertFalse(PhoneBook.fromDevice(listOf(row("Ravi", "9876543210"))).single().starred)
+    }
+
+    @Test
+    fun blankNamesAreDroppedAndANameWithNoUsableNumberStaysWithoutOne() {
+        val contacts = PhoneBook.fromDevice(listOf(row("  ", "9876543210"), row("Dadi", " ")))
+        assertEquals(listOf(PhoneContact("Dadi", null)), contacts)
     }
 }

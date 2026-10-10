@@ -19,6 +19,9 @@ data class PhoneContact(
     val starred: Boolean = false,
 )
 
+/** One number from the phone's own contacts, as the contacts list gives it. [mobile] is a mobile number; [starred] is the contact's star. */
+data class DeviceNumber(val name: String, val number: String, val mobile: Boolean, val starred: Boolean)
+
 /** What the person asked for. name == null: "call" alone, so Mouna asks who. body == null for calls or a message with no text yet. */
 data class PhoneCommand(val verb: PhoneVerb, val name: String?, val body: String?)
 
@@ -301,6 +304,18 @@ object PhoneBook {
         return byName.values.toList()
     }
 
+    /**
+     * The phone's own numbers, one contact per name: the mobile number when there is one, else the first usable number.
+     * Starred when any of the name's rows is starred. Rows with no name are dropped; a name with no usable number stays,
+     * with no number.
+     */
+    fun fromDevice(rows: List<DeviceNumber>): List<PhoneContact> =
+        rows.filter { it.name.isNotBlank() }.groupBy { it.name.trim() }.map { (name, group) ->
+            val usable = group.filter { it.number.isNotBlank() }
+            val pick = usable.firstOrNull { it.mobile } ?: usable.firstOrNull()
+            PhoneContact(name, pick?.number, starred = group.any { it.starred })
+        }
+
     /** A device contact whose name is new is added; one whose name is already saved only fills in a missing number. */
     private fun addDevice(byName: MutableMap<String, PhoneContact>, d: PhoneContact) {
         val n = d.name.trim()
@@ -493,6 +508,23 @@ object AppMatch {
         val best = ranked.firstOrNull()?.second ?: return false
         val second = ranked.getOrNull(1)?.second ?: 0f
         return best >= 0.92f - EPS && best - second >= 0.08f - EPS
+    }
+
+    /**
+     * [rank] over the apps as people say them: each app under its label, and again without a leading "Google " when that
+     * leaves a name ("Google Maps" is also "Maps"). Each app appears once, at its best score, under its own label. The
+     * scoring is [rank]'s.
+     */
+    fun search(spoken: String, apps: List<AppInfo>): List<Pair<AppInfo, Float>> {
+        val byPackage = apps.associateBy { it.pkg }
+        val best = rank(spoken, aliases(apps)).distinctBy { it.first.pkg }
+        return best.map { (alias, score) -> (byPackage[alias.pkg] ?: alias) to score }
+    }
+
+    /** Each app, plus a copy under its label without a leading "Google " (only when that leaves something). */
+    fun aliases(apps: List<AppInfo>): List<AppInfo> = apps.flatMap { app ->
+        val short = app.label.removePrefix("Google ").trim()
+        if (short.isEmpty() || short == app.label) listOf(app) else listOf(app, app.copy(label = short))
     }
 
     private fun squash(s: String): String = s.replace(" ", "")

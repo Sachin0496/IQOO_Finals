@@ -17,8 +17,6 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,7 +35,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
@@ -83,7 +80,6 @@ private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean)
         st.hearing -> Status("Reading your lips…", Ink.turmeric, true)
         else -> Status("Mouth a sentence", Ink.leaf)
     }
-    Channel.TYPE -> Status("Type below, Mouna speaks it aloud", Ink.leaf)
 }
 
 /** What the machine is doing: only on stage-debug. */
@@ -95,7 +91,6 @@ private fun techStatus(app: MounaApp, k: Knowledge): Status? = when (app.channel
     }
     Channel.VOICE -> if (app.hearing.ready) Status("Whisper", Ink.leaf) else Status("No voice model", Ink.mute)
     Channel.LIPS -> if (k.freeReady) Status("${k.freeModel} · NPU", Ink.leaf) else Status(k.freeTalk, Ink.mute, k.freeLoading)
-    Channel.TYPE -> null
 }
 
 /** How a phrase came to be said, in words. */
@@ -113,8 +108,11 @@ private fun howSaid(via: String): String = when {
     else -> ""
 }
 
-/** The ways the person can talk on Speak. Voice is left out: anyone who can say a phrase doesn't need Mouna to say it. */
-internal val SPEAK_CHANNELS = listOf(Channel.LIPS to "Lips", Channel.SIGN to "Sign", Channel.TYPE to "Type")
+/**
+ * The ways the person can talk on Speak. Voice is left out: anyone who can say a phrase doesn't need Mouna to say it.
+ * Typing is on the Call screen.
+ */
+internal val SPEAK_CHANNELS = listOf(Channel.LIPS to "Lips", Channel.SIGN to "Sign")
 
 /**
  * The one screen the person lives on: their face, what Mouna last said, and their phrases as pictures.
@@ -125,9 +123,7 @@ internal val SPEAK_CHANNELS = listOf(Channel.LIPS to "Lips", Channel.SIGN to "Si
 fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall: Boolean = false) {
     val micHot by remember { derivedStateOf { app.micLevel > 0.35f } }
     app.voiceStatus // the voice model loads in the background: re-read "ready" when its status changes
-    // imePadding at the root (not inside the type box): when the keyboard opens the whole column re-measures
-    // in the visible area and the camera card shrinks, instead of leaving a blank gap above the keyboard.
-    Column(Modifier.fillMaxSize().imePadding()) {
+    Column(Modifier.fillMaxSize()) {
         CameraCard(
             app.engine.live,
             bind,
@@ -153,7 +149,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall
             ) { said ->
                 if (said == null) {
                     Column {
-                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English."; Channel.TYPE -> if (inCall) "Type what to say." else "Type anything below." }, style = waitingStyle)
+                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English." }, style = waitingStyle)
                         if (app.channel == Channel.LIPS && !app.onCall) { // never walk away from a call
                             Text(
                                 "A name or word Lips can’t read? Teach it →",
@@ -186,7 +182,6 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall
         }
 
         if (!inCall) {
-            if (app.channel == Channel.TYPE) TypeBox(app, Modifier.padding(horizontal = 20.dp))
             Row(Modifier.padding(start = 24.dp, end = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 SectionLabel("Or tap a picture", Modifier.weight(1f))
                 PhoneButton(app) // not on a call: there is no phone flow to open there
@@ -222,23 +217,5 @@ private fun PhoneButton(app: MounaApp) {
         Icon(Icons.Rounded.Call, null, tint = Ink.turmeric, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text("Phone", style = Type.button.copy(fontSize = 15.sp))
-    }
-}
-
-/** Anything typed is spoken aloud in the caregiver's language, through the same voice as everything else. */
-@Composable
-private fun TypeBox(app: MounaApp, modifier: Modifier = Modifier) {
-    var text by remember { mutableStateOf("") }
-    Column(modifier) {
-        SectionLabel("Type what to say")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextBox(text, { text = it.take(200) }, "Type what to say", Modifier.weight(1f), singleLine = false)
-            Spacer(Modifier.width(10.dp))
-            BigButton("Speak", Tone.PRIMARY, enabled = text.isNotBlank()) {
-                app.sayTyped(text)
-                text = ""
-            }
-        }
-        Spacer(Modifier.height(14.dp))
     }
 }

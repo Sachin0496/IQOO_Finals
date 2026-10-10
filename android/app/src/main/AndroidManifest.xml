@@ -20,8 +20,13 @@
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
+    <!-- Names the person says ("call Nakul") are looked up in the phone's own contacts, read on the phone only. Asked for
+         the first time a name is not found; without it, only Mouna's own favourites are known. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Lets the app ask the system TTS engine which voices exist (fallback voice). -->
-    <!-- Phone actions open other apps (the dialler, WhatsApp, messages) and check WhatsApp is there. No SMS send, no contacts. -->
+    <!-- Phone actions open other apps (the dialler, WhatsApp, messages) and check WhatsApp is there. No SMS send.
+         "Open an app" lists the launcher's apps, so it can start them by name. -->
     <queries>
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
@@ -33,6 +38,10 @@
         <intent>
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         <package android:name="com.whatsapp" />
     </queries>
