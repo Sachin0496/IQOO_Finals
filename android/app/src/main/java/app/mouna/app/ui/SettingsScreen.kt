@@ -159,6 +159,25 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         Card {
             Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Eye control", style = Type.phrase)
+                        Text("Look at a button to outline it. Close your eyes for half a second to press it; blink twice quickly to go back.", style = Type.body.copy(fontSize = 13.sp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    MounaSwitch(app.eyeControl) { app.chooseEyeControl(it) }
+                }
+                Spacer(Modifier.height(12.dp))
+                val map = app.gazeMap
+                val mm = map?.let { pxToMm(it.errorPx, context.resources.displayMetrics.xdpi).toInt() }
+                SetupRow("Calibrate eyes", if (mm != null) "Calibrated · about $mm mm off" else "Follow a dot with your eyes, 20 to 45 seconds", map != null,
+                    if (map != null) "Redo" else "Start") { app.go(Screen.EYE_CONTROL) }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Card {
+            Column {
                 SectionLabel("Beyond the lips")
                 SetupRow("Your movement", if (k.switchReady) "Taught · it means yes" else "A raised eyebrow, a half smile… as your yes", k.switchReady,
                     if (k.switchReady) "Redo" else "Teach") { app.go(Screen.SWITCH) }

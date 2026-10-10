@@ -25,6 +25,8 @@ import androidx.camera.view.PreviewView
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import android.provider.ContactsContract
@@ -45,6 +47,7 @@ import app.mouna.app.engine.WebLink
 import app.mouna.app.sense.Sensor
 import android.telephony.TelephonyManager
 import app.mouna.app.ui.CameraFacing
+import app.mouna.app.ui.EyeControl
 import app.mouna.app.ui.LocalCameraFacing
 import app.mouna.app.ui.MounaRoot
 import app.mouna.app.ui.MounaTheme
@@ -79,6 +82,7 @@ class MainActivity : ComponentActivity() {
         contactAnswer = null
     }
     private lateinit var carrier: CarrierLink
+    private lateinit var eyes: EyeControl
     private val receivers = mutableListOf<BroadcastReceiver>()
     private val cameraDenied = mutableStateOf(false)
     private val cameraReady = mutableStateOf(false)
@@ -148,6 +152,14 @@ class MainActivity : ComponentActivity() {
             openPackage = ::openPackage,
         )
         welcome.value = !engine.store.welcomed
+        // Eye control finds the buttons of every Compose window (this one, each dialog) as it is created.
+        eyes = EyeControl(this, engine) { app.prompt != null || app.screen != Screen.SPEAK }
+        val before = ViewRootForTest.onViewCreatedCallback
+        ViewRootForTest.onViewCreatedCallback = { before?.invoke(it); eyes.register(it) }
+        lifecycleScope.launch {
+            // Paused while it is being calibrated: the dots must not be pressed.
+            snapshotFlow { Pair(app.eyeControl && app.screen != Screen.EYE_CONTROL, app.gazeMap) }.collect { (on, map) -> eyes.set(on, map) }
+        }
         engine.start()
         lifecycleScope.launch { engine.events.collect { app.onEvent(it) } }
 
@@ -438,6 +450,8 @@ class MainActivity : ComponentActivity() {
     }.getOrNull()
 
     override fun onDestroy() {
+        eyes.set(false, null)
+        ViewRootForTest.onViewCreatedCallback = null
         for (r in receivers) runCatching { unregisterReceiver(r) }
         receivers.clear()
         app.shutdown()
