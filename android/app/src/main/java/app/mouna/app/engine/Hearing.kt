@@ -174,6 +174,8 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
             var quiet = 0
             var startedAt = 0L
             var bad = 0
+            var peak = 0f
+            var frames = 0
             while (!mine.stop) {
                 val n = rec.read(frame, 0, FRAME, AudioRecord.READ_BLOCKING)
                 if (n < 0) { // the microphone was taken away (a call, another app) or died: don't spin on it
@@ -188,7 +190,9 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
                 for (x in chunk) e += x * x
                 val rms = sqrt(e / n)
                 onLevel(min(1f, rms / (noise * 12)))
-                val loud = rms > max(noise * 4f, 0.006f) // a busy room must not count as a voice
+                val loud = rms > max(noise * 3.2f, 0.004f)
+                peak = max(peak, rms)
+                if (++frames % 100 == 0) { Log.i("Mouna", "mic: room %.4f, loudest %.4f, need %.4f".format(noise, peak, max(noise * 3.2f, 0.004f))); peak = 0f }
                 if (speech.isEmpty()) {
                     if (!loud) noise = 0.95f * noise + 0.05f * rms // learn the room only between utterances
                     pre.addLast(chunk)
@@ -228,10 +232,10 @@ class Listener(private val onLevel: (Float) -> Unit, private val onUtterance: (F
     companion object {
         const val FRAME = 480 // 30 ms
         const val PRE_FRAMES = 10 // 300 ms kept from before the voice started
-        const val START_FRAMES = 7 // 210 ms of voice starts an utterance
+        const val START_FRAMES = 5 // 150 ms of voice starts an utterance
         const val END_FRAMES = 27 // 800 ms of quiet ends it (slow, effortful speech has long pauses)
         const val MAX_MS = 8000L
-        const val MIN_S = 0.6f
+        const val MIN_S = 0.45f
     }
 }
 
