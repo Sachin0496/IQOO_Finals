@@ -173,6 +173,10 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 val taught = k.words.count { (k.wordCounts[it.first] ?: 0) > 0 }
                 SetupRow("Teach Lips a word", if (taught > 0) "$taught word${if (taught == 1) "" else "s"} · names, any language" else "Names and words Lips can’t read, in any language",
                     taught > 0, if (taught > 0) "Edit" else "Teach") { app.openWords(Screen.SETTINGS) }
+                Spacer(Modifier.height(12.dp))
+                val signs = k.signs.count { (k.signCounts[it.first] ?: 0) > 0 }
+                SetupRow("Teach your signs", if (signs > 0) "$signs sign${if (signs == 1) "" else "s"} · Sign listens for yours" else "Sign learns your own signs, three times each",
+                    signs > 0, if (signs > 0) "Edit" else "Teach") { app.openSigns(Screen.SETTINGS) }
             }
         }
 

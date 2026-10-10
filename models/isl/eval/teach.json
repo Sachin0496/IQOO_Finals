@@ -1,0 +1,1533 @@
+{
+ "what": "Teach-your-own-signs on INCLUDE held-out test clips (different recordings per word): nearest taught example by cosine of SL-GCN features. 20 random picks of the taught clips per setting, seed 0.",
+ "framings": {
+  "portrait": {
+   "clips": 73,
+   "1_shot": {
+    "words": 17,
+    "trials": 1120,
+    "top1": 0.63125,
+    "top3": 0.8116071428571429,
+    "chosen": null,
+    "grid": [
+     {
+      "cos": 0.6,
+      "margin": 0.0,
+      "spoken_right": 0.63125,
+      "spoken_wrong": 0.36875,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 0.9875
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.02,
+      "spoken_right": 0.56875,
+      "spoken_wrong": 0.20892857142857144,
+      "offered_right_inside": 0.15357142857142858,
+      "untaught_spoken": 0.6803571428571429
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.05,
+      "spoken_right": 0.45267857142857143,
+      "spoken_wrong": 0.09017857142857143,
+      "offered_right_inside": 0.3196428571428571,
+      "untaught_spoken": 0.375
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.08,
+      "spoken_right": 0.31607142857142856,
+      "spoken_wrong": 0.03125,
+      "offered_right_inside": 0.48035714285714287,
+      "untaught_spoken": 0.2044642857142857
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.1,
+      "spoken_right": 0.2526785714285714,
+      "spoken_wrong": 0.015178571428571428,
+      "offered_right_inside": 0.5535714285714286,
+      "untaught_spoken": 0.11875
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.0,
+      "spoken_right": 0.6267857142857143,
+      "spoken_wrong": 0.36428571428571427,
+      "offered_right_inside": 0.00625,
+      "untaught_spoken": 0.9053571428571429
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.02,
+      "spoken_right": 0.5651785714285714,
+      "spoken_wrong": 0.20714285714285716,
+      "offered_right_inside": 0.15803571428571428,
+      "untaught_spoken": 0.6258928571428571
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.05,
+      "spoken_right": 0.44910714285714287,
+      "spoken_wrong": 0.08928571428571429,
+      "offered_right_inside": 0.32410714285714287,
+      "untaught_spoken": 0.3508928571428571
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.08,
+      "spoken_right": 0.3151785714285714,
+      "spoken_wrong": 0.03125,
+      "offered_right_inside": 0.48125,
+      "untaught_spoken": 0.19464285714285715
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.1,
+      "spoken_right": 0.2526785714285714,
+      "spoken_wrong": 0.015178571428571428,
+      "offered_right_inside": 0.5535714285714286,
+      "untaught_spoken": 0.11339285714285714
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.0,
+      "spoken_right": 0.6151785714285715,
+      "spoken_wrong": 0.34464285714285714,
+      "offered_right_inside": 0.027678571428571427,
+      "untaught_spoken": 0.8098214285714286
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.02,
+      "spoken_right": 0.5544642857142857,
+      "spoken_wrong": 0.2017857142857143,
+      "offered_right_inside": 0.16964285714285715,
+      "untaught_spoken": 0.5714285714285714
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.05,
+      "spoken_right": 0.44107142857142856,
+      "spoken_wrong": 0.0875,
+      "offered_right_inside": 0.33214285714285713,
+      "untaught_spoken": 0.32589285714285715
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.08,
+      "spoken_right": 0.31160714285714286,
+      "spoken_wrong": 0.03125,
+      "offered_right_inside": 0.48482142857142857,
+      "untaught_spoken": 0.18214285714285713
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.1,
+      "spoken_right": 0.25089285714285714,
+      "spoken_wrong": 0.015178571428571428,
+      "offered_right_inside": 0.5553571428571429,
+      "untaught_spoken": 0.11071428571428571
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.0,
+      "spoken_right": 0.5678571428571428,
+      "spoken_wrong": 0.30892857142857144,
+      "offered_right_inside": 0.09910714285714285,
+      "untaught_spoken": 0.6598214285714286
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.02,
+      "spoken_right": 0.5142857142857142,
+      "spoken_wrong": 0.17857142857142858,
+      "offered_right_inside": 0.225,
+      "untaught_spoken": 0.48214285714285715
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.05,
+      "spoken_right": 0.41785714285714287,
+      "spoken_wrong": 0.07946428571428571,
+      "offered_right_inside": 0.35892857142857143,
+      "untaught_spoken": 0.2785714285714286
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.08,
+      "spoken_right": 0.30178571428571427,
+      "spoken_wrong": 0.02857142857142857,
+      "offered_right_inside": 0.49464285714285716,
+      "untaught_spoken": 0.16785714285714284
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.1,
+      "spoken_right": 0.24553571428571427,
+      "spoken_wrong": 0.014285714285714285,
+      "offered_right_inside": 0.5607142857142857,
+      "untaught_spoken": 0.10267857142857142
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.0,
+      "spoken_right": 0.5125,
+      "spoken_wrong": 0.19553571428571428,
+      "offered_right_inside": 0.2,
+      "untaught_spoken": 0.38125
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.02,
+      "spoken_right": 0.4669642857142857,
+      "spoken_wrong": 0.10535714285714286,
+      "offered_right_inside": 0.3,
+      "untaught_spoken": 0.29196428571428573
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.05,
+      "spoken_right": 0.3892857142857143,
+      "spoken_wrong": 0.04732142857142857,
+      "offered_right_inside": 0.4,
+      "untaught_spoken": 0.18214285714285713
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.08,
+      "spoken_right": 0.2857142857142857,
+      "spoken_wrong": 0.013392857142857142,
+      "offered_right_inside": 0.5196428571428572,
+      "untaught_spoken": 0.11517857142857142
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.1,
+      "spoken_right": 0.2330357142857143,
+      "spoken_wrong": 0.00625,
+      "offered_right_inside": 0.5767857142857142,
+      "untaught_spoken": 0.07857142857142857
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.0,
+      "spoken_right": 0.35714285714285715,
+      "spoken_wrong": 0.0875,
+      "offered_right_inside": 0.40089285714285716,
+      "untaught_spoken": 0.15089285714285713
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.02,
+      "spoken_right": 0.33482142857142855,
+      "spoken_wrong": 0.04285714285714286,
+      "offered_right_inside": 0.45714285714285713,
+      "untaught_spoken": 0.125
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.05,
+      "spoken_right": 0.2892857142857143,
+      "spoken_wrong": 0.022321428571428572,
+      "offered_right_inside": 0.5116071428571428,
+      "untaught_spoken": 0.09642857142857143
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.08,
+      "spoken_right": 0.22142857142857142,
+      "spoken_wrong": 0.004464285714285714,
+      "offered_right_inside": 0.5892857142857143,
+      "untaught_spoken": 0.06607142857142857
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.1,
+      "spoken_right": 0.1875,
+      "spoken_wrong": 0.0017857142857142857,
+      "offered_right_inside": 0.6241071428571429,
+      "untaught_spoken": 0.05178571428571429
+     }
+    ]
+   },
+   "2_shot": {
+    "words": 17,
+    "trials": 780,
+    "top1": 0.6653846153846154,
+    "top3": 0.8564102564102564,
+    "chosen": null,
+    "grid": [
+     {
+      "cos": 0.6,
+      "margin": 0.0,
+      "spoken_right": 0.6653846153846154,
+      "spoken_wrong": 0.3346153846153846,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 1.0
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.02,
+      "spoken_right": 0.5897435897435898,
+      "spoken_wrong": 0.15256410256410258,
+      "offered_right_inside": 0.18846153846153846,
+      "untaught_spoken": 0.6666666666666666
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.05,
+      "spoken_right": 0.46282051282051284,
+      "spoken_wrong": 0.04487179487179487,
+      "offered_right_inside": 0.37435897435897436,
+      "untaught_spoken": 0.3435897435897436
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.08,
+      "spoken_right": 0.3141025641025641,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.541025641025641,
+      "untaught_spoken": 0.14615384615384616
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.1,
+      "spoken_right": 0.23333333333333334,
+      "spoken_wrong": 0.005128205128205128,
+      "offered_right_inside": 0.6230769230769231,
+      "untaught_spoken": 0.09743589743589744
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.0,
+      "spoken_right": 0.6653846153846154,
+      "spoken_wrong": 0.3346153846153846,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 0.926923076923077
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.02,
+      "spoken_right": 0.5897435897435898,
+      "spoken_wrong": 0.15256410256410258,
+      "offered_right_inside": 0.18846153846153846,
+      "untaught_spoken": 0.6307692307692307
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.05,
+      "spoken_right": 0.46282051282051284,
+      "spoken_wrong": 0.04487179487179487,
+      "offered_right_inside": 0.37435897435897436,
+      "untaught_spoken": 0.3217948717948718
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.08,
+      "spoken_right": 0.3141025641025641,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.541025641025641,
+      "untaught_spoken": 0.13974358974358975
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.1,
+      "spoken_right": 0.23333333333333334,
+      "spoken_wrong": 0.005128205128205128,
+      "offered_right_inside": 0.6230769230769231,
+      "untaught_spoken": 0.09358974358974359
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.0,
+      "spoken_right": 0.6641025641025641,
+      "spoken_wrong": 0.3333333333333333,
+      "offered_right_inside": 0.002564102564102564,
+      "untaught_spoken": 0.8666666666666667
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.02,
+      "spoken_right": 0.5884615384615385,
+      "spoken_wrong": 0.15256410256410258,
+      "offered_right_inside": 0.18974358974358974,
+      "untaught_spoken": 0.5923076923076923
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.05,
+      "spoken_right": 0.46282051282051284,
+      "spoken_wrong": 0.04487179487179487,
+      "offered_right_inside": 0.37435897435897436,
+      "untaught_spoken": 0.30128205128205127
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.08,
+      "spoken_right": 0.3141025641025641,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.541025641025641,
+      "untaught_spoken": 0.1294871794871795
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.1,
+      "spoken_right": 0.23333333333333334,
+      "spoken_wrong": 0.005128205128205128,
+      "offered_right_inside": 0.6230769230769231,
+      "untaught_spoken": 0.09102564102564102
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.0,
+      "spoken_right": 0.65,
+      "spoken_wrong": 0.31153846153846154,
+      "offered_right_inside": 0.03333333333333333,
+      "untaught_spoken": 0.7717948717948718
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.02,
+      "spoken_right": 0.5769230769230769,
+      "spoken_wrong": 0.13846153846153847,
+      "offered_right_inside": 0.2141025641025641,
+      "untaught_spoken": 0.5294871794871795
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.05,
+      "spoken_right": 0.46025641025641023,
+      "spoken_wrong": 0.04487179487179487,
+      "offered_right_inside": 0.3769230769230769,
+      "untaught_spoken": 0.2717948717948718
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.08,
+      "spoken_right": 0.3128205128205128,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.5423076923076923,
+      "untaught_spoken": 0.12051282051282051
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.1,
+      "spoken_right": 0.23333333333333334,
+      "spoken_wrong": 0.005128205128205128,
+      "offered_right_inside": 0.6230769230769231,
+      "untaught_spoken": 0.0858974358974359
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.0,
+      "spoken_right": 0.6102564102564103,
+      "spoken_wrong": 0.23333333333333334,
+      "offered_right_inside": 0.11153846153846154,
+      "untaught_spoken": 0.5282051282051282
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.02,
+      "spoken_right": 0.5512820512820513,
+      "spoken_wrong": 0.09102564102564102,
+      "offered_right_inside": 0.26794871794871794,
+      "untaught_spoken": 0.37435897435897436
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.05,
+      "spoken_right": 0.4423076923076923,
+      "spoken_wrong": 0.026923076923076925,
+      "offered_right_inside": 0.4025641025641026,
+      "untaught_spoken": 0.20512820512820512
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.08,
+      "spoken_right": 0.29615384615384616,
+      "spoken_wrong": 0.002564102564102564,
+      "offered_right_inside": 0.5602564102564103,
+      "untaught_spoken": 0.09615384615384616
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.1,
+      "spoken_right": 0.21666666666666667,
+      "spoken_wrong": 0.002564102564102564,
+      "offered_right_inside": 0.6397435897435897,
+      "untaught_spoken": 0.07179487179487179
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.0,
+      "spoken_right": 0.47307692307692306,
+      "spoken_wrong": 0.09743589743589744,
+      "offered_right_inside": 0.3128205128205128,
+      "untaught_spoken": 0.24358974358974358
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.02,
+      "spoken_right": 0.42948717948717946,
+      "spoken_wrong": 0.01282051282051282,
+      "offered_right_inside": 0.41794871794871796,
+      "untaught_spoken": 0.1717948717948718
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.05,
+      "spoken_right": 0.3564102564102564,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5,
+      "untaught_spoken": 0.12564102564102564
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.08,
+      "spoken_right": 0.24487179487179486,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6115384615384616,
+      "untaught_spoken": 0.07564102564102564
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.1,
+      "spoken_right": 0.1794871794871795,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.676923076923077,
+      "untaught_spoken": 0.06025641025641026
+     }
+    ]
+   },
+   "3_shot": {
+    "words": 17,
+    "trials": 440,
+    "top1": 0.7681818181818182,
+    "top3": 0.9272727272727272,
+    "chosen": {
+     "cos": 0.9,
+     "margin": 0.1,
+     "spoken_right": 0.175,
+     "spoken_wrong": 0.0,
+     "offered_right_inside": 0.7522727272727273,
+     "untaught_spoken": 0.04318181818181818
+    },
+    "grid": [
+     {
+      "cos": 0.6,
+      "margin": 0.0,
+      "spoken_right": 0.7681818181818182,
+      "spoken_wrong": 0.2318181818181818,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 1.0
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.02,
+      "spoken_right": 0.6977272727272728,
+      "spoken_wrong": 0.07272727272727272,
+      "offered_right_inside": 0.19090909090909092,
+      "untaught_spoken": 0.6090909090909091
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.05,
+      "spoken_right": 0.4954545454545455,
+      "spoken_wrong": 0.029545454545454545,
+      "offered_right_inside": 0.4113636363636364,
+      "untaught_spoken": 0.29318181818181815
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.08,
+      "spoken_right": 0.2840909090909091,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6431818181818182,
+      "untaught_spoken": 0.10227272727272728
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.1,
+      "spoken_right": 0.19772727272727272,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.7295454545454545,
+      "untaught_spoken": 0.06818181818181818
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.0,
+      "spoken_right": 0.7681818181818182,
+      "spoken_wrong": 0.2318181818181818,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 0.9613636363636363
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.02,
+      "spoken_right": 0.6977272727272728,
+      "spoken_wrong": 0.07272727272727272,
+      "offered_right_inside": 0.19090909090909092,
+      "untaught_spoken": 0.5772727272727273
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.05,
+      "spoken_right": 0.4954545454545455,
+      "spoken_wrong": 0.029545454545454545,
+      "offered_right_inside": 0.4113636363636364,
+      "untaught_spoken": 0.27954545454545454
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.08,
+      "spoken_right": 0.2840909090909091,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6431818181818182,
+      "untaught_spoken": 0.1
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.1,
+      "spoken_right": 0.19772727272727272,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.7295454545454545,
+      "untaught_spoken": 0.06818181818181818
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.0,
+      "spoken_right": 0.7681818181818182,
+      "spoken_wrong": 0.2318181818181818,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 0.9022727272727272
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.02,
+      "spoken_right": 0.6977272727272728,
+      "spoken_wrong": 0.07272727272727272,
+      "offered_right_inside": 0.19090909090909092,
+      "untaught_spoken": 0.5477272727272727
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.05,
+      "spoken_right": 0.4954545454545455,
+      "spoken_wrong": 0.029545454545454545,
+      "offered_right_inside": 0.4113636363636364,
+      "untaught_spoken": 0.2681818181818182
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.08,
+      "spoken_right": 0.2840909090909091,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6431818181818182,
+      "untaught_spoken": 0.09318181818181819
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.1,
+      "spoken_right": 0.19772727272727272,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.7295454545454545,
+      "untaught_spoken": 0.06818181818181818
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.0,
+      "spoken_right": 0.7477272727272727,
+      "spoken_wrong": 0.2318181818181818,
+      "offered_right_inside": 0.020454545454545454,
+      "untaught_spoken": 0.8340909090909091
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.02,
+      "spoken_right": 0.6772727272727272,
+      "spoken_wrong": 0.07272727272727272,
+      "offered_right_inside": 0.21136363636363636,
+      "untaught_spoken": 0.5068181818181818
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.05,
+      "spoken_right": 0.49318181818181817,
+      "spoken_wrong": 0.029545454545454545,
+      "offered_right_inside": 0.41363636363636364,
+      "untaught_spoken": 0.24772727272727274
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.08,
+      "spoken_right": 0.2840909090909091,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6431818181818182,
+      "untaught_spoken": 0.09318181818181819
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.1,
+      "spoken_right": 0.19772727272727272,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.7295454545454545,
+      "untaught_spoken": 0.06818181818181818
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.0,
+      "spoken_right": 0.7022727272727273,
+      "spoken_wrong": 0.18181818181818182,
+      "offered_right_inside": 0.09090909090909091,
+      "untaught_spoken": 0.6090909090909091
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.02,
+      "spoken_right": 0.6409090909090909,
+      "spoken_wrong": 0.045454545454545456,
+      "offered_right_inside": 0.2681818181818182,
+      "untaught_spoken": 0.3795454545454545
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.05,
+      "spoken_right": 0.4727272727272727,
+      "spoken_wrong": 0.020454545454545454,
+      "offered_right_inside": 0.43636363636363634,
+      "untaught_spoken": 0.18636363636363637
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.08,
+      "spoken_right": 0.2636363636363636,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6636363636363637,
+      "untaught_spoken": 0.07272727272727272
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.1,
+      "spoken_right": 0.17727272727272728,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.75,
+      "untaught_spoken": 0.05227272727272727
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.0,
+      "spoken_right": 0.5931818181818181,
+      "spoken_wrong": 0.09772727272727273,
+      "offered_right_inside": 0.2590909090909091,
+      "untaught_spoken": 0.3090909090909091
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.02,
+      "spoken_right": 0.5477272727272727,
+      "spoken_wrong": 0.00909090909090909,
+      "offered_right_inside": 0.3795454545454545,
+      "untaught_spoken": 0.20454545454545456
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.05,
+      "spoken_right": 0.42272727272727273,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5045454545454545,
+      "untaught_spoken": 0.11136363636363636
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.08,
+      "spoken_right": 0.2590909090909091,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6681818181818182,
+      "untaught_spoken": 0.06136363636363636
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.1,
+      "spoken_right": 0.175,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.7522727272727273,
+      "untaught_spoken": 0.04318181818181818
+     }
+    ]
+   }
+  },
+  "landscape": {
+   "clips": 73,
+   "1_shot": {
+    "words": 17,
+    "trials": 1120,
+    "top1": 0.7705357142857143,
+    "top3": 0.94375,
+    "chosen": {
+     "cos": 0.9,
+     "margin": 0.0,
+     "spoken_right": 0.36339285714285713,
+     "spoken_wrong": 0.02142857142857143,
+     "offered_right_inside": 0.5616071428571429,
+     "untaught_spoken": 0.033928571428571426
+    },
+    "grid": [
+     {
+      "cos": 0.6,
+      "margin": 0.0,
+      "spoken_right": 0.7705357142857143,
+      "spoken_wrong": 0.22678571428571428,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 0.9625
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.02,
+      "spoken_right": 0.7267857142857143,
+      "spoken_wrong": 0.14732142857142858,
+      "offered_right_inside": 0.10982142857142857,
+      "untaught_spoken": 0.7383928571428572
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.05,
+      "spoken_right": 0.6267857142857143,
+      "spoken_wrong": 0.08303571428571428,
+      "offered_right_inside": 0.26071428571428573,
+      "untaught_spoken": 0.4767857142857143
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.08,
+      "spoken_right": 0.5196428571428572,
+      "spoken_wrong": 0.03214285714285714,
+      "offered_right_inside": 0.3991071428571429,
+      "untaught_spoken": 0.29910714285714285
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.1,
+      "spoken_right": 0.4732142857142857,
+      "spoken_wrong": 0.019642857142857142,
+      "offered_right_inside": 0.45267857142857143,
+      "untaught_spoken": 0.22142857142857142
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.0,
+      "spoken_right": 0.7473214285714286,
+      "spoken_wrong": 0.20535714285714285,
+      "offered_right_inside": 0.03571428571428571,
+      "untaught_spoken": 0.8044642857142857
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.02,
+      "spoken_right": 0.7089285714285715,
+      "spoken_wrong": 0.13125,
+      "offered_right_inside": 0.1375,
+      "untaught_spoken": 0.6339285714285714
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.05,
+      "spoken_right": 0.6214285714285714,
+      "spoken_wrong": 0.07857142857142857,
+      "offered_right_inside": 0.26785714285714285,
+      "untaught_spoken": 0.42410714285714285
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.08,
+      "spoken_right": 0.5151785714285714,
+      "spoken_wrong": 0.030357142857142857,
+      "offered_right_inside": 0.4044642857142857,
+      "untaught_spoken": 0.26785714285714285
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.1,
+      "spoken_right": 0.46964285714285714,
+      "spoken_wrong": 0.019642857142857142,
+      "offered_right_inside": 0.45625,
+      "untaught_spoken": 0.19642857142857142
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.0,
+      "spoken_right": 0.7205357142857143,
+      "spoken_wrong": 0.17946428571428572,
+      "offered_right_inside": 0.07946428571428571,
+      "untaught_spoken": 0.5678571428571428
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.02,
+      "spoken_right": 0.6928571428571428,
+      "spoken_wrong": 0.12321428571428572,
+      "offered_right_inside": 0.15625,
+      "untaught_spoken": 0.48839285714285713
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.05,
+      "spoken_right": 0.6107142857142858,
+      "spoken_wrong": 0.07232142857142858,
+      "offered_right_inside": 0.28125,
+      "untaught_spoken": 0.3535714285714286
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.08,
+      "spoken_right": 0.5098214285714285,
+      "spoken_wrong": 0.029464285714285714,
+      "offered_right_inside": 0.4107142857142857,
+      "untaught_spoken": 0.24107142857142858
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.1,
+      "spoken_right": 0.46517857142857144,
+      "spoken_wrong": 0.019642857142857142,
+      "offered_right_inside": 0.4607142857142857,
+      "untaught_spoken": 0.17946428571428572
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.0,
+      "spoken_right": 0.6321428571428571,
+      "spoken_wrong": 0.1455357142857143,
+      "offered_right_inside": 0.19464285714285715,
+      "untaught_spoken": 0.3508928571428571
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.02,
+      "spoken_right": 0.60625,
+      "spoken_wrong": 0.10178571428571428,
+      "offered_right_inside": 0.2598214285714286,
+      "untaught_spoken": 0.3151785714285714
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.05,
+      "spoken_right": 0.5473214285714286,
+      "spoken_wrong": 0.06339285714285714,
+      "offered_right_inside": 0.3517857142857143,
+      "untaught_spoken": 0.25625
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.08,
+      "spoken_right": 0.4705357142857143,
+      "spoken_wrong": 0.025,
+      "offered_right_inside": 0.45357142857142857,
+      "untaught_spoken": 0.18839285714285714
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.1,
+      "spoken_right": 0.43392857142857144,
+      "spoken_wrong": 0.01607142857142857,
+      "offered_right_inside": 0.4955357142857143,
+      "untaught_spoken": 0.14464285714285716
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.0,
+      "spoken_right": 0.5508928571428572,
+      "spoken_wrong": 0.06875,
+      "offered_right_inside": 0.3410714285714286,
+      "untaught_spoken": 0.13839285714285715
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.02,
+      "spoken_right": 0.5392857142857143,
+      "spoken_wrong": 0.045535714285714284,
+      "offered_right_inside": 0.375,
+      "untaught_spoken": 0.12767857142857142
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.05,
+      "spoken_right": 0.4973214285714286,
+      "spoken_wrong": 0.026785714285714284,
+      "offered_right_inside": 0.43392857142857144,
+      "untaught_spoken": 0.11696428571428572
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.08,
+      "spoken_right": 0.43839285714285714,
+      "spoken_wrong": 0.010714285714285714,
+      "offered_right_inside": 0.49910714285714286,
+      "untaught_spoken": 0.09017857142857143
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.1,
+      "spoken_right": 0.40535714285714286,
+      "spoken_wrong": 0.00625,
+      "offered_right_inside": 0.5339285714285714,
+      "untaught_spoken": 0.07232142857142858
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.0,
+      "spoken_right": 0.36339285714285713,
+      "spoken_wrong": 0.02142857142857143,
+      "offered_right_inside": 0.5616071428571429,
+      "untaught_spoken": 0.033928571428571426
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.02,
+      "spoken_right": 0.35625,
+      "spoken_wrong": 0.007142857142857143,
+      "offered_right_inside": 0.5830357142857143,
+      "untaught_spoken": 0.033928571428571426
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.05,
+      "spoken_right": 0.3375,
+      "spoken_wrong": 0.0026785714285714286,
+      "offered_right_inside": 0.60625,
+      "untaught_spoken": 0.03125
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.08,
+      "spoken_right": 0.30625,
+      "spoken_wrong": 0.0008928571428571428,
+      "offered_right_inside": 0.6375,
+      "untaught_spoken": 0.029464285714285714
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.1,
+      "spoken_right": 0.28660714285714284,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6571428571428571,
+      "untaught_spoken": 0.027678571428571427
+     }
+    ]
+   },
+   "2_shot": {
+    "words": 17,
+    "trials": 780,
+    "top1": 0.8487179487179487,
+    "top3": 0.982051282051282,
+    "chosen": {
+     "cos": 0.9,
+     "margin": 0.08,
+     "spoken_right": 0.391025641025641,
+     "spoken_wrong": 0.0,
+     "offered_right_inside": 0.591025641025641,
+     "untaught_spoken": 0.041025641025641026
+    },
+    "grid": [
+     {
+      "cos": 0.6,
+      "margin": 0.0,
+      "spoken_right": 0.8487179487179487,
+      "spoken_wrong": 0.15128205128205127,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 0.9794871794871794
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.02,
+      "spoken_right": 0.808974358974359,
+      "spoken_wrong": 0.09487179487179487,
+      "offered_right_inside": 0.09358974358974359,
+      "untaught_spoken": 0.7397435897435898
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.05,
+      "spoken_right": 0.691025641025641,
+      "spoken_wrong": 0.04358974358974359,
+      "offered_right_inside": 0.258974358974359,
+      "untaught_spoken": 0.4641025641025641
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.08,
+      "spoken_right": 0.5435897435897435,
+      "spoken_wrong": 0.01282051282051282,
+      "offered_right_inside": 0.42948717948717946,
+      "untaught_spoken": 0.2743589743589744
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.1,
+      "spoken_right": 0.4666666666666667,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.5102564102564102,
+      "untaught_spoken": 0.2205128205128205
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.0,
+      "spoken_right": 0.8371794871794872,
+      "spoken_wrong": 0.14871794871794872,
+      "offered_right_inside": 0.014102564102564103,
+      "untaught_spoken": 0.8871794871794871
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.02,
+      "spoken_right": 0.7974358974358975,
+      "spoken_wrong": 0.09230769230769231,
+      "offered_right_inside": 0.1076923076923077,
+      "untaught_spoken": 0.6730769230769231
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.05,
+      "spoken_right": 0.6884615384615385,
+      "spoken_wrong": 0.04358974358974359,
+      "offered_right_inside": 0.26153846153846155,
+      "untaught_spoken": 0.43333333333333335
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.08,
+      "spoken_right": 0.541025641025641,
+      "spoken_wrong": 0.01282051282051282,
+      "offered_right_inside": 0.43205128205128207,
+      "untaught_spoken": 0.25256410256410255
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.1,
+      "spoken_right": 0.4653846153846154,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.5115384615384615,
+      "untaught_spoken": 0.2
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.0,
+      "spoken_right": 0.8269230769230769,
+      "spoken_wrong": 0.1423076923076923,
+      "offered_right_inside": 0.03076923076923077,
+      "untaught_spoken": 0.7051282051282052
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.02,
+      "spoken_right": 0.7923076923076923,
+      "spoken_wrong": 0.09230769230769231,
+      "offered_right_inside": 0.11282051282051282,
+      "untaught_spoken": 0.5884615384615385
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.05,
+      "spoken_right": 0.6871794871794872,
+      "spoken_wrong": 0.04358974358974359,
+      "offered_right_inside": 0.26282051282051283,
+      "untaught_spoken": 0.39871794871794874
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.08,
+      "spoken_right": 0.5397435897435897,
+      "spoken_wrong": 0.01282051282051282,
+      "offered_right_inside": 0.43333333333333335,
+      "untaught_spoken": 0.24102564102564103
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.1,
+      "spoken_right": 0.4641025641025641,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.5128205128205128,
+      "untaught_spoken": 0.18974358974358974
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.0,
+      "spoken_right": 0.767948717948718,
+      "spoken_wrong": 0.13974358974358975,
+      "offered_right_inside": 0.09102564102564102,
+      "untaught_spoken": 0.517948717948718
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.02,
+      "spoken_right": 0.7333333333333333,
+      "spoken_wrong": 0.09102564102564102,
+      "offered_right_inside": 0.17307692307692307,
+      "untaught_spoken": 0.4576923076923077
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.05,
+      "spoken_right": 0.658974358974359,
+      "spoken_wrong": 0.04358974358974359,
+      "offered_right_inside": 0.29102564102564105,
+      "untaught_spoken": 0.3371794871794872
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.08,
+      "spoken_right": 0.532051282051282,
+      "spoken_wrong": 0.01282051282051282,
+      "offered_right_inside": 0.441025641025641,
+      "untaught_spoken": 0.2230769230769231
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.1,
+      "spoken_right": 0.4564102564102564,
+      "spoken_wrong": 0.007692307692307693,
+      "offered_right_inside": 0.5205128205128206,
+      "untaught_spoken": 0.1717948717948718
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.0,
+      "spoken_right": 0.7153846153846154,
+      "spoken_wrong": 0.09102564102564102,
+      "offered_right_inside": 0.18846153846153846,
+      "untaught_spoken": 0.22179487179487178
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.02,
+      "spoken_right": 0.6871794871794872,
+      "spoken_wrong": 0.06538461538461539,
+      "offered_right_inside": 0.24102564102564103,
+      "untaught_spoken": 0.2064102564102564
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.05,
+      "spoken_right": 0.6243589743589744,
+      "spoken_wrong": 0.03076923076923077,
+      "offered_right_inside": 0.33589743589743587,
+      "untaught_spoken": 0.16794871794871793
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.08,
+      "spoken_right": 0.5051282051282051,
+      "spoken_wrong": 0.008974358974358974,
+      "offered_right_inside": 0.4717948717948718,
+      "untaught_spoken": 0.11538461538461539
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.1,
+      "spoken_right": 0.4307692307692308,
+      "spoken_wrong": 0.005128205128205128,
+      "offered_right_inside": 0.5487179487179488,
+      "untaught_spoken": 0.09358974358974359
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.0,
+      "spoken_right": 0.5064102564102564,
+      "spoken_wrong": 0.023076923076923078,
+      "offered_right_inside": 0.45256410256410257,
+      "untaught_spoken": 0.06153846153846154
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.02,
+      "spoken_right": 0.48846153846153845,
+      "spoken_wrong": 0.010256410256410256,
+      "offered_right_inside": 0.48333333333333334,
+      "untaught_spoken": 0.06153846153846154
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.05,
+      "spoken_right": 0.45897435897435895,
+      "spoken_wrong": 0.002564102564102564,
+      "offered_right_inside": 0.5205128205128206,
+      "untaught_spoken": 0.05384615384615385
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.08,
+      "spoken_right": 0.391025641025641,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.591025641025641,
+      "untaught_spoken": 0.041025641025641026
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.1,
+      "spoken_right": 0.33974358974358976,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6423076923076924,
+      "untaught_spoken": 0.03461538461538462
+     }
+    ]
+   },
+   "3_shot": {
+    "words": 17,
+    "trials": 440,
+    "top1": 0.9181818181818182,
+    "top3": 0.9772727272727273,
+    "chosen": {
+     "cos": 0.9,
+     "margin": 0.1,
+     "spoken_right": 0.33636363636363636,
+     "spoken_wrong": 0.0,
+     "offered_right_inside": 0.6409090909090909,
+     "untaught_spoken": 0.038636363636363635
+    },
+    "grid": [
+     {
+      "cos": 0.6,
+      "margin": 0.0,
+      "spoken_right": 0.9181818181818182,
+      "spoken_wrong": 0.08181818181818182,
+      "offered_right_inside": 0.0,
+      "untaught_spoken": 1.0
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.02,
+      "spoken_right": 0.8818181818181818,
+      "spoken_wrong": 0.05227272727272727,
+      "offered_right_inside": 0.05909090909090909,
+      "untaught_spoken": 0.7272727272727273
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.05,
+      "spoken_right": 0.7659090909090909,
+      "spoken_wrong": 0.01818181818181818,
+      "offered_right_inside": 0.19545454545454546,
+      "untaught_spoken": 0.4113636363636364
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.08,
+      "spoken_right": 0.5522727272727272,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.425,
+      "untaught_spoken": 0.2318181818181818
+     },
+     {
+      "cos": 0.6,
+      "margin": 0.1,
+      "spoken_right": 0.44545454545454544,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5318181818181819,
+      "untaught_spoken": 0.18409090909090908
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.0,
+      "spoken_right": 0.9136363636363637,
+      "spoken_wrong": 0.08181818181818182,
+      "offered_right_inside": 0.004545454545454545,
+      "untaught_spoken": 0.9090909090909091
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.02,
+      "spoken_right": 0.8772727272727273,
+      "spoken_wrong": 0.05227272727272727,
+      "offered_right_inside": 0.06363636363636363,
+      "untaught_spoken": 0.6590909090909091
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.05,
+      "spoken_right": 0.7636363636363637,
+      "spoken_wrong": 0.01818181818181818,
+      "offered_right_inside": 0.19772727272727272,
+      "untaught_spoken": 0.3704545454545455
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.08,
+      "spoken_right": 0.55,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.42727272727272725,
+      "untaught_spoken": 0.19318181818181818
+     },
+     {
+      "cos": 0.7,
+      "margin": 0.1,
+      "spoken_right": 0.44545454545454544,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5318181818181819,
+      "untaught_spoken": 0.14772727272727273
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.0,
+      "spoken_right": 0.9136363636363637,
+      "spoken_wrong": 0.08181818181818182,
+      "offered_right_inside": 0.004545454545454545,
+      "untaught_spoken": 0.7727272727272727
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.02,
+      "spoken_right": 0.8772727272727273,
+      "spoken_wrong": 0.05227272727272727,
+      "offered_right_inside": 0.06363636363636363,
+      "untaught_spoken": 0.6068181818181818
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.05,
+      "spoken_right": 0.7636363636363637,
+      "spoken_wrong": 0.01818181818181818,
+      "offered_right_inside": 0.19772727272727272,
+      "untaught_spoken": 0.35454545454545455
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.08,
+      "spoken_right": 0.55,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.42727272727272725,
+      "untaught_spoken": 0.18636363636363637
+     },
+     {
+      "cos": 0.75,
+      "margin": 0.1,
+      "spoken_right": 0.44545454545454544,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5318181818181819,
+      "untaught_spoken": 0.1409090909090909
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.0,
+      "spoken_right": 0.8568181818181818,
+      "spoken_wrong": 0.08181818181818182,
+      "offered_right_inside": 0.06136363636363636,
+      "untaught_spoken": 0.5977272727272728
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.02,
+      "spoken_right": 0.8204545454545454,
+      "spoken_wrong": 0.05227272727272727,
+      "offered_right_inside": 0.12045454545454545,
+      "untaught_spoken": 0.48409090909090907
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.05,
+      "spoken_right": 0.7340909090909091,
+      "spoken_wrong": 0.01818181818181818,
+      "offered_right_inside": 0.22727272727272727,
+      "untaught_spoken": 0.32045454545454544
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.08,
+      "spoken_right": 0.5477272727272727,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.42954545454545456,
+      "untaught_spoken": 0.17272727272727273
+     },
+     {
+      "cos": 0.8,
+      "margin": 0.1,
+      "spoken_right": 0.4431818181818182,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5340909090909091,
+      "untaught_spoken": 0.1340909090909091
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.0,
+      "spoken_right": 0.8068181818181818,
+      "spoken_wrong": 0.07727272727272727,
+      "offered_right_inside": 0.11363636363636363,
+      "untaught_spoken": 0.30227272727272725
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.02,
+      "spoken_right": 0.7772727272727272,
+      "spoken_wrong": 0.05,
+      "offered_right_inside": 0.16363636363636364,
+      "untaught_spoken": 0.26590909090909093
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.05,
+      "spoken_right": 0.7045454545454546,
+      "spoken_wrong": 0.01818181818181818,
+      "offered_right_inside": 0.25681818181818183,
+      "untaught_spoken": 0.19090909090909092
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.08,
+      "spoken_right": 0.525,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.45227272727272727,
+      "untaught_spoken": 0.11136363636363636
+     },
+     {
+      "cos": 0.85,
+      "margin": 0.1,
+      "spoken_right": 0.42727272727272725,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.55,
+      "untaught_spoken": 0.08863636363636364
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.0,
+      "spoken_right": 0.6068181818181818,
+      "spoken_wrong": 0.015909090909090907,
+      "offered_right_inside": 0.35454545454545455,
+      "untaught_spoken": 0.08636363636363636
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.02,
+      "spoken_right": 0.6,
+      "spoken_wrong": 0.006818181818181818,
+      "offered_right_inside": 0.3704545454545455,
+      "untaught_spoken": 0.08636363636363636
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.05,
+      "spoken_right": 0.5454545454545454,
+      "spoken_wrong": 0.004545454545454545,
+      "offered_right_inside": 0.42727272727272725,
+      "untaught_spoken": 0.06818181818181818
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.08,
+      "spoken_right": 0.41363636363636364,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.5636363636363636,
+      "untaught_spoken": 0.05227272727272727
+     },
+     {
+      "cos": 0.9,
+      "margin": 0.1,
+      "spoken_right": 0.33636363636363636,
+      "spoken_wrong": 0.0,
+      "offered_right_inside": 0.6409090909090909,
+      "untaught_spoken": 0.038636363636363635
+     }
+    ]
+   }
+  }
+ }
+}
