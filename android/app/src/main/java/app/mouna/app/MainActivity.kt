@@ -22,6 +22,7 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
@@ -36,7 +37,10 @@ import app.mouna.app.engine.PhrasePack
 import app.mouna.app.engine.Store
 import app.mouna.app.engine.Voice
 import app.mouna.app.engine.WebLink
+import app.mouna.app.sense.Sensor
 import android.telephony.TelephonyManager
+import app.mouna.app.ui.CameraFacing
+import app.mouna.app.ui.LocalCameraFacing
 import app.mouna.app.ui.MounaRoot
 import app.mouna.app.ui.MounaTheme
 import app.mouna.probe.ProbeActivity
@@ -182,15 +186,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             MounaTheme {
                 LaunchedEffect(Unit) { app.go(app.screen) } // start listening once the UI is up
-                MounaRoot(
-                    app = app,
-                    cameraReady = cameraReady.value,
-                    cameraDenied = cameraDenied.value,
-                    bindCamera = ::bindCamera,
-                    openProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
-                    welcome = welcome.value,
-                    onWelcomeDone = ::welcomeDone,
-                )
+                CompositionLocalProvider(LocalCameraFacing provides CameraFacing(cameraFront.value, canFlip.value, ::flipCamera)) {
+                    MounaRoot(
+                        app = app,
+                        cameraReady = cameraReady.value,
+                        cameraDenied = cameraDenied.value,
+                        bindCamera = ::bindCamera,
+                        openProbe = { startActivity(Intent(this, ProbeActivity::class.java)) },
+                        welcome = welcome.value,
+                        onWelcomeDone = ::welcomeDone,
+                    )
+                }
             }
         }
     }
@@ -221,6 +227,12 @@ class MainActivity : ComponentActivity() {
 
     private val preview = Preview.Builder().build()
     private var bound = false
+    private var provider: ProcessCameraProvider? = null
+    private var sensor: Sensor? = null
+    /** The camera actually in use faces the person holding the phone (the selfie camera): the preview is mirrored. */
+    private val cameraFront = mutableStateOf(true)
+    /** Both a selfie and a back camera: the camera card offers to flip between them. */
+    private val canFlip = mutableStateOf(false)
 
     /**
      * Each screen's camera card hands over its view; only the preview surface moves. The camera itself is bound once,
@@ -232,43 +244,70 @@ class MainActivity : ComponentActivity() {
         bound = true
         lifecycleScope.launch {
             // Null if the face model could not start at all: say so instead of waiting for it forever.
-            val sensor = engine.awaitSensor()
-            if (sensor == null) {
+            val s = engine.awaitSensor()
+            if (s == null) {
                 noCamera("the face model did not start")
                 return@launch
             }
+            sensor = s
             val future = ProcessCameraProvider.getInstance(this@MainActivity)
             future.addListener({
                 try {
-                    val provider = future.get()
-                    // Front camera faces the person; any camera is better than none (some devices misreport facing).
-                    val camera = listOf(CameraSelector.DEFAULT_FRONT_CAMERA, CameraSelector.DEFAULT_BACK_CAMERA)
-                        .firstOrNull { runCatching { provider.hasCamera(it) }.getOrDefault(false) }
-                        ?: provider.availableCameraInfos.firstOrNull()?.cameraSelector
-                    if (camera == null) {
-                        noCamera("this phone reports no camera")
-                        return@addListener
-                    }
-                    @Suppress("DEPRECATION")
-                    val builder = ImageAnalysis.Builder()
-                        .setTargetResolution(android.util.Size(480, 640))
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-                    // Lip reading wants >= 25 fps (Auto-AVSR is trained at 25). Indoors auto-exposure drops the front
-                    // camera to 20 fps (measured on the iQOO 15); ask for the best supported range topping out at 30.
-                    fpsRange(provider, camera)?.let { r ->
-                        androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
-                            .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, r)
-                        Log.i("Mouna", "camera fps range $r")
-                    }
-                    val analyzer = builder.build().also { it.setAnalyzer(engine.analysis, sensor) }
-                    provider.bindToLifecycle(this@MainActivity, camera, preview, analyzer)
+                    val p = future.get()
+                    provider = p
+                    canFlip.value = has(p, CameraSelector.DEFAULT_FRONT_CAMERA) && has(p, CameraSelector.DEFAULT_BACK_CAMERA)
+                    openCamera(p, s)
                 } catch (e: Exception) { // the camera is taken by another app, the HAL is down, a policy blocks it
                     Log.e("Mouna", "camera bind", e)
                     noCamera("the camera could not be opened")
                 }
             }, ContextCompat.getMainExecutor(this@MainActivity))
         }
+    }
+
+    /** The flip button: the other camera, remembered for next time. A caregiver can hold the phone and use the back camera. */
+    private fun flipCamera() {
+        val p = provider ?: return
+        val s = sensor ?: return
+        engine.store.frontCamera = !cameraFront.value
+        try {
+            p.unbindAll()
+            openCamera(p, s)
+        } catch (e: Exception) {
+            Log.e("Mouna", "camera flip", e)
+            noCamera("the camera could not be opened")
+        }
+    }
+
+    private fun has(p: ProcessCameraProvider, selector: CameraSelector) = runCatching { p.hasCamera(selector) }.getOrDefault(false)
+
+    /** Binds the camera the person chose (the selfie camera unless they flipped), or any camera if that one is missing. */
+    private fun openCamera(provider: ProcessCameraProvider, sensor: Sensor) {
+        // Some devices misreport facing: any camera is better than none.
+        val order = listOf(CameraSelector.DEFAULT_FRONT_CAMERA, CameraSelector.DEFAULT_BACK_CAMERA)
+        val camera = (if (engine.store.frontCamera) order else order.reversed()).firstOrNull { has(provider, it) }
+            ?: provider.availableCameraInfos.firstOrNull()?.cameraSelector
+        if (camera == null) {
+            noCamera("this phone reports no camera")
+            return
+        }
+        @Suppress("DEPRECATION")
+        val builder = ImageAnalysis.Builder()
+            .setTargetResolution(android.util.Size(480, 640))
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+        // Lip reading wants >= 25 fps (Auto-AVSR is trained at 25). Indoors auto-exposure drops the front
+        // camera to 20 fps (measured on the iQOO 15); ask for the best supported range topping out at 30.
+        fpsRange(provider, camera)?.let { r ->
+            androidx.camera.camera2.interop.Camera2Interop.Extender(builder)
+                .setCaptureRequestOption(android.hardware.camera2.CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, r)
+            Log.i("Mouna", "camera fps range $r")
+        }
+        val analyzer = builder.build().also { it.setAnalyzer(engine.analysis, sensor) }
+        val opened = provider.bindToLifecycle(this, camera, preview, analyzer)
+        // The analysis frames are never mirrored; only the preview of the selfie camera is, so the lip line follows it.
+        cameraFront.value = opened.cameraInfo.lensFacing == CameraSelector.LENS_FACING_FRONT
+        Log.i("Mouna", "camera ${if (cameraFront.value) "front" else "back"}")
     }
 
     /** The existing no-camera screen, instead of a Speak screen that will never see a face. */

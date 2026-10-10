@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -39,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -93,6 +96,12 @@ fun <T> StateFlow<Live>.collectSlice(select: (Live) -> T): State<T> {
 }
 
 private val CardShape = RoundedCornerShape(28.dp)
+
+/** The camera feeding Mouna: whether it is the selfie camera, and a way to turn it round. Provided by MainActivity. */
+@Immutable
+data class CameraFacing(val front: Boolean = true, val canFlip: Boolean = false, val flip: () -> Unit = {})
+
+val LocalCameraFacing = compositionLocalOf { CameraFacing() }
 private val LipFaint = Ink.bone.copy(alpha = 0.45f)
 
 /** The camera, softly framed, with the lip contour drawn in turmeric while Mouna is hearing. */
@@ -122,14 +131,32 @@ fun CameraCard(
             },
             modifier = Modifier.fillMaxSize(),
         )
-        LipLine(frame)
+        val camera = LocalCameraFacing.current
+        LipLine(frame, mirrored = camera.front)
         overlay(status)
+        if (camera.canFlip) FlipButton(camera, Modifier.align(Alignment.TopEnd).padding(8.dp))
     }
 }
 
-/** Outer lip contour over the mirrored, fill-centre preview. Reads the per-frame state only while drawing. */
+/** Selfie camera <-> back camera, so a caregiver can hold the phone and point it at the person. */
 @Composable
-private fun LipLine(frame: State<Live>) {
+private fun FlipButton(camera: CameraFacing, modifier: Modifier) {
+    Box(
+        modifier.size(48.dp).clip(CircleShape).background(Ink.bg.copy(alpha = 0.78f)).clickable(onClick = camera.flip),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Rounded.Refresh,
+            if (camera.front) "Use the back camera" else "Use the selfie camera",
+            tint = Ink.bone2,
+            modifier = Modifier.size(24.dp),
+        )
+    }
+}
+
+/** Outer lip contour over the fill-centre preview (mirrored for the selfie camera). Reads the per-frame state only while drawing. */
+@Composable
+private fun LipLine(frame: State<Live>, mirrored: Boolean) {
     Canvas(Modifier.fillMaxSize()) {
         val live = frame.value
         val outer = live.outer
@@ -139,7 +166,8 @@ private fun LipLine(frame: State<Live>) {
         val dy = (size.height - live.imageH * s) / 2
         val path = Path()
         for (i in outer.indices) {
-            val x = size.width - (outer[i].first * live.imageW * s + dx)
+            val px = outer[i].first * live.imageW * s + dx
+            val x = if (mirrored) size.width - px else px
             val y = outer[i].second * live.imageH * s + dy
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }

@@ -64,6 +64,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("welcomed", false)
         set(v) = prefs.edit().putBoolean("welcomed", v).apply()
 
+    /** The selfie camera (true) or the back camera, chosen with the flip button on the camera card. */
+    var frontCamera: Boolean
+        get() = prefs.getBoolean("front_camera", true)
+        set(v) = prefs.edit().putBoolean("front_camera", v).apply()
+
     var gaze: GazeModel?
         get() = runCatching {
             prefs.getString("gaze", null)?.let { s -> s.split(",").map { it.toDouble() }.let { GazeModel(it[0], it[1], it[2]) } }
