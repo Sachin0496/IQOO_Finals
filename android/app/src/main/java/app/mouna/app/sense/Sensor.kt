@@ -56,9 +56,10 @@ class Frame(
     val landmarkMs: Float = 0f,
     /** The whole frame (conversion, face model, crops), for free talk's frame-rate check. */
     val analyzeMs: Float = 0f,
-    /** Sign mode only: 27 body + hand points (x, y) for ISL, and how many hands were seen. */
+    /** Sign mode only: 27 body + hand points (x, y) for ISL, how many hands were seen, the pose wrists (Signer.Seen). */
     val sign: FloatArray? = null,
     val hands: Int = 0,
+    val wrists: FloatArray? = null,
 )
 
 /**
@@ -227,7 +228,7 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
         perfPrepMs += (SystemClock.elapsedRealtimeNanos() - tPrep) / 1e6f
         if (signing) {
             val kp = signer?.let { runCatching { it.keypoints(frame, now) }.getOrNull() }
-            onFrame(Frame(now, face = false, imageW = frame.width, imageH = frame.height, sign = kp?.first, hands = kp?.second ?: 0))
+            onFrame(Frame(now, face = false, imageW = frame.width, imageH = frame.height, sign = kp?.points, hands = kp?.hands ?: 0, wrists = kp?.wrists))
             return
         }
         if (wantBlend && !hasBlend && !blendFailed) enableBlendshapes()

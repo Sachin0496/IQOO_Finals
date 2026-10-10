@@ -53,9 +53,9 @@ class Signer(context: Context) : AutoCloseable {
      * One frame -> 27 (x, y) points, or null without a body. Coordinates are rescaled to INCLUDE's 16:9 frame
      * (x by width/16, y by height/9) so the shoulder-based normalisation sees the same proportions as in training.
      * Hands go to the person's left / right slot by which pose wrist they are nearest (as Holistic does); a missing
-     * hand is zeros, as in OpenHands' pose files. Returns the points and how many hands were seen.
+     * hand is zeros, as in OpenHands' pose files.
      */
-    fun keypoints(frame: Bitmap, tMs: Long): Pair<FloatArray, Int>? {
+    fun keypoints(frame: Bitmap, tMs: Long): Seen? {
         val img = BitmapImageBuilder(frame).build()
         val body = pose.detectForVideo(img, tMs).landmarks().firstOrNull() ?: return null
         val found = hands.detectForVideo(img, tMs).landmarks()
@@ -79,8 +79,13 @@ class Signer(context: Context) : AutoCloseable {
         }
         left?.let { h -> HAND.forEachIndexed { i, idx -> put(POSE.size + i, h[idx]) } }
         right?.let { h -> HAND.forEachIndexed { i, idx -> put(POSE.size + HAND.size + i, h[idx]) } }
-        return out to found.size
+        // The pose wrists, for SignSegmenter's "hands raised": the pose sees a wrist even when the hand model misses it.
+        val wrists = floatArrayOf(lw.y() * sy, rw.y() * sy, lw.visibility().orElse(0f), rw.visibility().orElse(0f))
+        return Seen(out, found.size, wrists)
     }
+
+    /** One frame: the 27 (x, y) points, how many hands the hand model saw, the pose wrists (left y, right y, visibilities). */
+    class Seen(val points: FloatArray, val hands: Int, val wrists: FloatArray)
 
     override fun close() {
         pose.close()

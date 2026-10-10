@@ -22,7 +22,7 @@ class Isl private constructor(private val session: OrtSession, private val env: 
         OnnxTensor.createTensor(env, FloatBuffer.wrap(x), longArrayOf(1, 2, t.toLong(), V.toLong())).use { input ->
             session.run(mapOf("keypoints" to input)).use { out ->
                 val p = (out.get(0) as OnnxTensor).floatBuffer.let { b -> FloatArray(b.remaining()).also { b.get(it) } }
-                return p.indices.sortedByDescending { p[it] }.take(5).map { Guess(word(labels[it]), p[it]) }
+                return top(p, labels)
             }
         }
     }
@@ -58,8 +58,26 @@ class Isl private constructor(private val session: OrtSession, private val env: 
         return x
     }
 
-        /** "4.sad" -> "sad", "10.Energy" -> "energy" */
-        fun word(label: String) = label.substringAfter('.').trim().lowercase()
+        /** "4.sad" -> "sad", "10.Energy" -> "energy", "55.Thankyou" -> "thank you": INCLUDE wrote some words run together. */
+        fun word(label: String): String {
+            val w = label.substringAfter('.').trim().lowercase()
+            return SPELLED[w] ?: w
+        }
+
+        private val SPELLED = mapOf(
+            "howareyou" to "how are you", "goodmorning" to "good morning", "goodafternoon" to "good afternoon",
+            "goodevening" to "good evening", "goodnight" to "good night", "thankyou" to "thank you",
+            "you(plural)" to "you all", "trainticket" to "train ticket", "trainstation" to "train station",
+            "streetorroad" to "street", "storeorshop" to "shop", "biglarge" to "big", "smalllittle" to "small",
+            "race(ethnicity)" to "race", "second(number)" to "second",
+        )
+
+        /** The five likeliest words; labels that read as the same word ("Second", "Second(Number)") add up. */
+        fun top(p: FloatArray, labels: List<String>): List<Guess> {
+            val byWord = LinkedHashMap<String, Float>()
+            for (i in p.indices) word(labels[i]).let { w -> byWord[w] = (byWord[w] ?: 0f) + p[i] }
+            return byWord.entries.sortedByDescending { it.value }.take(5).map { Guess(it.key, it.value) }
+        }
 
         fun folder(context: Context) = File(context.getExternalFilesDir(null), "isl").apply { mkdirs() }
 

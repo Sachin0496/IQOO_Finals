@@ -903,8 +903,11 @@ class MounaApp(
         const val IDLE_VOICE = "Starts when you first use Voice"
         const val LOADING_VOICE = "Getting ready…"
 
-        /** ISL: speak only a clear winner (model probability, not a measured accuracy). */
-        const val SIGN_SPEAK = 0.6f
+        /**
+         * ISL: speak only a clear winner (model probability), otherwise offer the top 3. On INCLUDE's held-out signers,
+         * six signs in a row: 0.6 spoke 31 wrong words in 120, 0.9 spoke 16 and kept 79 of 82 right ones (models/isl/eval).
+         */
+        const val SIGN_SPEAK = 0.9f
         const val SIGN_MARGIN = 0.25f
     }
 }

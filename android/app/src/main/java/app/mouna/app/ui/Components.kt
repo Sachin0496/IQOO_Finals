@@ -74,7 +74,7 @@ data class LiveStatus(
     val signing: Boolean = false,
 )
 
-private fun Live.status() = LiveStatus(face, hearing, body, hands > 0, signing)
+private fun Live.status() = LiveStatus(face, hearing, body, handsRaised, signing)
 
 /** Status words for a screen: recomposes only when one of them changes, not at the camera's frame rate. */
 @Composable
