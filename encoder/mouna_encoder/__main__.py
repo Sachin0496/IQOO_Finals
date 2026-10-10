@@ -181,6 +181,8 @@ def main() -> None:
                 avsr.export_decoder(t, m, out)
                 avsr.export_scorer(t, m, out)
             avsr.phone_files(m, out)
+            if a.lora:  # the app reads this: a tuned model leads with the person's sentences less eagerly (FIRST_WITHIN_TUNED)
+                (out / "lora.txt").write_text(a.lora.stem + "\n")
         elif a.cmd == "avsr-read":
             avsr.read_cli(a.video)
         else:
