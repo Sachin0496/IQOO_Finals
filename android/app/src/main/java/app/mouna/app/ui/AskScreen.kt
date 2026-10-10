@@ -103,24 +103,28 @@ fun AskScreen(app: MounaApp, bind: (PreviewView) -> Unit) {
     val face by app.engine.live.collectSlice { it.face } // nods and blinks need the face in view
 
     Column(Modifier.fillMaxSize()) {
-        CameraCard(app.engine.live, bind, Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(168.dp)) {
+        // The same card as Speak: status top left, the flip button top right, the switch along the bottom.
+        CameraCard(app.engine.live, bind, Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(224.dp)) {
             Row(
-                Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 14.dp, end = 14.dp).fillMaxWidth(),
+                Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 14.dp, end = 62.dp).fillMaxWidth(), // the flip button sits top right
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (face) Pill("Watching for nods", Ink.leaf) else Pill("Can’t see your face: tap to answer", Ink.mute)
-                if (Stage.debug && treeOpen) Text("ASK · QUESTION ${session.asked}", style = Type.label)
+                if (face) Pill("Watching for nods", Ink.leaf, modifier = Modifier.weight(1f, fill = false))
+                else Pill("Can’t see your face: tap to answer", Ink.mute, modifier = Modifier.weight(1f, fill = false))
+                if (Stage.debug && treeOpen) Pill("Question ${session.asked}")
             }
+            ModeSwitch(
+                AskSource.entries.map { it.ordinal to it.label },
+                source,
+                {
+                    source = it
+                    app.stopQuestion()
+                    listening = false
+                },
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp),
+            )
         }
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            SourcePill(source, {
-                source = it
-                app.stopQuestion()
-                listening = false
-            })
-        }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(14.dp))
         Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp)) {
             if (treeOpen) TreeBody(app, session, result, { round++ }, ::yes, ::no, { tick++ })
             else CustomBody(app, draft, { draft = it }, custom, customDone, listening, missed,
@@ -129,30 +133,6 @@ fun AskScreen(app: MounaApp, bind: (PreviewView) -> Unit) {
                 { custom = null; customDone = false }, ::answerCustomQ)
         }
         Spacer(Modifier.height(12.dp))
-    }
-}
-
-/** Common questions, or the caregiver's own by typing or voice. */
-@Composable
-private fun SourcePill(picked: Int, onPick: (Int) -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier.clip(CircleShape).background(Ink.bg.copy(alpha = 0.78f)).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        AskSource.entries.forEach { s ->
-            val on = picked == s.ordinal
-            Text(
-                s.label,
-                style = (if (on) Type.button.copy(fontSize = 15.sp, color = Ink.bg) else Type.button.copy(fontSize = 15.sp, color = Ink.bone2)),
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(if (on) Ink.bone else Ink.bg.copy(alpha = 0f))
-                    .clickable { onPick(s.ordinal) }
-                    .heightIn(min = 48.dp)
-                    .padding(horizontal = 14.dp)
-                    .wrapContentHeight(Alignment.CenterVertically),
-            )
-        }
     }
 }
 
