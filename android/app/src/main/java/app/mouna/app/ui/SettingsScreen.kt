@@ -153,7 +153,7 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                     if (k.gazeReady) "Redo" else "Set up") { app.go(Screen.EYES) }
                 Spacer(Modifier.height(12.dp))
                 val recorded = app.recordedCount
-                SetupRow("Teach free talk", if (recorded > 0) "$recorded sentences recorded · they are offered first" else "Mouth sentences you want to say, so free talk learns you",
+                SetupRow("Teach Lips", if (recorded > 0) "$recorded sentences recorded · they are offered first" else "Mouth sentences you want to say, so Lips learns you",
                     recorded > 0, "Record") { app.go(Screen.RECORD) }
             }
         }
@@ -163,7 +163,7 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
             Spacer(Modifier.height(14.dp))
             Card {
                 Column {
-                    SectionLabel("Free talk model")
+                    SectionLabel("Lips model")
                     Text(
                         "The original reads anyone. A model tuned to one person reads that person better, and others less well.",
                         style = Type.body.copy(fontSize = 13.sp),

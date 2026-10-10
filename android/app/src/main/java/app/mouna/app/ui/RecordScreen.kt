@@ -19,17 +19,17 @@ import app.mouna.app.MounaApp
 import app.mouna.app.engine.Knowledge
 
 /**
- * Recording for free talk's fine-tune (issue #5 B): one prompted sentence at a time, mouthed silently. Only the 96 px
+ * Recording for Lips' fine-tune (issue #5 B): one prompted sentence at a time, mouthed silently. Only the 96 px
  * grey mouth crops and the sentence are kept (avsr/train/), for `python -m mouna_encoder avsr-adapt` on the laptop.
  */
 @Composable
 fun RecordScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        Text("RECORD FOR FREE TALK", style = Type.label)
+        Text("RECORD FOR LIPS", style = Type.label)
         Spacer(Modifier.height(8.dp))
         CameraCard(app.engine.live, bind, Modifier.fillMaxWidth().height(200.dp)) { st ->
             val pill = when {
-                !k.freeReady -> "Free talk isn’t ready yet"
+                !k.freeReady -> "Lips isn’t ready yet"
                 !app.recording -> "Not recording"
                 !st.face -> "Looking for your face"
                 st.hearing -> "Recording…"
@@ -42,7 +42,7 @@ fun RecordScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             Text(
                 "You will see ${app.recordPrompts.size} short sentences, one at a time. Mouth each one silently, then keep " +
                     "your lips still for a moment. Only a small grey picture of your mouth and the sentence are kept, on this " +
-                    "phone, to tune free talk to you. Recorded so far this session: ${app.recordCount}.",
+                    "phone, to tune Lips to you. Recorded so far this session: ${app.recordCount}.",
                 style = Type.body,
             )
             Spacer(Modifier.weight(1f))

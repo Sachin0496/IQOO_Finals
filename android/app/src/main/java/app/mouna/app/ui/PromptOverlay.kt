@@ -204,10 +204,10 @@ private fun ColumnScope.SayClearly(app: MounaApp, text: String) {
     }
 }
 
-/** Free talk: the sentence Mouna read, the other readings below; nothing is spoken until the person says yes. */
+/** Lips: the sentence Mouna read, the other readings below; nothing is spoken until the person says yes. */
 @Composable
 private fun ColumnScope.DidYouMean(app: MounaApp, p: Prompt.Read) {
-    Header(app, "FREE TALK: READ FROM YOUR LIPS", "Did you mean…?")
+    Header(app, "READ FROM YOUR LIPS", "Did you mean…?")
     Text("“${p.sentences[p.index]}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
     if (p.personal.getOrElse(p.index) { false }) Text("ONE OF YOUR SENTENCES", style = Type.label.copy(color = Ink.leaf))
     val others = p.sentences.indices.filter { it != p.index }

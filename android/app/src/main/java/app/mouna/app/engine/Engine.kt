@@ -76,7 +76,7 @@ data class Knowledge(
     /** The ISL model has been looked for (found or not): until then the screen says "Loading…", not "No ISL model". */
     val islKnown: Boolean = false,
     /** Free talk (open-vocabulary English, NPU): status line, and whether it is ready to read. */
-    val freeTalk: String = "Free talk · Loading…",
+    val freeTalk: String = "Lips · Loading…",
     val freeReady: Boolean = false,
     /** Free talk is loading or setting up a model (a first start compiles it for the NPU: minutes). */
     val freeLoading: Boolean = true,
@@ -120,7 +120,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     /** Free talk owns its own thread: its first NPU compile takes minutes and must not hold up the lip encoder. */
     private val freeWorker = Executors.newSingleThreadExecutor()
     @Volatile private var openVsr: OpenVsr? = null
-    @Volatile var freeTalkStatus = "Free talk · Loading…"
+    @Volatile var freeTalkStatus = "Lips · Loading…"
         private set
     @Volatile private var freeOn = false
     private var perfN = 0
@@ -620,8 +620,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     private fun openFreeTalk(id: String?) = submit(freeWorker) {
         openVsr?.close()
         openVsr = null
-        val label = freeTalkModels().firstOrNull { it.id == id }?.label ?: "free talk"
-        freeTalkStatus = "Free talk · Loading $label…"
+        val label = freeTalkModels().firstOrNull { it.id == id }?.label ?: "lip reading"
+        freeTalkStatus = "Lips · Loading $label…"
         _knowledge.value = _knowledge.value.copy(freeTalk = freeTalkStatus, freeReady = false, freeLoading = true)
         val (r, msg) = runCatching {
             OpenVsr.open(context, id) { line ->
@@ -631,7 +631,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
                     _knowledge.value = _knowledge.value.copy(freeTalk = freeTalkStatus)
                 }
             }
-        }.getOrElse { null to "Free talk: ${it.message}" }
+        }.getOrElse { null to "Lips: ${it.message}" }
         openVsr = r
         freeTalkStatus = msg
         ftLog(msg)
@@ -641,7 +641,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         )
     }
 
-    /** Free talk listens (Speak screen, Free talk channel, no prompt open). */
+    /** Free talk listens (Speak screen, Lips channel, no prompt open). */
     fun freeTalk(on: Boolean) {
         freeOn = on
     }

@@ -93,7 +93,6 @@ fun MounaRoot(
                     ) { s ->
                         when (s) {
                             Screen.SPEAK -> SpeakScreen(app, k, bindCamera)
-                            Screen.TEACH -> TeachScreen(app, k, bindCamera)
                             Screen.ASK -> AskScreen(app)
                             Screen.CALL -> CallScreen(app, k, bindCamera)
                             Screen.SETTINGS -> SettingsScreen(app, k, openProbe)
@@ -112,7 +111,7 @@ fun MounaRoot(
     }
 }
 
-private val MAIN = listOf(Screen.SPEAK, Screen.TEACH, Screen.ASK, Screen.CALL)
+private val MAIN = listOf(Screen.SPEAK, Screen.ASK, Screen.CALL)
 
 private val ChipShape = CircleShape
 
@@ -190,7 +189,6 @@ private fun NavBar(app: MounaApp) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         NavItem(MounaIcons.RecordVoiceOver, "Speak", app.screen == Screen.SPEAK, Modifier.weight(1f)) { app.go(Screen.SPEAK) }
-        NavItem(MounaIcons.School, "Teach", app.screen == Screen.TEACH, Modifier.weight(1f)) { app.go(Screen.TEACH) }
         NavItem(MounaIcons.QuestionAnswer, "Ask", app.screen == Screen.ASK, Modifier.weight(1f)) { app.go(Screen.ASK) }
         NavItem(Icons.Rounded.Call, "Call", app.screen == Screen.CALL, Modifier.weight(1f)) { app.go(Screen.CALL) }
     }

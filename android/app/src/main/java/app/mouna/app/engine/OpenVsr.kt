@@ -282,7 +282,7 @@ class OpenVsr private constructor(
                 ?.sortedBy { it.name }.orEmpty()
             val all = dirs.ifEmpty { if (File(root, "avsr_vsr_t64.onnx").exists() || File(root, "avsr_vsr_t64.qnn_ctx_fp16.onnx").exists()) listOf(root) else emptyList() }
             return all.map { d ->
-                val label = File(d, "label.txt").takeIf { it.exists() }?.readText()?.trim()?.ifEmpty { null } ?: if (d == root) "Free talk" else d.name
+                val label = File(d, "label.txt").takeIf { it.exists() }?.readText()?.trim()?.ifEmpty { null } ?: if (d == root) "Original" else d.name
                 val ready = FreeTalk.BUCKETS.all { t -> listOf("vsr", "dec", "score").all { File(d, "avsr_${it}_t$t.qnn_ctx_fp16.onnx").exists() } }
                 Model(if (d == root) "" else d.name, label, d, ready)
             }
@@ -295,15 +295,15 @@ class OpenVsr private constructor(
         fun open(context: Context, model: String?, log: (String) -> Unit): Pair<OpenVsr?, String> {
             val all = models(context)
             val m = all.firstOrNull { it.id == model } ?: all.firstOrNull()
-                ?: return null to "Free talk: no model in ${folder(context).absolutePath}"
+                ?: return null to "Lips: no model in ${folder(context).absolutePath}"
             val dir = m.dir
             val root = folder(context)
             /** Lookup tables shared by every model live in avsr/; a model's own copy wins. */
             fun shared(name: String) = File(dir, name).takeIf { it.exists() } ?: File(root, name)
             val tokFile = shared("tokens.txt")
-            if (!tokFile.exists()) return null to "Free talk: no model in ${dir.absolutePath}"
+            if (!tokFile.exists()) return null to "Lips: no model in ${dir.absolutePath}"
             val tokens = tokFile.readLines()
-            if (tokens.size != UNITS) return null to "Free talk: tokens.txt has ${tokens.size} units, expected $UNITS"
+            if (tokens.size != UNITS) return null to "Lips: tokens.txt has ${tokens.size} units, expected $UNITS"
             val env = OrtEnvironment.getEnvironment()
             val sessions = LinkedHashMap<Int, OrtSession>()
             val notes = mutableListOf<String>()
