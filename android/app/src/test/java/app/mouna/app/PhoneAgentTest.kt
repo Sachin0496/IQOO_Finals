@@ -4,9 +4,11 @@ import app.mouna.app.engine.NameMatch
 import app.mouna.app.engine.PhoneBook
 import app.mouna.app.engine.PhoneCommand
 import app.mouna.app.engine.PhoneContact
+import app.mouna.app.engine.PhoneFlow
 import app.mouna.app.engine.PhoneParser
 import app.mouna.app.engine.PhoneRoute
 import app.mouna.app.engine.PhoneRouter
+import app.mouna.app.engine.PhoneStep
 import app.mouna.app.engine.PhoneVerb
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -421,5 +423,88 @@ class PhoneAgentTest {
         assertNull(PhoneRouter.waDigits(""))
         assertNull(PhoneRouter.waDigits("1234567890"))
         assertNull(PhoneRouter.waDigits("abc"))
+    }
+
+    // Flow: who, what to say, confirm
+
+    @Test
+    fun aSureNameGoesStraightToConfirm() {
+        val nakul = contact("Nakul", "+919876500001")
+        val contacts = listOf(nakul, contact("Ravi"))
+        assertEquals(PhoneStep.Confirm(PhoneVerb.CALL, nakul, null), PhoneFlow.start(call("nakul"), contacts))
+    }
+
+    @Test
+    fun aNameThatFitsTwoPeopleAsksWho() {
+        val nakul = contact("Nakul", "9876500001")
+        val sharma = contact("Nakul Sharma", "9876500002")
+        val step = PhoneFlow.start(call("nakul"), listOf(nakul, sharma))
+        assertEquals(PhoneStep.Who(PhoneVerb.CALL, null, listOf(nakul, sharma)), step)
+    }
+
+    @Test
+    fun aNameThatSoundsLikeAnotherContactAsksWho() {
+        val step = PhoneFlow.start(call("nakul"), listOf(contact("Nakul"), contact("Nakool")))
+        assertTrue(step is PhoneStep.Who)
+    }
+
+    @Test
+    fun anUnknownNameIsMissing() {
+        val contacts = listOf(contact("Nakul"), contact("Kunal"))
+        assertEquals(PhoneStep.Missing("priya"), PhoneFlow.start(call("priya"), contacts))
+        assertEquals(PhoneStep.Missing("nakul"), PhoneFlow.start(call("nakul"), emptyList()))
+    }
+
+    @Test
+    fun callAloneListsEveryoneSaved() {
+        val contacts = listOf(contact("Nakul"), contact("Ravi"))
+        assertEquals(PhoneStep.Who(PhoneVerb.CALL, null, contacts), PhoneFlow.start(call(null), contacts))
+        assertEquals(PhoneStep.Who(PhoneVerb.CALL, null, emptyList()), PhoneFlow.start(call(null), emptyList()))
+    }
+
+    @Test
+    fun aSureMessageKeepsItsTextOrHasNone() {
+        val nakul = contact("Nakul", "9876500001")
+        val contacts = listOf(nakul)
+        assertEquals(PhoneStep.Confirm(PhoneVerb.MESSAGE, nakul, "i am late"), PhoneFlow.start(msg("nakul", "i am late"), contacts))
+        assertEquals(PhoneStep.Confirm(PhoneVerb.MESSAGE, nakul, null), PhoneFlow.start(msg("nakul"), contacts))
+    }
+
+    @Test
+    fun aTwoWordNameIsJoinedBeforeItIsMatched() {
+        val sharma = contact("Nakul Sharma", "9876500002")
+        val cmd = PhoneParser.parse("message nakul sharma hi")!!
+        assertEquals(PhoneStep.Confirm(PhoneVerb.MESSAGE, sharma, "hi"), PhoneFlow.start(cmd, listOf(sharma, contact("Ravi"))))
+    }
+
+    @Test
+    fun pairShowsTwoAtATimeAndWrapsRoundOddCounts() {
+        val three = listOf("a", "b", "c")
+        assertEquals(listOf("a", "b"), PhoneFlow.pair(three, 0))
+        assertEquals(listOf("c", "a"), PhoneFlow.pair(three, 1))
+        assertEquals(listOf("b", "c"), PhoneFlow.pair(three, 2))
+        assertEquals(listOf("a", "b"), PhoneFlow.pair(three, 3))
+        assertEquals(listOf("a"), PhoneFlow.pair(listOf("a"), 5))
+        assertEquals(emptyList<String>(), PhoneFlow.pair(emptyList<String>(), 0))
+    }
+
+    @Test
+    fun pairWithAnEvenCountGoesBackToTheStart() {
+        val four = listOf("a", "b", "c", "d")
+        assertEquals(listOf("c", "d"), PhoneFlow.pair(four, 1))
+        assertEquals(listOf("a", "b"), PhoneFlow.pair(four, 2))
+    }
+
+    @Test
+    fun pagesOfFiveShowEveryItem() {
+        val five = listOf(1, 2, 3, 4, 5)
+        val seen = (0 until 5).flatMap { PhoneFlow.pair(five, it) }.toSet()
+        assertEquals(five.toSet(), seen)
+    }
+
+    @Test
+    fun quickMessagesAreFourDistinctTexts() {
+        assertEquals(4, PhoneFlow.QUICK.size)
+        assertEquals(PhoneFlow.QUICK.size, PhoneFlow.QUICK.distinct().size)
     }
 }

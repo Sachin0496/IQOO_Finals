@@ -335,3 +335,48 @@ object PhoneRouter {
         return "https://wa.me/$digits?text=" + URLEncoder.encode(text, "UTF-8").replace("+", "%20")
     }
 }
+
+/** What Mouna shows next for a phone request. */
+sealed interface PhoneStep {
+    /** Pick a person from [people], best match first. [body] is the text if the person already gave one. */
+    data class Who(val verb: PhoneVerb, val body: String?, val people: List<PhoneContact>) : PhoneStep
+
+    /** One person is clearly meant: confirm before anything happens. */
+    data class Confirm(val verb: PhoneVerb, val c: PhoneContact, val body: String?) : PhoneStep
+
+    /** Nobody saved by that name. */
+    data class Missing(val name: String) : PhoneStep
+}
+
+/** The steps a phone request goes through: who, then what to say, then one confirm. Pure, so it is tested without a phone. */
+object PhoneFlow {
+    /** Message texts offered by gaze when the person gave none of their own. */
+    val QUICK = listOf("Please come here", "I need help", "I'm okay", "Please call me")
+
+    /**
+     * No name: everyone saved, to pick from. A name that clearly matches one person: confirm them. Several that could
+     * be it: pick between them, best first. Nothing close, or no contacts at all: say who is missing.
+     */
+    fun start(cmd: PhoneCommand, contacts: List<PhoneContact>): PhoneStep {
+        val resolved = PhoneParser.resolve(cmd, contacts)
+        val name = resolved.name ?: return PhoneStep.Who(resolved.verb, resolved.body, contacts)
+        if (contacts.isEmpty()) return PhoneStep.Missing(name)
+        val ranked = NameMatch.rank(name, contacts)
+        return when {
+            ranked.isEmpty() -> PhoneStep.Missing(name)
+            NameMatch.sure(ranked) -> PhoneStep.Confirm(resolved.verb, ranked.first().first, resolved.body)
+            else -> PhoneStep.Who(resolved.verb, resolved.body, ranked.map { it.first })
+        }
+    }
+
+    /**
+     * The two items on screen for [page], left then right. Each page moves on two items and wraps round, so an odd
+     * count still reaches every item. One item shows alone.
+     */
+    fun <T> pair(items: List<T>, page: Int): List<T> {
+        if (items.isEmpty()) return emptyList()
+        if (items.size == 1) return listOf(items[0])
+        val start = Math.floorMod(page * 2, items.size)
+        return listOf(items[start], items[(start + 1) % items.size])
+    }
+}

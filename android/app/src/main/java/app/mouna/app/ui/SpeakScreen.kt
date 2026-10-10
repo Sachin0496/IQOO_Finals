@@ -7,7 +7,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
@@ -184,7 +187,10 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             }
         }
 
-        SectionLabel("Or tap a picture", Modifier.padding(start = 24.dp))
+        Row(Modifier.padding(start = 24.dp, end = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel("Or tap a picture", Modifier.weight(1f))
+            if (!app.onCall) PhoneButton(app) // on a call there is no phone flow to open
+        }
         if (app.channel == Channel.TYPE) TypeBox(app, Modifier.padding(horizontal = 20.dp))
         val tileH = tileHeight(app.lang)
         LazyRow(
@@ -222,6 +228,24 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
                     .wrapContentHeight(Alignment.CenterVertically),
             )
         }
+    }
+}
+
+/** The way in for eyes and taps: a visible, quiet pill that opens the phone flow (call or message, always confirmed). */
+@Composable
+private fun PhoneButton(app: MounaApp) {
+    Row(
+        Modifier
+            .heightIn(min = 48.dp)
+            .clip(CircleShape)
+            .border(1.dp, Ink.rule2, CircleShape)
+            .clickable { app.phone(null) }
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Rounded.Call, null, tint = Ink.turmeric, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Phone", style = Type.button.copy(fontSize = 15.sp))
     }
 }
 
