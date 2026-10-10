@@ -85,9 +85,23 @@ sealed interface Prompt {
 /**
  * Lips: open-vocabulary lip reading (once called free talk), every sentence confirmed. The old phrase-pack lips
  * (taught phrases, encoder + core) is off for now; the engine keeps it for learning new words later.
- * Typing is not a channel: it lives on the Call screen (CallTab.TYPE) and goes through [MounaApp.sayTyped].
+ * Type: typed text is spoken through [MounaApp.sayTyped]. It is a developer option on Speak ([MounaApp.devType]); typing
+ * on a call is CallTab.TYPE on the Call screen.
  */
-enum class Channel { LIPS, VOICE, SIGN }
+enum class Channel { LIPS, VOICE, SIGN, TYPE }
+
+/**
+ * The channel Speak opens on. The saved one, except that Voice is no longer offered on Speak, and Type only while the
+ * developer option is on: with it off, a saved "type" opens on Lips. Anything unreadable opens on Lips too.
+ */
+fun startChannel(stored: String, devType: Boolean): Channel {
+    val c = runCatching { Channel.valueOf(stored.uppercase()) }.getOrNull()
+    return when {
+        c == null || c == Channel.VOICE -> Channel.LIPS
+        c == Channel.TYPE && !devType -> Channel.LIPS
+        else -> c
+    }
+}
 
 data class Said(val phrase: Phrase?, val text: String, val via: String)
 
@@ -317,6 +331,9 @@ class MounaApp(
     /** Warm paper theme for bright rooms; false is the ink-on-black default. */
     var light by mutableStateOf(store.light)
         private set
+    /** Developer option (Settings, Advanced): the Type channel on Speak. Off until turned on. */
+    var devType by mutableStateOf(store.devType)
+        private set
     /** Keep very clear, uncorrected matches as extra examples (off by default; see SelfTrain). */
     var selfTrain by mutableStateOf(store.selfTrain)
         private set
@@ -331,6 +348,12 @@ class MounaApp(
 
     /** Where lips, voice and sign listen: Speak, or the Mouth/Sign half of the Call screen. */
     private fun onSpeakSurface() = screen == Screen.SPEAK || (screen == Screen.CALL && callTab == CallTab.MOUTH)
+
+    /**
+     * The channel the Speak surface works with. Type listens to nothing, so on the Call screen's mouth tab (which shows
+     * Lips) it reads as Lips: the lips are read there whatever was picked on Speak.
+     */
+    val speakChannel: Channel get() = if (channel == Channel.TYPE && screen == Screen.CALL) Channel.LIPS else channel
 
     fun go(s: Screen) {
         if (s != screen) showSaid(null) // what was said belongs to the screen it was said on
@@ -347,8 +370,8 @@ class MounaApp(
         val speak = onSpeakSurface() && prompt == null
         engine.listen(Listen.PAUSED) // phrase-pack lips is off (see Channel)
         armGestures(prompt != null || screen == Screen.ASK)
-        engine.signing(onSpeakSurface() && channel == Channel.SIGN)
-        engine.freeTalk((speak && channel == Channel.LIPS) || (screen == Screen.RECORD && recording) || (screen == Screen.WORDS && wordTeaching != null))
+        engine.signing(onSpeakSurface() && speakChannel == Channel.SIGN)
+        engine.freeTalk((speak && speakChannel == Channel.LIPS) || (screen == Screen.RECORD && recording) || (screen == Screen.WORDS && wordTeaching != null))
         val mic = speak && channel == Channel.VOICE && !onCall
         if (mic) listener.start() else listener.stop()
         if (!mic) micLevel = 0f
@@ -372,12 +395,7 @@ class MounaApp(
         }
     }
 
-    /**
-     * The saved channel. Voice is no longer offered on Speak, and a saved "type" (typing moved to the Call screen) is no
-     * Speak channel either: both open on Lips.
-     */
-    private fun storedChannel(): Channel =
-        runCatching { Channel.valueOf(store.listenWith.uppercase()) }.getOrNull()?.takeIf { it != Channel.VOICE } ?: Channel.LIPS
+    private fun storedChannel(): Channel = startChannel(store.listenWith, store.devType)
 
     fun chooseChannel(c: Channel) {
         if (c == Channel.VOICE) {
@@ -445,7 +463,7 @@ class MounaApp(
 
     /** A sign: speak a clear winner, otherwise offer the likeliest words. Words are spoken by the phone's voice. */
     private fun signed(g: List<Isl.Guess>) {
-        if (!onSpeakSurface() || prompt != null || channel != Channel.SIGN || g.isEmpty()) return
+        if (!onSpeakSurface() || prompt != null || speakChannel != Channel.SIGN || g.isEmpty()) return
         if (Stage.debug) android.util.Log.i("Mouna", "signed -> " + g.take(3).joinToString { "${it.word} %.2f".format(it.p) })
         val best = g[0]
         val second = g.getOrNull(1)?.p ?: 0f
@@ -579,7 +597,7 @@ class MounaApp(
     }
 
     private fun read(e: Event.Read) {
-        if (!onSpeakSurface() || prompt != null || channel != Channel.LIPS) return
+        if (!onSpeakSurface() || prompt != null || speakChannel != Channel.LIPS) return
         // open readings and the person's own sentences, merged by the model's score (Personal.merge); else open only;
         // then the words they taught, matched on the same clip (Words.merge)
         val open = e.options.ifEmpty { e.sentences.map { app.mouna.core.Personal.Option(it, 0.0, false) } }
@@ -897,6 +915,7 @@ class MounaApp(
         light = store.light
         Ink.light = store.light
         selfTrain = store.selfTrain
+        devType = store.devType
         channel = storedChannel()
         callMode = storedCallMode()
         callServerNow = Rooms.base(store.callServer.ifBlank { BuildConfig.CALL_SERVER })
@@ -934,6 +953,13 @@ class MounaApp(
     fun chooseSelfTrain(on: Boolean) {
         selfTrain = on
         store.selfTrain = on
+    }
+
+    /** Developer option: the Type channel on Speak. Turning it off while Type is the channel moves Speak to Lips. */
+    fun chooseDevType(on: Boolean) {
+        devType = on
+        store.devType = on
+        if (!on && channel == Channel.TYPE) chooseChannel(Channel.LIPS)
     }
 
     /** QA and rehearsal: show what the person would see for a decision of [kind], with phrases from their pack. */
@@ -1343,8 +1369,8 @@ class MounaApp(
     fun quick(q: app.mouna.app.engine.QuickPhrase) = sayCall(q.packId, q.say(lang), lang, "call")
 
     /**
-     * Anything typed on the Call screen, in whichever script it is written. A phone or app request typed instead is acted
-     * on, not spoken.
+     * Anything typed (Speak's Type channel, or the Call screen), in whichever script it is written. A phone or app request
+     * typed instead is acted on, not spoken.
      */
     fun sayTyped(text: String) {
         val t = text.trim()
