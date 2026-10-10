@@ -73,7 +73,7 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
                         }
                         DecisionKind.RESCUE -> Rescue(app, d.options, k)
                         DecisionKind.CHOOSE -> Pick(app, k, "Which one?", "A FEW ARE POSSIBLE", d.options, d.maybeNone)
-                        DecisionKind.ASK -> Pick(app, k, "Which one?", "MANY ARE POSSIBLE", d.options, d.maybeNone, offerAsk = true)
+                        DecisionKind.ASK -> Pick(app, k, "Which one?", "MANY ARE POSSIBLE", d.options, d.maybeNone)
                         DecisionKind.NOT_TAUGHT -> NotTaught(app, k, d.options, d.maybeNone)
                         DecisionKind.SPEAK -> Unit
                     }
@@ -141,7 +141,6 @@ private fun ColumnScope.Pick(
     label: String,
     options: List<String>,
     noneFirst: Boolean,
-    offerAsk: Boolean = false,
 ) {
     val items = if (noneFirst) listOf(NONE) + options else options + NONE
     val hi = scanning(app, items, k.switchReady)
@@ -168,7 +167,6 @@ private fun ColumnScope.Pick(
         }
     }
     if (k.switchReady) Hint("Use your movement when the right one lights up.")
-    if (offerAsk) BigButton("Ask me yes / no instead", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.ASK) }
 }
 
 /** Sign mode wasn't sure: the likeliest ISL words, as big buttons. */
@@ -256,7 +254,6 @@ private fun ColumnScope.NotTaught(app: MounaApp, k: Knowledge, maybe: List<Strin
     Spacer(Modifier.weight(1f))
     if (maybeNone) Hint("This looked like one of your “none of these” examples.")
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        BigButton("Ask me yes / no", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.ASK) }
         BigButton("Something else", Tone.NO, Modifier.fillMaxWidth()) { app.noneOfThese() }
     }
 }
