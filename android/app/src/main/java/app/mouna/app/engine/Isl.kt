@@ -79,7 +79,7 @@ class Isl private constructor(private val session: OrtSession, private val env: 
             return byWord.entries.sortedByDescending { it.value }.take(5).map { Guess(it.key, it.value) }
         }
 
-        fun folder(context: Context) = File(context.getExternalFilesDir(null), "isl").apply { mkdirs() }
+        fun folder(context: Context) = ModelStore.dir(context, "isl")
 
         fun open(context: Context): Isl? {
             // This ONNX Runtime (QNN edition, no XNNPACK / NNAPI) traps on the emulator's CPU for this model (Apple M4
