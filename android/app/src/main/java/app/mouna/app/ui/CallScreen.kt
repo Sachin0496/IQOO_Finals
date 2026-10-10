@@ -242,16 +242,13 @@ private fun WebDialer(app: MounaApp) {
             }
             if (server.isEmpty()) {
                 Spacer(Modifier.height(14.dp))
-                Text("Web calls aren't set up on this phone yet.", style = Type.body.copy(color = Ink.turmeric))
-                if (Stage.debug) {
-                    Spacer(Modifier.height(4.dp))
-                    Text("No call server address. Add it in Settings › Advanced.", style = Type.mono.copy(fontSize = 12.sp))
-                    Text(
-                        "Open Advanced settings",
-                        style = Type.mono.copy(fontSize = 12.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline),
-                        modifier = Modifier.clickable { app.go(Screen.SETTINGS) }.padding(vertical = 8.dp),
-                    )
-                }
+                Text("No call server: web link calls are off. Add it in Settings › Advanced › Web calls.", style = Type.body.copy(color = Ink.turmeric))
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Open Advanced settings",
+                    style = Type.mono.copy(fontSize = 12.sp, color = Ink.turmeric, textDecoration = TextDecoration.Underline),
+                    modifier = Modifier.clickable { Stage.debug = true; app.go(Screen.SETTINGS) }.padding(vertical = 8.dp),
+                )
             }
             app.callNote?.let {
                 Spacer(Modifier.height(10.dp))

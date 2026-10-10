@@ -74,7 +74,7 @@ class WebLink(context: Context, private val http: OkHttpClient = client()) : Cal
         val room = Rooms.normalise(target)
         val url = Rooms.base(server())
         if (room == null) { _note.value = "That is not a call link."; return false }
-        if (url.isEmpty()) { _note.value = "Set the call server in Settings first."; return false }
+        if (url.isEmpty()) { _note.value = "No call server: web link calls are off. Add it in Settings › Advanced › Web calls."; return false }
         if (Rooms.isCleartext(server())) { _note.value = Rooms.HTTPS_ONLY; return false }
         base = url
         token = tokenFor(room)
