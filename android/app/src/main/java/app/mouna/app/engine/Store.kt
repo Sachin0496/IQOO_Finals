@@ -60,6 +60,11 @@ class Store(context: Context) {
         get() = prefs.getBoolean("light", false)
         set(v) = prefs.edit().putBoolean("light", v).apply()
 
+    /** Developer option (Settings, Advanced): a Type channel on Speak, for testing. Off unless turned on. */
+    var devType: Boolean
+        get() = prefs.getBoolean("dev_type", false)
+        set(v) = prefs.edit().putBoolean("dev_type", v).apply()
+
     /** Keep very clear matches the person doesn't correct as extra examples (see [SelfTrain]). Off until the person turns it on. */
     var selfTrain: Boolean
         get() = prefs.getBoolean("self_train", false)

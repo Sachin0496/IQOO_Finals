@@ -339,6 +339,17 @@ private fun Advanced(app: MounaApp, k: Knowledge, openProbe: () -> Unit, off: ()
         }
 
         Card {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Type box on Speak (developer)", style = Type.phrase)
+                    Text("For testing: type a sentence instead of mouthing it.", style = Type.body.copy(fontSize = 13.sp))
+                }
+                Spacer(Modifier.width(12.dp))
+                MounaSwitch(app.devType) { app.chooseDevType(it) }
+            }
+        }
+
+        Card {
             Column {
                 SectionLabel("Lip encoder")
                 Row(verticalAlignment = Alignment.CenterVertically) {

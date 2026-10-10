@@ -28,8 +28,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import android.provider.ContactsContract
+import app.mouna.app.engine.AppInfo
 import app.mouna.app.engine.CallUsage
 import app.mouna.app.engine.CarrierLink
+import app.mouna.app.engine.DeviceNumber
+import app.mouna.app.engine.PhoneBook
+import app.mouna.app.engine.PhoneContact
 import app.mouna.app.engine.Engine
 import app.mouna.app.engine.SignSegmenter
 import app.mouna.app.engine.Lang
@@ -63,8 +67,13 @@ class MainActivity : ComponentActivity() {
         callAnswer?.invoke(granted[Manifest.permission.CALL_PHONE] == true)
         callAnswer = null
     }
+    private var contactsAnswer: ((Boolean) -> Unit)? = null
+    private val askContactsPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        contactsAnswer?.invoke(granted)
+        contactsAnswer = null
+    }
     private var contactAnswer: ((Pair<String, String>?) -> Unit)? = null
-    // The picker grants read access to the one row picked: no READ_CONTACTS needed.
+    // The picker grants read access to the one row it returns, so it works whatever READ_CONTACTS says.
     private val pickContactResult = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         contactAnswer?.invoke(r.data?.data?.let { readContact(it) })
         contactAnswer = null
@@ -126,6 +135,17 @@ class MainActivity : ComponentActivity() {
             },
             openIntent = { intent -> runCatching { startActivity(intent) }.isSuccess },
             hasWhatsApp = ::hasWhatsApp,
+            askContacts = { answer ->
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                    answer(true)
+                } else {
+                    contactsAnswer = answer
+                    askContactsPermission.launch(Manifest.permission.READ_CONTACTS)
+                }
+            },
+            loadContacts = ::loadContacts,
+            listApps = ::listApps,
+            openPackage = ::openPackage,
         )
         welcome.value = !engine.store.welcomed
         engine.start()
@@ -152,6 +172,12 @@ class MainActivity : ComponentActivity() {
                 voice.callMode = app.onCall || i.getBooleanExtra("call", false)
                 Log.i("MounaCall", "SAY \"$text\" ${lang.tag} callMode=${voice.callMode} usage=${voice.callUsage}")
                 app.debugSay(text, lang, i.getStringExtra("voice") ?: app.voiceId)
+            }
+            // adb shell am broadcast -a app.mouna.READ --es text "I need some water"
+            // Shows the Lips confirm for that sentence, exactly as a sentence read from the lips is shown: the confirm and
+            // say path (sayRead) can be tried without a face.
+            debugReceiver("app.mouna.READ") { i ->
+                i.getStringExtra("text")?.let { app.debugRead(it) }
             }
             // adb shell am broadcast -a app.mouna.CALLSERVER --es url https://....trycloudflare.com   (blank url: back to the build's)
             debugReceiver("app.mouna.CALLSERVER") { i ->
@@ -358,6 +384,51 @@ class MainActivity : ComponentActivity() {
 
     /** WhatsApp installed? Visible to this app through the <package> entry in the manifest's <queries>. */
     private fun hasWhatsApp(): Boolean = runCatching { packageManager.getPackageInfo("com.whatsapp", 0) }.isSuccess
+
+    /**
+     * The phone's contacts with a number, one per name (see [PhoneBook.fromDevice]). Empty without READ_CONTACTS or if
+     * the contacts provider fails. Runs off the main thread.
+     */
+    private fun loadContacts(): List<PhoneContact> {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return emptyList()
+        val columns = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.TYPE,
+            ContactsContract.CommonDataKinds.Phone.STARRED,
+        )
+        return runCatching {
+            val rows = mutableListOf<DeviceNumber>()
+            contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, columns, null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    rows += DeviceNumber(
+                        name = c.getString(0).orEmpty(),
+                        number = c.getString(1).orEmpty(),
+                        mobile = c.getInt(2) == ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
+                        starred = c.getInt(3) == 1,
+                    )
+                }
+            }
+            PhoneBook.fromDevice(rows)
+        }.getOrDefault(emptyList())
+    }
+
+    /** The apps the launcher shows, one per package, without Mouna itself. Runs off the main thread. */
+    private fun listApps(): List<AppInfo> {
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return runCatching {
+            packageManager.queryIntentActivities(launcher, 0)
+                .map { AppInfo(it.loadLabel(packageManager).toString(), it.activityInfo.packageName) }
+                .filter { it.pkg != packageName }
+                .distinctBy { it.pkg }
+        }.getOrDefault(emptyList())
+    }
+
+    /** Opens the app in [pkg] at its own start screen; false if it has none or the phone refuses. */
+    private fun openPackage(pkg: String): Boolean {
+        val launch = packageManager.getLaunchIntentForPackage(pkg)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) ?: return false
+        return runCatching { startActivity(launch) }.isSuccess
+    }
 
     /** Name and number of the contact row the picker returned. */
     private fun readContact(uri: android.net.Uri): Pair<String, String>? = runCatching {

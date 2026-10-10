@@ -357,8 +357,8 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     LaunchedEffect(hint) { if (hint) { delay(2200); hint = false } }
     val talk = when {
         app.callTab == CallTab.PHRASES -> Talk.PHRASES
+        app.callTab == CallTab.TYPE -> Talk.TYPE
         app.channel == Channel.SIGN -> Talk.SIGN
-        app.channel == Channel.TYPE -> Talk.TYPE
         else -> Talk.LIPS
     }
     Column(Modifier.fillMaxSize()) {
@@ -383,7 +383,7 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             // One switch for every way to talk on a call: no second switch inside the camera.
             ModeSwitch(Talk.entries.map { it to it.label }, talk, { t ->
                 t.channel?.let { app.chooseChannel(it) }
-                app.chooseCallTab(if (t == Talk.PHRASES) CallTab.PHRASES else CallTab.MOUTH)
+                app.chooseCallTab(t.tab)
             }, fill = true)
             Spacer(Modifier.height(14.dp))
         }
@@ -397,9 +397,12 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     }
 }
 
-/** The ways to talk on a call, in switch order: mouth, sign, type or tap a phrase. */
-private enum class Talk(val label: String, val channel: Channel?) {
-    LIPS("Lips", Channel.LIPS), SIGN("Sign", Channel.SIGN), TYPE("Type", Channel.TYPE), PHRASES("Phrases", null)
+/** The ways to talk on a call, in switch order: mouth, sign, type or tap a phrase. [tab] is the lower half it shows. */
+private enum class Talk(val label: String, val channel: Channel?, val tab: CallTab) {
+    LIPS("Lips", Channel.LIPS, CallTab.MOUTH),
+    SIGN("Sign", Channel.SIGN, CallTab.MOUTH),
+    TYPE("Type", null, CallTab.TYPE),
+    PHRASES("Phrases", null, CallTab.PHRASES),
 }
 
 /** How long the button must be held to end a call: long enough that a brush or a stray tap does nothing. */

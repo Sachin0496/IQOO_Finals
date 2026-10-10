@@ -61,7 +61,7 @@ private val teachLink get() = Type.body.copy(color = Ink.turmeric, textDecoratio
 private val waitingStyle get() = Type.display.copy(color = Ink.mute, fontStyle = FontStyle.Italic, fontSize = 32.sp, lineHeight = 36.sp)
 
 /** The one thing to tell the person about this channel, in plain words. */
-private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean): Status = when (app.channel) {
+private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean): Status = when (app.speakChannel) {
     Channel.SIGN -> when {
         st.signing -> Status("Seeing your sign…", Ink.turmeric, true)
         !k.islKnown -> Status("Getting ready…", Ink.mute, true)
@@ -87,7 +87,7 @@ private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean)
 }
 
 /** What the machine is doing: only on stage-debug. */
-private fun techStatus(app: MounaApp, k: Knowledge): Status? = when (app.channel) {
+private fun techStatus(app: MounaApp, k: Knowledge): Status? = when (app.speakChannel) {
     Channel.SIGN -> when {
         !k.islKnown -> Status("ISL · loading…", Ink.mute, true)
         k.islReady -> Status("ISL · 263 signs", Ink.leaf)
@@ -113,8 +113,13 @@ private fun howSaid(via: String): String = when {
     else -> ""
 }
 
-/** The ways the person can talk on Speak. Voice is left out: anyone who can say a phrase doesn't need Mouna to say it. */
-internal val SPEAK_CHANNELS = listOf(Channel.LIPS to "Lips", Channel.SIGN to "Sign", Channel.TYPE to "Type")
+/**
+ * The ways the person can talk on Speak. Voice is left out: anyone who can say a phrase doesn't need Mouna to say it.
+ * Type is a developer option (Settings, Advanced), listed only while it is on. Typing on a call is on the Call screen.
+ */
+internal fun speakChannels(devType: Boolean): List<Pair<Channel, String>> =
+    if (devType) listOf(Channel.LIPS to "Lips", Channel.SIGN to "Sign", Channel.TYPE to "Type")
+    else listOf(Channel.LIPS to "Lips", Channel.SIGN to "Sign")
 
 /**
  * The one screen the person lives on: their face, what Mouna last said, and their phrases as pictures.
@@ -141,7 +146,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall
                 Pill(main.text, main.dot, main.pulse, Modifier.weight(1f, fill = false))
                 if (Stage.debug) techStatus(app, k)?.let { Pill(it.text, it.dot, it.pulse) }
             }
-            if (!inCall) ModeSwitch(SPEAK_CHANNELS, app.channel, app::chooseChannel, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
+            if (!inCall) ModeSwitch(speakChannels(app.devType), app.channel, app::chooseChannel, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
         }
 
         Spacer(Modifier.height(14.dp))
@@ -153,8 +158,8 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall
             ) { said ->
                 if (said == null) {
                     Column {
-                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English."; Channel.TYPE -> if (inCall) "Type what to say." else "Type anything below." }, style = waitingStyle)
-                        if (app.channel == Channel.LIPS && !app.onCall) { // never walk away from a call
+                        Text(when (app.speakChannel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English."; Channel.TYPE -> "Type anything below." }, style = waitingStyle)
+                        if (app.speakChannel == Channel.LIPS && !app.onCall) { // never walk away from a call
                             Text(
                                 "A name or word Lips can’t read? Teach it →",
                                 style = teachLink,
@@ -233,7 +238,7 @@ private fun PhoneButton(app: MounaApp) {
     }
 }
 
-/** Anything typed is spoken aloud in the caregiver's language, through the same voice as everything else. */
+/** Developer option (Settings, Advanced): anything typed is spoken aloud in the caregiver's language, through the same voice. */
 @Composable
 private fun TypeBox(app: MounaApp, modifier: Modifier = Modifier) {
     var text by remember { mutableStateOf("") }
