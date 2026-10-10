@@ -76,7 +76,7 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
             when (prompt) {
                 is Prompt.PickAny -> Pick(app, k, "What did you mean?", "PICK THE RIGHT ONE", k.pack, noneFirst = false)
                 is Prompt.Heard -> SayClearly(app, prompt.text)
-                is Prompt.Signed -> DidYouSign(app, prompt.words)
+                is Prompt.Signed -> DidYouSign(app, prompt)
                 is Prompt.Read -> DidYouMean(app, prompt)
                 is Prompt.PhoneWhat -> PhoneWhat(app, k)
                 is Prompt.PhoneWho -> PhoneWho(app, prompt, k)
@@ -93,7 +93,7 @@ fun PromptOverlay(app: MounaApp, prompt: Prompt, k: Knowledge) {
                         }
                         DecisionKind.RESCUE -> Rescue(app, d.options, k)
                         DecisionKind.CHOOSE -> Pick(app, k, "Which one?", "A FEW ARE POSSIBLE", d.options, d.maybeNone)
-                        DecisionKind.ASK -> Pick(app, k, "Which one?", "MANY ARE POSSIBLE", d.options, d.maybeNone, offerAsk = true)
+                        DecisionKind.ASK -> Pick(app, k, "Which one?", "MANY ARE POSSIBLE", d.options, d.maybeNone)
                         DecisionKind.NOT_TAUGHT -> NotTaught(app, k, d.options, d.maybeNone)
                         DecisionKind.SPEAK -> Unit
                     }
@@ -161,7 +161,6 @@ private fun ColumnScope.Pick(
     label: String,
     options: List<String>,
     noneFirst: Boolean,
-    offerAsk: Boolean = false,
 ) {
     val items = if (noneFirst) listOf(NONE) + options else options + NONE
     val hi = scanning(app, items, k.switchReady)
@@ -188,27 +187,20 @@ private fun ColumnScope.Pick(
         }
     }
     if (k.switchReady) Hint("Use your movement when the right one lights up.")
-    if (offerAsk) BigButton("Ask me yes / no instead", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.ASK) }
 }
 
-/** Sign mode wasn't sure: the likeliest ISL words, as big buttons. */
+/** Sign mode wasn't sure: one word at a time, as Lips asks. Nod or blink says it; shake or No asks about the next. */
 @Composable
-private fun ColumnScope.DidYouSign(app: MounaApp, words: List<String>) {
-    Header(app, "NOT SURE", "Did you sign…?")
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        words.forEach { w ->
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .border(1.dp, Ink.rule2, RoundedCornerShape(22.dp))
-                    .clickable { app.sayWord(w) }
-                    .padding(horizontal = 22.dp, vertical = 20.dp),
-            ) { Text(w.replaceFirstChar { it.uppercase() }, style = signWord) }
-        }
-    }
+private fun ColumnScope.DidYouSign(app: MounaApp, p: Prompt.Signed) {
+    Header(app, "READ FROM YOUR HANDS", "Did you sign…?")
+    val w = p.words[p.index]
+    Text("“${w.replaceFirstChar { it.uppercase() }}”", style = Type.display.copy(fontSize = 34.sp, lineHeight = 40.sp, color = Ink.turmeric))
     Spacer(Modifier.weight(1f))
-    BigButton("None of these", Tone.NO, Modifier.fillMaxWidth()) { app.close() }
+    Hint(if (p.index + 1 < p.words.size) "Nod or blink twice to say it, or shake your head for the next guess." else "Nod or blink twice to say it, or shake your head to say nothing.")
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        BigButton("No", Tone.NO, Modifier.weight(1f)) { app.nextSign() }
+        BigButton("Yes, say it", Tone.YES, Modifier.weight(1.4f)) { app.sayWord(w) }
+    }
 }
 
 /** Voice mode: words that are none of the person's phrases. Mouna offers to say exactly those words, clearly. */
@@ -423,12 +415,10 @@ private fun ColumnScope.NotTaught(app: MounaApp, k: Knowledge, maybe: List<Strin
     Spacer(Modifier.weight(1f))
     if (maybeNone) Hint("This looked like one of your “none of these” examples.")
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        BigButton("Ask me yes / no", Tone.PRIMARY, Modifier.fillMaxWidth()) { app.go(Screen.ASK) }
         BigButton("Something else", Tone.NO, Modifier.fillMaxWidth()) { app.noneOfThese() }
     }
 }
 
-private val signWord get() = Type.display.copy(fontSize = 30.sp)
 
 @Composable
 private fun NoneTile(modifier: Modifier, selected: Boolean, onClick: () -> Unit) {

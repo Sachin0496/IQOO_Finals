@@ -77,8 +77,8 @@ class OrtEncoder private constructor(
             (Build.VERSION.SDK_INT >= 31 && Build.SOC_MANUFACTURER.contains("QTI", ignoreCase = true)) ||
                 Build.HARDWARE.contains("qcom", ignoreCase = true)
 
-        /** adb push the model files here: /sdcard/Android/data/app.mouna/files/encoder/ (gitignored weights). */
-        fun folder(context: Context): File = File(context.getExternalFilesDir(null), "encoder").apply { mkdirs() }
+        /** adb push the model files here: /sdcard/Mouna/encoder/ or the app's own files/encoder/ ([ModelStore], gitignored weights). */
+        fun folder(context: Context): File = ModelStore.dir(context, "encoder")
 
         /**
          * Tries a QNN context binary on the NPU, then compiles the plain ONNX for the NPU on the phone, then the plain

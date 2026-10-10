@@ -28,6 +28,18 @@ android {
         ndk { abiFilters += "arm64-v8a" } // the OnePlus 13R and iQOO 15; QNN ships arm64 only
     }
 
+    // One debug key for the whole team (keystore/debug.keystore, the standard "android" debug passwords): a build from any
+    // laptop installs over the phone's copy as an update. With each laptop's own key, Android refuses the update and the
+    // only way in is uninstalling, which deletes the person's data (and, without Keep models, the models).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -100,7 +112,13 @@ val fetchMediapipe by tasks.registering {
         }
     }
 }
-tasks.named("preBuild") { dependsOn(copyFaceModel, copyVoices, fetchSherpa, fetchMediapipe) }
+// Sign demos for Teach your signs (models/isl/eval/demo_signs.py): keypoints only, INCLUDE CC BY 4.0.
+val copySignDemos by tasks.registering(Copy::class) {
+    from(rootProject.file("../models/isl/sign_demos.json"))
+    into(layout.projectDirectory.dir("src/main/assets"))
+}
+
+tasks.named("preBuild") { dependsOn(copyFaceModel, copyVoices, fetchSherpa, fetchMediapipe, copySignDemos) }
 
 dependencies {
     val camerax = "1.4.1"

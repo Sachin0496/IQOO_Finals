@@ -298,7 +298,7 @@ fun PhraseTile(
 }
 
 /**
- * The one segmented switch: Speak's channels, Ask's question sources and a call's ways to talk all look the same.
+ * The one segmented switch: Speak's channels and a call's ways to talk all look the same.
  * [fill] spreads the options across the full width (a call's row); otherwise it hugs its labels (over the camera).
  */
 @Composable

@@ -71,6 +71,7 @@ fun MounaRoot(
             app.prompt != null -> app.close()
             app.screen == Screen.EYES || app.screen == Screen.SWITCH || app.screen == Screen.RECORD -> app.go(Screen.SETTINGS)
             app.screen == Screen.WORDS -> app.go(app.wordsBack)
+            app.screen == Screen.SIGNS -> app.go(app.signsBack)
             app.screen != Screen.SPEAK -> app.go(Screen.SPEAK)
             else -> activity?.moveTaskToBack(true)
         }
@@ -94,13 +95,13 @@ fun MounaRoot(
                     ) { s ->
                         when (s) {
                             Screen.SPEAK -> SpeakScreen(app, k, bindCamera)
-                            Screen.ASK -> AskScreen(app, bindCamera)
                             Screen.CALL -> CallScreen(app, k, bindCamera)
                             Screen.SETTINGS -> SettingsScreen(app, k, openProbe)
                             Screen.EYES -> EyesSetup(app, bindCamera)
                             Screen.SWITCH -> SwitchSetup(app, bindCamera)
                             Screen.RECORD -> RecordScreen(app, k, bindCamera)
                             Screen.WORDS -> WordsScreen(app, k, bindCamera)
+                            Screen.SIGNS -> SignsScreen(app, k, bindCamera)
                         }
                     }
                 }
@@ -113,7 +114,7 @@ fun MounaRoot(
     }
 }
 
-private val MAIN = listOf(Screen.SPEAK, Screen.ASK, Screen.CALL)
+private val MAIN = listOf(Screen.SPEAK, Screen.CALL)
 
 private val ChipShape = CircleShape
 
@@ -132,7 +133,16 @@ private fun TopBar(app: MounaApp) {
         if (app.screen in MAIN) {
             IconButtonSoft(Icons.Rounded.Settings, "Settings") { app.go(Screen.SETTINGS) }
         } else {
-            BackButton { app.go(if (app.screen == Screen.SETTINGS) Screen.SPEAK else if (app.screen == Screen.WORDS) app.wordsBack else Screen.SETTINGS) }
+            BackButton {
+                app.go(
+                    when (app.screen) {
+                        Screen.SETTINGS -> Screen.SPEAK
+                        Screen.WORDS -> app.wordsBack
+                        Screen.SIGNS -> app.signsBack
+                        else -> Screen.SETTINGS
+                    },
+                )
+            }
         }
     }
 }
@@ -191,7 +201,6 @@ private fun NavBar(app: MounaApp) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         NavItem(MounaIcons.RecordVoiceOver, "Speak", app.screen == Screen.SPEAK, Modifier.weight(1f)) { app.go(Screen.SPEAK) }
-        NavItem(MounaIcons.QuestionAnswer, "Ask", app.screen == Screen.ASK, Modifier.weight(1f)) { app.go(Screen.ASK) }
         NavItem(Icons.Rounded.Call, "Call", app.screen == Screen.CALL, Modifier.weight(1f)) { app.go(Screen.CALL) }
     }
 }

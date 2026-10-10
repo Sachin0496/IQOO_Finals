@@ -3,6 +3,7 @@ package app.mouna.app.engine
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
+import java.io.File
 import app.mouna.app.sense.DoubleBlink
 import app.mouna.app.sense.Frame
 import app.mouna.app.sense.Gesture
@@ -89,6 +90,12 @@ data class Knowledge(
     val words: List<Pair<String, String>> = emptyList(),
     val wordCounts: Map<String, Int> = emptyMap(),
     val teachingWord: String? = null,
+    /** The person's own signs (SignBook): id -> text, examples per sign, the sign the next one teaches, and whether the
+     *  ISL model can learn them (it has the features output). */
+    val signs: List<Pair<String, String>> = emptyList(),
+    val signCounts: Map<String, Int> = emptyMap(),
+    val teachingSign: String? = null,
+    val signsTeachable: Boolean = false,
 )
 
 sealed interface Event {
@@ -98,8 +105,13 @@ sealed interface Event {
     data class Taught(val intent: String, val check: Boolean?) : Event
     data class NegativeAdded(val count: Int) : Event
     data object SwitchPressed : Event
-    /** A sign was seen; the most likely words from the ISL model, best first. */
-    data class Signed(val guesses: List<Isl.Guess>, val ms: Double) : Event
+    /**
+     * A sign was seen: the most likely INCLUDE words, best first, and [mine], the person's own taught signs' decision
+     * (null when none are taught or the model has no features output).
+     */
+    data class Signed(val guesses: List<Isl.Guess>, val ms: Double, val mine: SignBook.Decision? = null) : Event
+    /** A sign taught [id]; [count] examples so far. */
+    data class SignTaught(val id: String, val count: Int) : Event
     /** Free talk read a sentence: candidates best first (empty: nothing readable). [ms]: end of mouthing to sentences. */
     data class Read(
         val sentences: List<String>,
@@ -149,7 +161,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
      * ~0.7 s don't end the utterance; under ~1 s is a twitch, not a sentence (measured: those read as "THE", "THAT").
      * Waits for free talk's own crop: the lip encoder's crop is only made while Lips listens.
      */
-    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 30, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
+    private val freeSegmenter = Segmenter(preRoll = 8, minFrames = 40, maxFrames = 300, tail = 20, keepTail = 8, hasCrop = { it.avsr != null })
 
     private val _live = MutableStateFlow(Live())
     val live: StateFlow<Live> = _live.asStateFlow()
@@ -185,6 +197,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
     @Volatile private var teachWord: String? = null
     @Volatile private var wordCount = 0
     private var isl: Isl? = null
+    /** The person's own signs (worker thread). In the app's private files: they are the person's, not a model. */
+    private val signBook = SignBook(File(context.filesDir, "person/signs.json"))
+    @Volatile private var teachSign: String? = null
     @Volatile private var islKnown = false
     @Volatile private var signMode = false
     /** The switch setup (or anything else that captures frames) has run: the landmarker keeps its blendshape output. */
@@ -367,9 +382,35 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         val endMs = f.tMs
         onWorker {
             val model = isl ?: return@onWorker
-            val g = runCatching { model.classify(frames) }.onFailure { Log.e(TAG, "isl", it) }.getOrNull() ?: return@onWorker
-            _events.tryEmit(Event.Signed(g, (SystemClock.uptimeMillis() - endMs).toDouble()))
+            val r = runCatching { model.read(frames) }.onFailure { Log.e(TAG, "isl", it) }.getOrNull() ?: return@onWorker
+            val teach = teachSign
+            if (teach != null && r.features != null) {
+                val n = signBook.teach(teach, r.features)
+                if (n >= SignBook.SHOTS) teachSign = null
+                _events.tryEmit(Event.SignTaught(teach, n))
+                publish()
+                return@onWorker
+            }
+            val mine = r.features?.let { signBook.decide(it) }
+            r.features?.let { f -> Log.i(TAG, "sign mine -> " + signBook.match(f).take(3).joinToString { "${it.text} %.3f".format(it.cos) }) }
+            _events.tryEmit(Event.Signed(r.guesses, (SystemClock.uptimeMillis() - endMs).toDouble(), mine))
         }
+    }
+
+    /** A new sign of the person's own: [text] is what Mouna says. Teach it with [teachSign]. */
+    fun addSign(text: String, id: String? = null): String = signBook.add(text, id).also { refresh() }
+
+    fun removeSign(id: String) = onWorker {
+        signBook.remove(id)
+        if (teachSign == id) teachSign = null
+        publish()
+    }
+
+    /** The next signs (up to [SignBook.SHOTS] in all) become examples of [id]; null stops. Sign mode must be on ([signing]). */
+    fun teachSign(id: String?) = onWorker {
+        teachSign = id
+        onAnalysis { signCutter.reset() }
+        publish()
     }
 
     /** QA: classify recorded keypoints (frames of 27 x 2) and log the top words. */
@@ -478,6 +519,10 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             words = store.words,
             wordCounts = wordLearner.intents.associateWith { wordLearner.count(it) },
             teachingWord = teachWord,
+            signs = signBook.signs.map { it.id to it.text },
+            signCounts = signBook.signs.associate { it.id to it.examples.size },
+            teachingSign = teachSign,
+            signsTeachable = isl?.canTeach == true,
         )
     }
 
@@ -542,6 +587,8 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         lastWord = null
         teachWord = null
         wordCount = 0
+        signBook.clear()
+        teachSign = null
         pendingSelf = null
         personalSwitch = null
         gazeModel = null
@@ -643,8 +690,28 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             onWorker { teachWordFrom(c, word) }
             return
         }
+        if (recordTo == null && !speechLike(c)) return // breathing, a twitch, a resting jaw: not worth reading
         val match = if (ready && wordCount > 0) java.util.concurrent.CompletableFuture<Decision?>().also { f -> onWorker { f.complete(matchWords(c)) } } else null
         submit(freeWorker) { readClip(c, match) }
+    }
+
+    /**
+     * Speech opens and closes the lips; a still face mostly doesn't. Spread of the inner-lip gap (p90 - p10, in mouth
+     * widths) and how often it crosses its middle. Logged per clip ("lips gate") to tune [OPEN_SPREAD] and [OPEN_CYCLES].
+     */
+    private fun speechLike(c: Clip): Boolean {
+        val a = c.frames.filter { it.face }.map { it.aperture }
+        if (a.size < MIN_SPEECH_FRAMES) { ftLog("lips gate: ${a.size} frames -> skip (short)"); return false }
+        val s = a.sorted()
+        val p10 = s[(s.size * 0.1).toInt()]
+        val p90 = s[(s.size * 0.9).toInt().coerceAtMost(s.size - 1)]
+        val spread = p90 - p10
+        val mid = (p10 + p90) / 2
+        var cycles = 0
+        for (i in 1 until a.size) if ((a[i - 1] < mid) != (a[i] < mid)) cycles++
+        val ok = spread >= OPEN_SPREAD && cycles >= OPEN_CYCLES
+        ftLog("lips gate: ${a.size} frames, spread ${"%.3f".format(spread)}, crossings $cycles -> ${if (ok) "read" else "skip"}")
+        return ok
     }
 
     private val wordsKey get() = "words-${encoder.id}"
@@ -902,6 +969,12 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         private const val MAX_LEARNED = 200
         /** How long a Lips reading waits for the taught words' match (it runs in parallel and takes ~20 ms). */
         private const val WORD_WAIT_MS = 400L
+        /** Lips: a clip is read only if the inner-lip gap spreads at least this far (mouth widths)... */
+        private const val OPEN_SPREAD = 0.15f
+        /** ...and crosses its middle this often (two opens and closes). */
+        private const val OPEN_CYCLES = 4
+        /** ...over at least this many face frames (~2 s): shorter bursts on the phone were twitches read as filler. */
+        private const val MIN_SPEECH_FRAMES = 60
         /** "Not one of my words" examples kept from confirmations; the oldest go first. */
         private const val MAX_WORD_NEGATIVES = 40
     }

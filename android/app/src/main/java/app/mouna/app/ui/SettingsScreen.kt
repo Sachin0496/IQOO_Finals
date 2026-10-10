@@ -48,6 +48,8 @@ import app.mouna.app.Screen
 import app.mouna.app.engine.CallUsage
 import app.mouna.app.engine.Knowledge
 import app.mouna.app.engine.Lang
+import app.mouna.app.engine.ModelStore
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.mouna.app.engine.Sarvam
 import app.mouna.core.DecisionKind
 
@@ -171,6 +173,10 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 val taught = k.words.count { (k.wordCounts[it.first] ?: 0) > 0 }
                 SetupRow("Teach Lips a word", if (taught > 0) "$taught word${if (taught == 1) "" else "s"} · names, any language" else "Names and words Lips can’t read, in any language",
                     taught > 0, if (taught > 0) "Edit" else "Teach") { app.openWords(Screen.SETTINGS) }
+                Spacer(Modifier.height(12.dp))
+                val signs = k.signs.count { (k.signCounts[it.first] ?: 0) > 0 }
+                SetupRow("Teach your signs", if (signs > 0) "$signs sign${if (signs == 1) "" else "s"} · Sign listens for yours" else "Sign learns your own signs, three times each",
+                    signs > 0, if (signs > 0) "Edit" else "Teach") { app.openSigns(Screen.SETTINGS) }
             }
         }
 
@@ -218,6 +224,22 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
                 var name by remember { mutableStateOf(app.callerName) }
                 TextBox(name, { name = it.take(40); app.chooseCallerName(name) }, "Your name", Modifier.fillMaxWidth())
             }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        Card {
+            // Re-read when coming back from Android's settings page.
+            var kept by remember { mutableStateOf(ModelStore.kept()) }
+            LifecycleResumeEffect(Unit) {
+                kept = ModelStore.kept()
+                onPauseOrDispose {}
+            }
+            SetupRow(
+                "Keep models",
+                if (kept) "Kept in /sdcard/Mouna: reinstalling Mouna won't delete them" else "Lips, sign and voice models are deleted if Mouna is reinstalled. Allow \"All files access\" to keep them",
+                kept,
+                if (kept) "Change" else "Allow",
+            ) { ModelStore.askAccess(context) }
         }
 
         if (Stage.debug) {
@@ -341,7 +363,7 @@ private fun Advanced(app: MounaApp, k: Knowledge, openProbe: () -> Unit, off: ()
                 Text("voice: ${app.voiceStatus}", style = Type.mono.copy(fontSize = 12.sp))
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "To use the NPU: adb push qnn_ctx_fp16.onnx /sdcard/Android/data/app.mouna/files/encoder/ and restart.",
+                    "To use the NPU: adb push qnn_ctx_fp16.onnx to /sdcard/Mouna/encoder/ (Keep models on) or /sdcard/Android/data/app.mouna/files/encoder/, and restart.",
                     style = Type.mono.copy(fontSize = 11.sp, color = Ink.mute),
                 )
             }

@@ -89,7 +89,8 @@ class Sensor(context: Context, private val onFrame: (Frame) -> Unit, blendshapes
     private var landmarker: FaceLandmarker
     @Volatile var delegate: String
         private set
-    private val gate = ActivityGate()
+    // Stricter than the Lab's defaults (0.06 / 0.035): small idle mouth movements were read as speech.
+    private val gate = ActivityGate(on = 0.09f, off = 0.05f)
     private var prev: FloatArray? = null
     @Volatile var blendNames: List<String> = emptyList()
         private set
