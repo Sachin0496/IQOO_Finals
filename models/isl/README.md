@@ -19,5 +19,7 @@ each hand's wrist and finger points 4, 5, 8, 9, 12, 13, 16, 17, 20), x and y, ce
 and scaled by the mean shoulder distance over the clip. Output `probs` (1, 263), labels in `isl_include_labels.json`
 (sorted INCLUDE "Word" names, as in OpenHands' `INCLUDEDataset.read_glosses`).
 
-Licences: OpenHands code Apache-2.0. **INCLUDE dataset terms: check before any public claim.** Accuracy on our own
-signers: not measured.
+Licences: OpenHands code Apache-2.0; INCLUDE dataset CC BY 4.0 (Zenodo 4010759).
+
+Accuracy through the app's pipeline on INCLUDE's held-out signers, and on the iQOO 15: `eval/README.md`. Accuracy on
+our own signers: not measured.

@@ -1,0 +1,73 @@
+{
+ "source": "INCLUDE test split (held out from training), categories Greetings, Pronouns",
+ "model": "AI4Bharat OpenHands SL-GCN, INCLUDE checkpoint (models/isl)",
+ "pipeline": "the app's: Signer, Isl, MounaApp.signed (models/isl/eval/signs.py)",
+ "landscape": {
+  "clips": 73,
+  "words": 17,
+  "whole_clip_top1": 59,
+  "whole_clip_top3": 65,
+  "whole_clip_top5": 67,
+  "hands_seen_frames": 0.944,
+  "old_segmenter_fired_on_clips": 4,
+  "new_segmenter_fired_on_clips": 72,
+  "continuous_old": {
+   "signs": 120,
+   "spoken_right": 12,
+   "spoken_wrong": 25,
+   "offered_with_right": 3,
+   "offered_without": 3,
+   "missed": 77
+  },
+  "continuous_new_speak0.6": {
+   "signs": 120,
+   "spoken_right": 82,
+   "spoken_wrong": 31,
+   "offered_with_right": 5,
+   "offered_without": 2,
+   "missed": 0
+  },
+  "continuous_new": {
+   "signs": 120,
+   "spoken_right": 79,
+   "spoken_wrong": 16,
+   "offered_with_right": 16,
+   "offered_without": 9,
+   "missed": 0
+  }
+ },
+ "portrait": {
+  "clips": 73,
+  "words": 17,
+  "whole_clip_top1": 42,
+  "whole_clip_top3": 53,
+  "whole_clip_top5": 55,
+  "hands_seen_frames": 0.974,
+  "old_segmenter_fired_on_clips": 0,
+  "new_segmenter_fired_on_clips": 72,
+  "continuous_old": {
+   "signs": 120,
+   "spoken_right": 3,
+   "spoken_wrong": 18,
+   "offered_with_right": 7,
+   "offered_without": 12,
+   "missed": 80
+  },
+  "continuous_new_speak0.6": {
+   "signs": 120,
+   "spoken_right": 61,
+   "spoken_wrong": 42,
+   "offered_with_right": 5,
+   "offered_without": 12,
+   "missed": 0
+  },
+  "continuous_new": {
+   "signs": 120,
+   "spoken_right": 53,
+   "spoken_wrong": 20,
+   "offered_with_right": 17,
+   "offered_without": 30,
+   "missed": 0
+  }
+ }
+}
