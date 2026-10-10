@@ -83,7 +83,7 @@ private fun status(app: MounaApp, k: Knowledge, st: LiveStatus, micHot: Boolean)
         else -> Status("Watching your lips", Ink.leaf)
     }
     Channel.FREE -> when {
-        !k.freeReady && k.freeTalk.contains("Loading") -> Status("Getting ready…", Ink.mute, true)
+        !k.freeReady && k.freeLoading -> Status(if ("Setting up" in k.freeTalk) "Setting up free talk (first time)…" else "Getting ready…", Ink.mute, true)
         !k.freeReady -> Status("Free talk isn’t available on this phone", Ink.mute)
         !st.face -> Status("Looking for your face", Ink.mute)
         st.hearing -> Status("Reading your lips…", Ink.turmeric, true)
@@ -99,7 +99,7 @@ private fun techStatus(app: MounaApp, k: Knowledge): Status? = when (app.channel
         else -> Status(if (isEmulator) "ISL runs on the phone" else "No ISL model", Ink.mute)
     }
     Channel.VOICE -> if (app.hearing.ready) Status("Whisper", Ink.leaf) else Status("No voice model", Ink.mute)
-    Channel.FREE -> if (k.freeReady) Status("Auto-AVSR · NPU", Ink.leaf) else Status(k.freeTalk, Ink.mute, k.freeTalk.contains("Loading"))
+    Channel.FREE -> if (k.freeReady) Status("${k.freeModel} · NPU", Ink.leaf) else Status(k.freeTalk, Ink.mute, k.freeLoading)
     Channel.LIPS -> when {
         !k.ready -> Status("Encoder · loading…", Ink.mute, true)
         k.encoder.label.startsWith("NPU") -> Status(k.encoder.label, Ink.leaf)

@@ -39,6 +39,8 @@ class OpenVsr private constructor(
     private val outW: FloatArray = FloatArray(0),
     private val outB: FloatArray = FloatArray(0),
     private val spm: Spm? = null,
+    /** Which model this is (Settings > Free talk model). */
+    val model: Model? = null,
 ) : AutoCloseable {
     private val idsCache = HashMap<String, IntArray>()
     /** No-video attention score per sentence ([Personal.rank]): it depends only on the text, so it is computed once. */
@@ -257,6 +259,9 @@ class OpenVsr private constructor(
 
     override fun close() = (sessions.values + decoders.values + scorers.values).forEach { it.close() }
 
+    /** A free-talk model on the phone: avsr/models/<id>/ (its NPU graphs, label.txt); [ready] once compiled. */
+    data class Model(val id: String, val label: String, val dir: File, val ready: Boolean)
+
     companion object {
         const val UNITS = 5049
         const val SOS = UNITS - 1
@@ -268,12 +273,34 @@ class OpenVsr private constructor(
         fun folder(context: Context): File = File(context.getExternalFilesDir(null), "avsr").apply { mkdirs() }
 
         /**
+         * Every model pushed to the phone (python -m mouna_encoder avsr-export --out ... --label ...), e.g. the original
+         * model and one tuned to this person. Without avsr/models, the graphs in avsr/ itself are the one model.
+         */
+        fun models(context: Context): List<Model> {
+            val root = folder(context)
+            val dirs = File(root, "models").listFiles()?.filter { it.isDirectory && File(it, "avsr_vsr_t64.onnx").let { f -> f.exists() || File(it, "avsr_vsr_t64.qnn_ctx_fp16.onnx").exists() } }
+                ?.sortedBy { it.name }.orEmpty()
+            val all = dirs.ifEmpty { if (File(root, "avsr_vsr_t64.onnx").exists() || File(root, "avsr_vsr_t64.qnn_ctx_fp16.onnx").exists()) listOf(root) else emptyList() }
+            return all.map { d ->
+                val label = File(d, "label.txt").takeIf { it.exists() }?.readText()?.trim()?.ifEmpty { null } ?: if (d == root) "Free talk" else d.name
+                val ready = FreeTalk.BUCKETS.all { t -> listOf("vsr", "dec", "score").all { File(d, "avsr_${it}_t$t.qnn_ctx_fp16.onnx").exists() } }
+                Model(if (d == root) "" else d.name, label, d, ready)
+            }
+        }
+
+        /**
          * Opens every bucket on the NPU (compiling and caching the context binary the first time, which takes a while).
          * NPU only: no CPU fallback. Returns the reader, or null and why.
          */
-        fun open(context: Context, log: (String) -> Unit): Pair<OpenVsr?, String> {
-            val dir = folder(context)
-            val tokFile = File(dir, "tokens.txt")
+        fun open(context: Context, model: String?, log: (String) -> Unit): Pair<OpenVsr?, String> {
+            val all = models(context)
+            val m = all.firstOrNull { it.id == model } ?: all.firstOrNull()
+                ?: return null to "Free talk: no model in ${folder(context).absolutePath}"
+            val dir = m.dir
+            val root = folder(context)
+            /** Lookup tables shared by every model live in avsr/; a model's own copy wins. */
+            fun shared(name: String) = File(dir, name).takeIf { it.exists() } ?: File(root, name)
+            val tokFile = shared("tokens.txt")
             if (!tokFile.exists()) return null to "Free talk: no model in ${dir.absolutePath}"
             val tokens = tokFile.readLines()
             if (tokens.size != UNITS) return null to "Free talk: tokens.txt has ${tokens.size} units, expected $UNITS"
@@ -331,8 +358,8 @@ class OpenVsr private constructor(
                 }
             }
             if (sessions.isEmpty()) return null to (listOf("Free talk: no graph opened on the NPU") + notes).joinToString("\n")
-            val embedF = File(dir, "dec_embed.bin")
-            val posF = File(dir, "dec_pos.bin")
+            val embedF = shared("dec_embed.bin")
+            val posF = shared("dec_pos.bin")
             if (decoders.isNotEmpty() && (!embedF.exists() || !posF.exists())) {
                 decoders.values.forEach { it.close() }
                 decoders.clear()
@@ -341,9 +368,9 @@ class OpenVsr private constructor(
             val embed = if (decoders.isEmpty()) FloatArray(0) else readFloats(embedF)
             val pos = if (decoders.isEmpty()) FloatArray(0) else readFloats(posF)
             // personal sentences (issue #5 A): the scorer graphs, the decoder's output layer and the tokenizer
-            val wF = File(dir, "dec_out_w.bin")
-            val bF = File(dir, "dec_out_b.bin")
-            val pF = File(dir, "spm_pieces.tsv")
+            val wF = shared("dec_out_w.bin")
+            val bF = shared("dec_out_b.bin")
+            val pF = shared("spm_pieces.tsv")
             val score = decoders.isNotEmpty() && scorers.isNotEmpty() && wF.exists() && bF.exists() && pF.exists()
             if (!score) {
                 scorers.values.forEach { it.close() }
@@ -352,8 +379,8 @@ class OpenVsr private constructor(
             val spm = if (score) Spm(Spm.parse(pF.readLines()), tokens) else null
             return OpenVsr(
                 env, sessions, decoders, tokens, embed, pos,
-                scorers, if (score) readFloats(wF) else FloatArray(0), if (score) readFloats(bF) else FloatArray(0), spm,
-            ) to "Free talk: NPU · fp16 · buckets ${sessions.keys.joinToString("/")}" +
+                scorers, if (score) readFloats(wF) else FloatArray(0), if (score) readFloats(bF) else FloatArray(0), spm, m,
+            ) to "Free talk: ${m.label} · NPU · fp16 · buckets ${sessions.keys.joinToString("/")}" +
                 " · decoder ${if (decoders.isEmpty()) "none (CTC only)" else decoders.keys.joinToString("/")}" +
                 " · personal ${if (scorers.isEmpty()) "off" else "on"}" +
                 if (notes.isEmpty()) "" else "\n" + notes.joinToString("\n")

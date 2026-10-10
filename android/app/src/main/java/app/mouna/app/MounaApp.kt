@@ -532,6 +532,11 @@ class MounaApp(
         applyChannel() // free talk waits while the person confirms
     }
 
+    /** Free talk's models (Settings): re-read when Settings opens; switching closes one model and loads the other. */
+    fun freeTalkModels() = engine.freeTalkModels()
+
+    fun chooseFreeTalkModel(id: String) = engine.chooseFreeTalkModel(id)
+
     /** Free talk: say the confirmed sentence in the phone's voice (English: the model reads English). */
     fun sayRead(text: String) {
         engine.rememberSentence(text) // offered again next time, scored by the model (issue #5 A)

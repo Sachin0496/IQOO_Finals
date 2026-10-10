@@ -158,6 +158,41 @@ fun SettingsScreen(app: MounaApp, k: Knowledge, openProbe: () -> Unit) {
             }
         }
 
+        val models = remember(k.freeModelId, k.freeLoading) { app.freeTalkModels() }
+        if (models.size > 1) {
+            Spacer(Modifier.height(14.dp))
+            Card {
+                Column {
+                    SectionLabel("Free talk model")
+                    Text(
+                        "The original reads anyone. A model tuned to one person reads that person better, and others less well.",
+                        style = Type.body.copy(fontSize = 13.sp),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        models.forEach { m ->
+                            Chip(m.label, m.id == (k.freeModelId ?: models.first().id)) {
+                                if (m.id != k.freeModelId && !k.freeLoading) app.chooseFreeTalkModel(m.id)
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val status = when {
+                        k.freeLoading -> k.freeTalk
+                        k.freeReady -> "In use: ${k.freeModel}"
+                        else -> k.freeTalk
+                    }
+                    Text(status, style = Type.body.copy(fontSize = 13.sp, color = if (k.freeReady) Ink.leaf else Ink.mute))
+                    models.filter { !it.ready }.takeIf { it.isNotEmpty() }?.let { notReady ->
+                        Text(
+                            "First use of ${notReady.joinToString { it.label }} sets it up on the NPU (about 25 min, keep the phone unlocked).",
+                            style = Type.body.copy(fontSize = 12.sp, color = Ink.mute),
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(14.dp))
         Card {
             Column {

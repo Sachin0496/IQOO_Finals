@@ -86,6 +86,11 @@ class Store(context: Context) {
             }).toString()
         }).apply()
 
+    /** Free talk: the model chosen in Settings (avsr/models/<id>); null = the first one. */
+    var freeTalkModel: String?
+        get() = prefs.getString("freeTalkModel", null)
+        set(v) = prefs.edit().putString("freeTalkModel", v).apply()
+
     /** Free talk: sentences this person confirmed (issue #5 A), offered again by the model's own score. Newest last. */
     var freeTalkSentences: List<String>
         get() = runCatching {

@@ -78,6 +78,11 @@ data class Knowledge(
     /** Free talk (open-vocabulary English, NPU): status line, and whether it is ready to read. */
     val freeTalk: String = "Free talk · Loading…",
     val freeReady: Boolean = false,
+    /** Free talk is loading or setting up a model (a first start compiles it for the NPU: minutes). */
+    val freeLoading: Boolean = true,
+    /** The free-talk model in use (its label), and its id. */
+    val freeModel: String = "",
+    val freeModelId: String? = null,
 )
 
 sealed interface Event {
@@ -233,14 +238,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             publish(report)
             Log.i(PERF, "encoder ready in ${SystemClock.elapsedRealtime() - t0} ms (${encoder.label})")
             // Free talk after the lip encoder (start-up order above), on its own thread: a first NPU compile takes minutes.
-            submit(freeWorker) {
-                val (r, msg) = runCatching { OpenVsr.open(context) { ftLog(it) } }
-                    .getOrElse { null to "Free talk: ${it.message}" }
-                openVsr = r
-                freeTalkStatus = msg
-                ftLog(msg)
-                _knowledge.value = _knowledge.value.copy(freeTalk = msg.lineSequence().first(), freeReady = r != null)
-            }
+            openFreeTalk(store.freeTalkModel)
 
             val t1 = SystemClock.elapsedRealtime()
             isl = runCatching { Isl.open(context) }.getOrNull()
@@ -456,6 +454,9 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
             islKnown = islKnown,
             freeTalk = freeTalkStatus.lineSequence().first(),
             freeReady = openVsr != null,
+            freeLoading = k.freeLoading,
+            freeModel = k.freeModel,
+            freeModelId = k.freeModelId,
         )
     }
 
@@ -607,6 +608,39 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
         store.freeTalkSentences = (store.freeTalkSentences.filter { !it.equals(t, ignoreCase = true) } + t).takeLast(MAX_LEARNED)
     }
 
+    /** The free-talk models on the phone (Settings > Free talk model). */
+    fun freeTalkModels(): List<OpenVsr.Model> = runCatching { OpenVsr.models(context) }.getOrDefault(emptyList())
+
+    /** Switch free talk to another model: the old one is closed first (one model in memory at a time). */
+    fun chooseFreeTalkModel(id: String) {
+        store.freeTalkModel = id
+        openFreeTalk(id)
+    }
+
+    private fun openFreeTalk(id: String?) = submit(freeWorker) {
+        openVsr?.close()
+        openVsr = null
+        val label = freeTalkModels().firstOrNull { it.id == id }?.label ?: "free talk"
+        freeTalkStatus = "Free talk · Loading $label…"
+        _knowledge.value = _knowledge.value.copy(freeTalk = freeTalkStatus, freeReady = false, freeLoading = true)
+        val (r, msg) = runCatching {
+            OpenVsr.open(context, id) { line ->
+                ftLog(line)
+                if ("compiling" in line) {
+                    freeTalkStatus = "Setting up $label on the NPU (first time only, about 25 min)…"
+                    _knowledge.value = _knowledge.value.copy(freeTalk = freeTalkStatus)
+                }
+            }
+        }.getOrElse { null to "Free talk: ${it.message}" }
+        openVsr = r
+        freeTalkStatus = msg
+        ftLog(msg)
+        _knowledge.value = _knowledge.value.copy(
+            freeTalk = msg.lineSequence().first(), freeReady = r != null, freeLoading = false,
+            freeModel = r?.model?.label ?: "", freeModelId = r?.model?.id,
+        )
+    }
+
     /** Free talk listens (Speak screen, Free talk channel, no prompt open). */
     fun freeTalk(on: Boolean) {
         freeOn = on
@@ -671,7 +705,7 @@ class Engine(private val context: Context, private val bundled: PhrasePack, val 
      */
     fun freeTalkSelfTest() = freeWorker.execute {
         val r = openVsr ?: run { ftLog("free talk self-test: $freeTalkStatus"); return@execute }
-        val dir = OpenVsr.folder(context)
+        val dir = r.model?.dir ?: OpenVsr.folder(context)
         for (t in app.mouna.core.FreeTalk.BUCKETS) {
             val fx = java.io.File(dir, "selftest_t${t}_x.bin")
             if (!fx.exists()) continue
