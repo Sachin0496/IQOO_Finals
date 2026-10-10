@@ -2,7 +2,8 @@
 
 Each clip -> the app's own keypoints (signs.keypoints: pose + hands, 27 points) -> the signing part (signs.segments,
 the app's SignSegmenter) -> centred on the shoulders and scaled by shoulder width (as Isl.normalise) -> 15 fps ->
-android/app/src/main/assets/sign_demos.json. INCLUDE (Zenodo 4010759) is CC BY 4.0: credited in the file and on screen.
+models/isl/sign_demos.json (the build copies it into the app's assets). INCLUDE (Zenodo 4010759) is CC BY 4.0: credited
+in the file and on screen.
 
     python demo_signs.py <videos dir> [<cache dir with Greetings npz>]
 """
@@ -23,7 +24,7 @@ CLIPS = {
 # already extracted by include_eval.py (landscape framing)
 CACHED = {"thank_you": ("Greetings__55._Thank_you", "Thank you"), "alright": ("Greetings__50._Alright", "Alright")}
 FPS = 15
-OUT = os.path.join(S.ASSETS, "sign_demos.json")
+OUT = os.path.join(S.HERE, "..", "sign_demos.json")
 
 
 def frames(video):

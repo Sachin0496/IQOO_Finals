@@ -112,7 +112,13 @@ val fetchMediapipe by tasks.registering {
         }
     }
 }
-tasks.named("preBuild") { dependsOn(copyFaceModel, copyVoices, fetchSherpa, fetchMediapipe) }
+// Sign demos for Teach your signs (models/isl/eval/demo_signs.py): keypoints only, INCLUDE CC BY 4.0.
+val copySignDemos by tasks.registering(Copy::class) {
+    from(rootProject.file("../models/isl/sign_demos.json"))
+    into(layout.projectDirectory.dir("src/main/assets"))
+}
+
+tasks.named("preBuild") { dependsOn(copyFaceModel, copyVoices, fetchSherpa, fetchMediapipe, copySignDemos) }
 
 dependencies {
     val camerax = "1.4.1"
