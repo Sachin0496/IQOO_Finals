@@ -94,7 +94,7 @@ fun MounaRoot(
                     ) { s ->
                         when (s) {
                             Screen.SPEAK -> SpeakScreen(app, k, bindCamera)
-                            Screen.ASK -> AskScreen(app)
+                            Screen.ASK -> AskScreen(app, bindCamera)
                             Screen.CALL -> CallScreen(app, k, bindCamera)
                             Screen.SETTINGS -> SettingsScreen(app, k, openProbe)
                             Screen.EYES -> EyesSetup(app, bindCamera)
