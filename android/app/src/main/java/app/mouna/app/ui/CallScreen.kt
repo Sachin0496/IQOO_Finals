@@ -65,6 +65,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mouna.app.CallTab
+import app.mouna.app.Channel
 import app.mouna.app.MounaApp
 import app.mouna.app.engine.CallPhrases
 import app.mouna.app.engine.CallState
@@ -132,10 +133,13 @@ private fun produceNow(key: Any) = remember(key) { mutableLongStateOf(SystemCloc
 @Composable
 private fun Dialer(app: MounaApp) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal = 20.dp).padding(bottom = 18.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TabChip("Phone number", app.callMode == CallMode.PHONE) { app.chooseCallMode(CallMode.PHONE) }
-            TabChip("Web link", app.callMode == CallMode.WEB) { app.chooseCallMode(CallMode.WEB) }
-        }
+        ModeSwitch(
+            listOf(CallMode.PHONE to "Phone number", CallMode.WEB to "Web link"),
+            app.callMode,
+            app::chooseCallMode,
+            Modifier.padding(horizontal = 20.dp).padding(bottom = 16.dp),
+            fill = true,
+        )
         Box(Modifier.weight(1f)) {
             if (app.callMode == CallMode.PHONE) PhoneDialer(app) else WebDialer(app)
         }
@@ -351,6 +355,12 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
     val via by app.voice.via.collectAsState()
     var hint by remember { mutableStateOf(false) }
     LaunchedEffect(hint) { if (hint) { delay(2200); hint = false } }
+    val talk = when {
+        app.callTab == CallTab.PHRASES -> Talk.PHRASES
+        app.channel == Channel.SIGN -> Talk.SIGN
+        app.channel == Channel.TYPE -> Talk.TYPE
+        else -> Talk.LIPS
+    }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,17 +379,27 @@ private fun InCall(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             BigButton("Introduce me", Tone.PRIMARY, Modifier.fillMaxWidth().height(54.dp)) { app.intro() }
             if (hint) Text("Hold the button to hang up", style = Type.body.copy(color = Ink.turmeric, fontSize = 13.sp), modifier = Modifier.padding(top = 8.dp))
             app.callNote?.let { Text(it, style = Type.body.copy(color = Ink.turmeric, fontSize = 13.sp), modifier = Modifier.padding(top = 8.dp)) }
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TabChip("Phrases", app.callTab == CallTab.PHRASES) { app.chooseCallTab(CallTab.PHRASES) }
-                TabChip("Lips · Sign", app.callTab == CallTab.MOUTH) { app.chooseCallTab(CallTab.MOUTH) }
-            }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
+            // One switch for every way to talk on a call: no second switch inside the camera.
+            ModeSwitch(Talk.entries.map { it to it.label }, talk, { t ->
+                t.channel?.let { app.chooseChannel(it) }
+                app.chooseCallTab(if (t == Talk.PHRASES) CallTab.PHRASES else CallTab.MOUTH)
+            }, fill = true)
+            Spacer(Modifier.height(14.dp))
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (app.callTab == CallTab.PHRASES) Phrases(app) else SpeakScreen(app, k, bind)
+            when (talk) {
+                Talk.PHRASES -> Phrases(app)
+                Talk.TYPE -> TypeToSay(app)
+                else -> SpeakScreen(app, k, bind, inCall = true)
+            }
         }
     }
+}
+
+/** The ways to talk on a call: tap a phrase, mouth, sign or type. */
+private enum class Talk(val label: String, val channel: Channel?) {
+    PHRASES("Phrases", null), LIPS("Lips", Channel.LIPS), SIGN("Sign", Channel.SIGN), TYPE("Type", Channel.TYPE)
 }
 
 /** How long the button must be held to end a call: long enough that a brush or a stray tap does nothing. */
@@ -453,23 +473,9 @@ internal fun guestLine(name: String?, speaking: Boolean): String {
     return if (name.isNullOrBlank()) "They're $what" else "$name is $what"
 }
 
-@Composable
-private fun TabChip(text: String, on: Boolean, onClick: () -> Unit) {
-    Text(
-        text,
-        style = Type.body.copy(fontSize = 14.sp, color = if (on) Ink.bg else Ink.bone),
-        modifier = Modifier
-            .clip(CircleShape)
-            .then(if (on) Modifier.background(Ink.bone) else Modifier.border(1.dp, Ink.rule2, CircleShape))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    )
-}
-
-/** Quick phrases and a text box: for anyone who can tap. */
+/** Quick phrases: for anyone who can tap. */
 @Composable
 private fun Phrases(app: MounaApp) {
-    var text by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 20.dp)) {
         CallPhrases.quick.chunked(2).forEach { pair ->
             // Both buttons of a row are as tall as the taller one, so a long Tamil phrase never makes a ragged row.
@@ -506,20 +512,33 @@ private fun Phrases(app: MounaApp) {
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
-        Spacer(Modifier.height(6.dp))
-        SectionLabel("Or type anything")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextBox(text, { text = it.take(200) }, "Type what to say", Modifier.weight(1f), singleLine = false)
-            Spacer(Modifier.width(10.dp))
-            BigButton("Speak", Tone.PRIMARY, enabled = text.isNotBlank()) {
-                app.sayTyped(text)
-                text = ""
-            }
-        }
-        app.said?.let {
-            Spacer(Modifier.height(14.dp))
-            Text("“${it.text}”", style = Type.display.copy(fontSize = 22.sp, lineHeight = 26.sp, color = Ink.bone2, fontStyle = FontStyle.Italic), maxLines = 3)
-        }
+        LastSaid(app)
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** Typing on a call: a roomy box, one big Speak button, and the last thing said. */
+@Composable
+private fun TypeToSay(app: MounaApp) {
+    var text by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        SectionLabel("Type what to say")
+        TextBox(text, { text = it.take(200) }, "Type anything", Modifier.fillMaxWidth().heightIn(min = 132.dp), singleLine = false)
+        Spacer(Modifier.height(12.dp))
+        BigButton("Speak", Tone.PRIMARY, Modifier.fillMaxWidth(), enabled = text.isNotBlank()) {
+            app.sayTyped(text)
+            text = ""
+        }
+        LastSaid(app)
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** The last thing Mouna said into the call, so the person can check it went. */
+@Composable
+private fun LastSaid(app: MounaApp) {
+    app.said?.let {
+        Spacer(Modifier.height(14.dp))
+        Text("“${it.text}”", style = Type.display.copy(fontSize = 22.sp, lineHeight = 26.sp, color = Ink.bone2, fontStyle = FontStyle.Italic), maxLines = 3)
     }
 }

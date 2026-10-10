@@ -8,16 +8,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.Icon
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.background
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,9 +43,6 @@ import app.mouna.app.MounaApp
 import app.mouna.app.Screen
 import app.mouna.app.engine.Knowledge
 import app.mouna.app.engine.isEmulator
-
-private val switchOn get() = Type.button.copy(fontSize = 15.sp, color = Ink.bg)
-private val switchOff get() = Type.button.copy(fontSize = 15.sp, color = Ink.bone2)
 
 private class Status(val text: String, val dot: Color, val pulse: Boolean = false)
 
@@ -115,12 +105,16 @@ private fun howSaid(via: String): String = when {
     else -> ""
 }
 
+/** The ways the person can talk on Speak. Voice is left out: anyone who can say a phrase doesn't need Mouna to say it. */
+internal val SPEAK_CHANNELS = listOf(Channel.LIPS to "Lips", Channel.SIGN to "Sign", Channel.TYPE to "Type")
+
 /**
  * The one screen the person lives on: their face, what Mouna last said, and their phrases as pictures.
  * Mouthing is hands-free (the gate finds the utterance); the pictures are the fallback for anyone who can tap.
+ * [inCall]: the camera and what was said only, under the Call screen's own switch (it has its own phrases and typing).
  */
 @Composable
-fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
+fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit, inCall: Boolean = false) {
     val micHot by remember { derivedStateOf { app.micLevel > 0.35f } }
     app.voiceStatus // the voice model loads in the background: re-read "ready" when its status changes
     // imePadding at the root (not inside the type box): when the keyboard opens the whole column re-measures
@@ -131,7 +125,6 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             bind,
             Modifier.padding(horizontal = 20.dp).fillMaxWidth().weight(1f),
         ) { st ->
-            if (app.channel == Channel.VOICE) VoiceRing(app, Modifier.align(Alignment.Center))
             Row(
                 Modifier.align(Alignment.TopStart).padding(start = 14.dp, top = 14.dp, end = 62.dp).fillMaxWidth(), // the flip button sits top right
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -140,7 +133,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
                 Pill(main.text, main.dot, main.pulse, Modifier.weight(1f, fill = false))
                 if (Stage.debug) techStatus(app, k)?.let { Pill(it.text, it.dot, it.pulse) }
             }
-            ChannelSwitch(app, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
+            if (!inCall) ModeSwitch(SPEAK_CHANNELS, app.channel, app::chooseChannel, Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp))
         }
 
         Spacer(Modifier.height(14.dp))
@@ -152,7 +145,7 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             ) { said ->
                 if (said == null) {
                     Column {
-                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English."; Channel.TYPE -> "Type anything below." }, style = waitingStyle)
+                        Text(when (app.channel) { Channel.VOICE -> "Say a phrase."; Channel.SIGN -> "Sign a word."; Channel.LIPS -> "Mouth anything, in English."; Channel.TYPE -> if (inCall) "Type what to say." else "Type anything below." }, style = waitingStyle)
                         if (app.channel == Channel.LIPS && !app.onCall) { // never walk away from a call
                             Text(
                                 "A name or word Lips can’t read? Teach it →",
@@ -184,43 +177,21 @@ fun SpeakScreen(app: MounaApp, k: Knowledge, bind: (PreviewView) -> Unit) {
             }
         }
 
-        SectionLabel("Or tap a picture", Modifier.padding(start = 24.dp))
-        if (app.channel == Channel.TYPE) TypeBox(app, Modifier.padding(horizontal = 20.dp))
-        val tileH = tileHeight(app.lang)
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.padding(bottom = 6.dp),
-        ) {
-            items(k.pack, key = { it }) { id ->
-                app.phrases[id]?.let { p ->
-                    PhraseTile(p, app.lang, Modifier.width(128.dp).height(tileH)) { app.speak(id, "touch") }
+        if (!inCall) {
+            if (app.channel == Channel.TYPE) TypeBox(app, Modifier.padding(horizontal = 20.dp))
+            SectionLabel("Or tap a picture", Modifier.padding(start = 24.dp))
+            val tileH = tileHeight(app.lang)
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(bottom = 6.dp),
+            ) {
+                items(k.pack, key = { it }) { id ->
+                    app.phrases[id]?.let { p ->
+                        PhraseTile(p, app.lang, Modifier.width(128.dp).height(tileH)) { app.speak(id, "touch") }
+                    }
                 }
             }
-        }
-    }
-}
-
-/** Lips, voice, sign or typing: whichever this person can use today. */
-@Composable
-private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
-    Row(
-        modifier.clip(CircleShape).background(Ink.bg.copy(alpha = 0.78f)).padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        listOf(Channel.LIPS to "Lips", Channel.VOICE to "Voice", Channel.SIGN to "Sign", Channel.TYPE to "Type").forEach { (c, label) ->
-            val on = app.channel == c
-            Text(
-                label,
-                style = if (on) switchOn else switchOff,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(if (on) Ink.bone else Ink.bg.copy(alpha = 0f))
-                    .clickable { app.chooseChannel(c) }
-                    .heightIn(min = 48.dp)
-                    .padding(horizontal = 12.dp) // every channel must fit a phone's width
-                    .wrapContentHeight(Alignment.CenterVertically),
-            )
         }
     }
 }
@@ -230,7 +201,7 @@ private fun ChannelSwitch(app: MounaApp, modifier: Modifier) {
 private fun TypeBox(app: MounaApp, modifier: Modifier = Modifier) {
     var text by remember { mutableStateOf("") }
     Column(modifier) {
-        SectionLabel("Or type anything")
+        SectionLabel("Type what to say")
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextBox(text, { text = it.take(200) }, "Type what to say", Modifier.weight(1f), singleLine = false)
             Spacer(Modifier.width(10.dp))
@@ -239,19 +210,6 @@ private fun TypeBox(app: MounaApp, modifier: Modifier = Modifier) {
                 text = ""
             }
         }
-        Spacer(Modifier.height(10.dp))
-    }
-}
-
-/** A soft ring that breathes with the voice: the person can see they are being heard. Reads the mic level itself. */
-@Composable
-private fun VoiceRing(app: MounaApp, modifier: Modifier) {
-    val scale by animateFloatAsState(1f + 0.6f * app.micLevel, tween(90), label = "ring")
-    val busy = app.hearingBusy
-    Box(modifier.size(150.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(150.dp).scale(scale).clip(CircleShape).background(Ink.turmeric.copy(alpha = if (busy) 0.30f else 0.14f)))
-        Box(Modifier.size(84.dp).clip(CircleShape).background(Ink.bg.copy(alpha = 0.82f)), contentAlignment = Alignment.Center) {
-            Icon(MounaIcons.GraphicEq, null, tint = Ink.turmeric, modifier = Modifier.size(38.dp))
-        }
+        Spacer(Modifier.height(14.dp))
     }
 }

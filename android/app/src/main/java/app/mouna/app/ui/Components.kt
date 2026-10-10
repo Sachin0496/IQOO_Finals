@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -287,6 +288,41 @@ fun PhraseTile(
                 Spacer(Modifier.height(4.dp))
                 Text(phrase.say(Lang.EN), style = tileSub, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+        }
+    }
+}
+
+/**
+ * The one segmented switch: Speak's channels, Ask's question sources and a call's ways to talk all look the same.
+ * [fill] spreads the options across the full width (a call's row); otherwise it hugs its labels (over the camera).
+ */
+@Composable
+fun <T> ModeSwitch(options: List<Pair<T, String>>, picked: T, onPick: (T) -> Unit, modifier: Modifier = Modifier, fill: Boolean = false) {
+    Row(
+        modifier
+            .then(if (fill) Modifier.fillMaxWidth() else Modifier)
+            .clip(CircleShape)
+            .background(if (fill) Ink.raised else Ink.bg.copy(alpha = 0.78f))
+            .then(if (fill) Modifier.border(1.dp, Ink.rule, CircleShape) else Modifier)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        options.forEach { (value, label) ->
+            val on = value == picked
+            Text(
+                label,
+                style = Type.button.copy(fontSize = 15.sp, color = if (on) Ink.bg else Ink.bone2),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier
+                    .then(if (fill) Modifier.weight(1f) else Modifier)
+                    .clip(CircleShape)
+                    .background(if (on) Ink.bone else Color.Transparent)
+                    .clickable { onPick(value) }
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = if (fill) 4.dp else 16.dp)
+                    .wrapContentHeight(Alignment.CenterVertically),
+            )
         }
     }
 }
