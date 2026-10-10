@@ -24,6 +24,7 @@ import java.nio.FloatBuffer
  *   avsr_vsr_t{64,128,256}.onnx   plain fp32 graphs; compiled for the NPU on the phone at first start (fp16) and
  *                                 cached next to them as avsr_vsr_t*.qnn_ctx_fp16.onnx
  *   tokens.txt                    5,049 units, one per line (0 = blank)
+ *   lora.txt                      only in a model tuned to the person (avsr-export --lora): its sentences lead less eagerly
  */
 class OpenVsr private constructor(
     private val env: OrtEnvironment,
@@ -105,7 +106,7 @@ class OpenVsr private constructor(
         val t1 = SystemClock.elapsedRealtimeNanos()
         val listed = scorePersonal(personal, logp, n, enc, valid)
         val open = seen.entries.map { Personal.Option(it.key, it.value, personal = false) }
-        val options = Personal.merge(open, listed)
+        val options = Personal.merge(open, listed, firstWithin = if (model?.tuned == true) Personal.FIRST_WITHIN_TUNED else Personal.FIRST_WITHIN)
         val personalMs = (SystemClock.elapsedRealtimeNanos() - t1) / 1e6
         return Reading(seen.keys.toList(), seen.values.toList(), n, t, npuMs, decodeMs, steps, options, personalMs)
     }
@@ -259,8 +260,11 @@ class OpenVsr private constructor(
 
     override fun close() = (sessions.values + decoders.values + scorers.values).forEach { it.close() }
 
-    /** A free-talk model on the phone: avsr/models/<id>/ (its NPU graphs, label.txt); [ready] once compiled. */
-    data class Model(val id: String, val label: String, val dir: File, val ready: Boolean)
+    /**
+     * A free-talk model on the phone: avsr/models/<id>/ (its NPU graphs, label.txt); [ready] once compiled; [tuned] when
+     * it was exported with a person's adapter (lora.txt, written by avsr-export --lora).
+     */
+    data class Model(val id: String, val label: String, val dir: File, val ready: Boolean, val tuned: Boolean = false)
 
     companion object {
         const val UNITS = 5049
@@ -284,7 +288,7 @@ class OpenVsr private constructor(
             return all.map { d ->
                 val label = File(d, "label.txt").takeIf { it.exists() }?.readText()?.trim()?.ifEmpty { null } ?: if (d == root) "Original" else d.name
                 val ready = FreeTalk.BUCKETS.all { t -> listOf("vsr", "dec", "score").all { File(d, "avsr_${it}_t$t.qnn_ctx_fp16.onnx").exists() } }
-                Model(if (d == root) "" else d.name, label, d, ready)
+                Model(if (d == root) "" else d.name, label, d, ready, tuned = File(d, "lora.txt").exists())
             }
         }
 
