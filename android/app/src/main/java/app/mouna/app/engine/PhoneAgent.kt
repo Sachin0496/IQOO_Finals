@@ -27,8 +27,11 @@ data class PhoneCommand(val verb: PhoneVerb, val name: String?, val body: String
 
 /** How a phone request is carried out. [PhoneRoute.EmergencyDial] only ever opens the dialer, never places a call. */
 sealed interface PhoneRoute {
-    /** A call in the web-call screen, for a contact with no phone number. */
-    data class WebRoom(val room: String, val name: String) : PhoneRoute
+    /**
+     * A call in the web-call screen: the contact's own [room], or a new link to send them when [room] is null (a phone
+     * with no SIM calling someone who only has a number).
+     */
+    data class WebRoom(val room: String?, val name: String) : PhoneRoute
 
     /** The phone's own phone app calls [number]. */
     data class Carrier(val number: String, val name: String) : PhoneRoute
@@ -351,7 +354,10 @@ fun PhoneBook.shortlist(all: List<PhoneContact>, favouriteNames: Set<String>): L
 object PhoneRouter {
     private val emergency = setOf("112", "100", "101", "102", "108", "911", "999")
 
-    /** [hasSim] false: a contact with a web room is called there, since the phone app cannot connect without a SIM. */
+    /**
+     * [hasSim] false: the phone app cannot connect without a SIM, so a call goes over the web: to the contact's room, or a
+     * new link to send them.
+     */
     fun route(verb: PhoneVerb, c: PhoneContact, body: String?, hasWhatsApp: Boolean, hasSim: Boolean = true): PhoneRoute =
         when (verb) {
             PhoneVerb.CALL -> call(c, hasSim)
@@ -382,8 +388,9 @@ object PhoneRouter {
         val n = c.number
         return when {
             n != null && isEmergency(n) -> PhoneRoute.EmergencyDial(n)
-            n != null && (hasSim || c.room == null) -> PhoneRoute.Carrier(n, c.name)
+            n != null && hasSim -> PhoneRoute.Carrier(n, c.name)
             c.room != null -> PhoneRoute.WebRoom(c.room, c.name)
+            n != null -> PhoneRoute.WebRoom(null, c.name)
             else -> PhoneRoute.Unreachable("${c.name} has no phone number saved")
         }
     }
