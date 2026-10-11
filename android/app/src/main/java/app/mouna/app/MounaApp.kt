@@ -1077,6 +1077,11 @@ class MounaApp(
         val number = Phones.normalise(dialNumber) ?: return
         callNote = null
         showSaid(null)
+        if (!hasSim()) {
+            // The phone app would only show "No SIM card": say why here, and point to what works.
+            callNote = "This phone has no SIM, so it can't make phone calls. Use a web call link instead."
+            return
+        }
         askCall { allowed ->
             if (!allowed) {
                 callNote = "Allow Mouna to make phone calls to call from here."
@@ -1238,7 +1243,14 @@ class MounaApp(
         if (onCall) return // a call started meanwhile: nothing is dialled over it
         when (val route = PhoneRouter.route(pr.verb, pr.c, pr.body, hasWhatsApp = hasWhatsApp(), hasSim = hasSim())) {
             is PhoneRoute.WebRoom -> {
+                if (callServer().isEmpty()) {
+                    showSaid(Said(null, "This phone has no SIM, and web calls are off. Add a call server in Settings.", "none"))
+                    return
+                }
                 go(Screen.CALL)
+                chooseCallMode(CallMode.WEB)
+                // A new link: the Call screen shows it with Share link, and "Save as Nakul's link" keeps it for next time.
+                if (route.room == null) chooseWebName(route.name)
                 // No "Calling…" aloud: the voice now goes into the call, and the call screen already names who.
                 startWebCall(route.room, route.name)
             }

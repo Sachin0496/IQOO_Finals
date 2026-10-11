@@ -741,6 +741,16 @@ class PhoneAgentTest {
         assertEquals(PhoneRoute.Carrier("+919876543210", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, both, null, hasWhatsApp = false, hasSim = true))
         assertEquals(PhoneRoute.WebRoom("room1", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, both, null, hasWhatsApp = false, hasSim = false))
         val numberOnly = PhoneContact("Nakul", "+919876543210")
-        assertEquals(PhoneRoute.Carrier("+919876543210", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, numberOnly, null, hasWhatsApp = false, hasSim = false))
+        assertEquals(PhoneRoute.Carrier("+919876543210", "Nakul"), PhoneRouter.route(PhoneVerb.CALL, numberOnly, null, hasWhatsApp = false, hasSim = true))
+    }
+
+    @Test
+    fun noSimAndNoRoomCallsOnANewWebLinkNotThePhoneApp() {
+        val numberOnly = PhoneContact("Nakul", "+919876543210")
+        assertEquals(PhoneRoute.WebRoom(null, "Nakul"), PhoneRouter.route(PhoneVerb.CALL, numberOnly, null, hasWhatsApp = false, hasSim = false))
+        // Emergency numbers still only open the dialler, SIM or not.
+        val police = PhoneContact("Police", "112")
+        assertEquals(PhoneRoute.EmergencyDial("112"), PhoneRouter.route(PhoneVerb.CALL, police, null, hasWhatsApp = false, hasSim = false))
+        assertEquals(PhoneRoute.Unreachable("Dadi has no phone number saved"), PhoneRouter.route(PhoneVerb.CALL, PhoneContact("Dadi"), null, hasWhatsApp = false, hasSim = false))
     }
 }
